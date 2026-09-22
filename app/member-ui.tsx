@@ -1,0 +1,2 @@
+import {LockKeyhole,ArrowUpRight} from 'lucide-react';
+export function AuthGate({title,text,href}:{title:string;text:string;href:string}){return <main className="page-shell"><div className="panel auth-panel"><LockKeyhole size={43}/><h1>{title}</h1><p>{text}</p><a className="btn btn-primary" href={href} target="_top">Se connecter pour continuer <ArrowUpRight size={18}/></a><p className="auth-note">La connexion protège vos commandes et votre solde fidélité.</p></div></main>;}
