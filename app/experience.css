@@ -1,0 +1,146 @@
+/* Experience layer (loaded last): real-photo wheel, motion and micro-interactions.
+   Every animation here is decorative and switched off under prefers-reduced-motion. */
+
+/* ---------- Photos ---------- */
+.pizza-photo{background:radial-gradient(circle,#1a1416 0 46%,transparent 47%);border-radius:50%;overflow:visible}
+@media(min-width:761px){.pizza-photo img{filter:drop-shadow(0 18px 22px rgb(0 0 0 / .65))}}
+.pizza-photo.is-missing{display:grid;place-items:center;aspect-ratio:1;background:radial-gradient(circle at 50% 38%,#2c1b22 0,#140e10 68%);box-shadow:inset 0 0 0 1px #3b2a30;outline:2px dashed rgb(227 29 75 / .45);outline-offset:-12px}
+.pizza-missing{display:grid;gap:6px;justify-items:center;text-align:center;padding:14%}
+.pizza-missing b{font-family:var(--font-display);font-weight:400;font-size:clamp(16px,2.3vw,28px);line-height:1;text-transform:uppercase;color:#f4eef0}
+.pizza-missing small{font-family:var(--font-hand);font-size:11px;color:var(--primary);text-transform:uppercase;letter-spacing:.04em}
+
+/* ---------- Hero wheel ---------- */
+.wheel-hero{--sw:calc(var(--sh) * .7167)!important;position:relative;isolation:isolate}
+.wheel-hero::after{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;opacity:.07;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.wheel-ambient{position:absolute;left:50%;top:50%;width:min(980px,130vw);aspect-ratio:1;translate:-50% -50%;z-index:-1;pointer-events:none;opacity:.4;filter:blur(90px) saturate(1.5);-webkit-mask-image:radial-gradient(circle,#000 25%,transparent 68%);mask-image:radial-gradient(circle,#000 25%,transparent 68%)}
+.wheel-ambient img{display:block;width:100%;height:100%;animation:ambient-in 1.4s ease both}
+@keyframes ambient-in{from{opacity:0;scale:.8}to{opacity:1;scale:1}}
+.wheel-name{animation:none!important}
+.wheel-name>span[aria-hidden]{display:inline-block;animation:letter-in .75s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--i) * 32ms)}
+@keyframes letter-in{from{opacity:0;transform:translateY(.55em) rotate(8deg)}to{opacity:1;transform:none}}
+.wheel-stage{cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.wheel-stage:active{cursor:grabbing}
+.wheel-stage:focus-visible{outline:2px solid var(--ring);outline-offset:-8px;border-radius:28px}
+.wheel{z-index:1;animation:wheel-in 1.35s cubic-bezier(.16,1,.3,1) both}
+@keyframes wheel-in{from{transform:rotate(-100deg);opacity:0}to{transform:none;opacity:1}}
+.wheel-slot{transition:none!important;will-change:transform,opacity}
+/* Dimming comes from the slot's opacity (pizza-wheel.tsx): no filter changes while the wheel turns. */
+.wheel-slice{left:calc(var(--sw) / -2);bottom:var(--rin);width:var(--sw);height:var(--sh);cursor:inherit;transition:none!important;transform:translateY(calc(var(--lift,0) * -18px)) scale(calc(.78 + var(--lift,0) * .22))!important;filter:none!important;will-change:transform}
+@media(min-width:761px) and (hover:hover){.wheel-slice{filter:drop-shadow(0 24px 28px rgb(0 0 0 / .65))!important}}
+.is-off .wheel-slice{filter:grayscale(1)!important}
+.pizza-slice{position:absolute;inset:0;clip-path:url(#wheel-slice-clip)}
+.pizza-slice img{position:absolute;left:-89.5%;top:0;width:279%;height:200%;max-width:none;pointer-events:none}
+.wheel-defs{position:absolute;width:0;height:0;overflow:hidden}
+.wheel-frame-layer{position:absolute;left:50%;top:calc(var(--sh) + var(--rin) + 30px);width:0;height:0;z-index:4;pointer-events:none;animation:frame-in .75s .8s cubic-bezier(.16,1,.3,1) both}
+@keyframes frame-in{from{opacity:0;transform:scale(1.18)}to{opacity:1;transform:none}}
+.wheel-box{position:absolute;left:calc(var(--sw) / -2);bottom:var(--rin);width:var(--sw);height:var(--sh);transform:translateY(-18px)}
+.wheel-frame{position:absolute;left:calc(var(--sw) * -.1814);top:calc(var(--sh) * -.08);bottom:auto;width:calc(var(--sw) * 1.3632);height:calc(var(--sh) * 1.17);overflow:visible}
+.wheel-frame path{fill:none;stroke:#fff;stroke-width:3.2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.wheel-offer{left:auto;bottom:auto;right:-34%;top:-2%;z-index:2;animation:sticker-in .6s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes sticker-in{from{opacity:0;transform:rotate(-24deg) scale(.4)}to{opacity:1;transform:rotate(9deg) scale(1)}}
+.wheel-off{position:absolute;left:50%;top:38%;translate:-50% 0;rotate:-6deg;background:#000d;color:#fff;font:13px var(--font-hand);text-transform:uppercase;padding:8px 13px;border-radius:999px;white-space:nowrap}
+.wheel-desc{animation:rise .5s ease both}
+.wheel-arrow{transition:transform .35s cubic-bezier(.34,1.56,.64,1),background .2s,color .2s}
+.wheel-arrow:active{transform:scale(.9)}
+
+/* ---------- Buttons ---------- */
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn-shine{position:relative;overflow:hidden;isolation:isolate}
+.btn-shine::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(110deg,transparent 32%,rgb(255 255 255 / .38) 50%,transparent 68%);translate:-130% 0;transition:translate .8s cubic-bezier(.16,1,.3,1)}
+.btn-shine:hover::after{translate:130% 0}
+
+/* ---------- Menu cards ---------- */
+.product{transition:border-color .3s,transform .55s cubic-bezier(.16,1,.3,1),box-shadow .55s}
+@media(hover:hover){.product:hover{transform:translateY(-6px);box-shadow:0 30px 60px -28px rgb(227 29 75 / .45)}}
+.product-art{background:radial-gradient(circle at 50% 55%,#1d1417 0,#0b0909 64%)!important;padding:18px 34px!important}
+.product-art .pizza-photo img{transition:transform 1.2s cubic-bezier(.16,1,.3,1)}
+@media(hover:hover){.product:hover .pizza-photo img{transform:rotate(30deg) scale(1.06)}}
+.product-art:focus-visible .pizza-photo img{transform:rotate(30deg) scale(1.06)}
+.product-art .pizza-photo.is-missing{width:auto;height:100%;aspect-ratio:1;margin:auto}
+.menu-tabs [role=tabpanel][data-state=active]{animation:rise .45s ease both}
+@supports (animation-timeline:view()){@media(prefers-reduced-motion:no-preference){
+ .product{animation:card-in linear both;animation-timeline:view();animation-range:entry 0% cover 24%}
+ .section-heading,.club-band,.visit>*{animation:card-in linear both;animation-timeline:view();animation-range:entry 0% cover 30%}
+}}
+@keyframes card-in{from{opacity:0;translate:0 56px;scale:.96}to{opacity:1;translate:0 0;scale:1}}
+
+/* ---------- Product sheet ---------- */
+.modal-hero{position:relative;display:grid;place-items:center;height:248px;margin:-4px 0 -2px}
+.modal-hero::before{content:'';position:absolute;width:236px;aspect-ratio:1;border-radius:50%;border:1.5px dashed rgb(255 255 255 / .16)}
+.modal-photo{width:236px!important;height:236px!important;margin:0!important;border-radius:50%;overflow:visible!important;background:none;animation:sheet-spin 1s cubic-bezier(.16,1,.3,1) both}
+.modal-photo img{transition:transform .75s cubic-bezier(.34,1.56,.64,1);filter:drop-shadow(0 26px 28px rgb(0 0 0 / .72))}
+.size-senior .modal-photo img{transform:scale(.775)}
+@keyframes sheet-spin{from{opacity:0;transform:rotate(-130deg) scale(.55)}to{opacity:1;transform:none}}
+.modal-size-tag{position:absolute;right:calc(50% - 150px);bottom:16px;background:#fff;color:#000;border-radius:999px;padding:6px 11px;font:700 11px/1 var(--font-body);letter-spacing:.06em;animation:sticker-in .5s cubic-bezier(.34,1.56,.64,1) both}
+.offer-pair{display:flex;align-items:center;gap:10px;animation:rise .45s ease both}
+.offer-pair .pizza-photo{flex:none;width:64px;height:64px}
+.offer-pair .pizza-missing small{display:none}
+.offer-pair .pizza-missing b{font-size:10px}
+.offer-pair>b{font:26px/1 var(--font-display);color:var(--primary)}
+.offer-pair>span{margin-left:6px;font:12px/1.3 var(--font-hand);text-transform:uppercase;color:#fff}
+
+/* ---------- Cart ---------- */
+.cart-row{display:grid!important;grid-template-columns:64px minmax(0,1fr) auto;align-items:start;gap:14px;animation:rise .4s ease both}
+.cart-thumb{width:64px;height:64px}
+.cart-thumb.is-missing{outline-offset:-5px}
+.cart-thumb .pizza-missing{padding:8%}
+.cart-thumb .pizza-missing small{display:none}
+.cart-thumb .pizza-missing b{font-size:10px}
+.cart-thumb-extra{display:grid;place-items:center;border-radius:50%;background:#1b1618;color:#d9cfd3}
+.cart-row-main{min-width:0}
+.cart-bar{display:none}
+@media(max-width:760px){
+ .cart-bar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;display:flex;align-items:center;gap:12px;min-height:58px;padding:8px 18px 8px 8px;border:0;border-radius:999px;background:var(--primary);color:#fff;font:700 12px var(--font-body);letter-spacing:.08em;text-transform:uppercase;box-shadow:0 18px 40px -12px rgb(227 29 75 / .7),0 10px 24px rgb(0 0 0 / .55);animation:bar-in .6s cubic-bezier(.16,1,.3,1) both}
+ .cart-bar-count{display:flex;align-items:center;gap:6px;background:rgb(0 0 0 / .22);border-radius:999px;padding:9px 13px}
+ .cart-bar strong{margin-left:auto;font:22px/1 var(--font-display);letter-spacing:.01em}
+ body:has(.cart-bar) .footer{padding-bottom:104px}
+ .modal-hero{height:210px}
+ .modal-hero::before,.modal-photo{width:200px!important;height:200px!important}
+ .modal-size-tag{right:calc(50% - 126px)}
+}
+@keyframes bar-in{from{transform:translateY(150%)}to{transform:none}}
+
+/* ---------- Reduced motion ---------- */
+@media(prefers-reduced-motion:reduce){
+ .wheel,.wheel-frame-layer,.wheel-name>span,.wheel-ambient img,.wheel-offer,.wheel-desc,.modal-photo,.modal-size-tag,.offer-pair,.cart-bar,.cart-row,.menu-tabs [role=tabpanel]{animation:none!important}
+ .modal-photo img,.product-art .pizza-photo img,.product,.btn-shine::after,.wheel-arrow{transition:none!important}
+ .product:hover{transform:none}
+}
+
+/* ---------- Order tracking, account, header ---------- */
+.tracking-stage{position:relative}
+.tracking-stage.passed{border-color:#4c4438!important}
+.tracking-stage.passed::before{content:'';position:absolute;left:0;right:0;top:-3px;height:3px;background:var(--primary);transform-origin:left;animation:stage-fill .7s calc(var(--s) * .16s) cubic-bezier(.16,1,.3,1) both}
+.tracking-stage.is-current svg{color:var(--primary);animation:pulse 1.8s ease-in-out infinite}
+@keyframes stage-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.receipt-list li{align-items:center}
+.receipt-list li>span:not(.pizza-photo){flex:1}
+.receipt-list .pizza-photo{flex:none;width:52px;height:52px}
+.receipt-list .pizza-missing small{display:none}
+.receipt-list .pizza-missing b{font-size:9px}
+.order-stack{display:flex;padding-left:8px}
+.order-stack .pizza-photo{width:40px;height:40px;margin-left:-8px;background:#1a1416}
+.order-stack .pizza-missing small{display:none}
+.order-stack .pizza-missing b{font-size:7px}
+.order-link{transition:border-color .3s,transform .45s cubic-bezier(.16,1,.3,1)}
+@media(hover:hover){.order-link:hover{transform:translateX(4px)}}
+.hero-bottom a svg{animation:nudge 1.8s ease-in-out infinite}
+@keyframes nudge{50%{transform:translateY(4px)}}
+@supports (animation-timeline:scroll()){@media(prefers-reduced-motion:no-preference) and (min-width:761px){.header-inner{animation:header-compact linear both;animation-timeline:scroll(root);animation-range:0 180px}}}
+@keyframes header-compact{to{min-height:64px}}
+@media(prefers-reduced-motion:reduce){.tracking-stage.passed::before,.tracking-stage.is-current svg,.hero-bottom a svg{animation:none!important}.order-link:hover{transform:none}}
+
+/* ---------- Phones and touch screens: same look, far less work for the graphics chip ---------- */
+/* The 90 px blur, the blended film grain and the frosted header repaint large areas on every frame. */
+@media(max-width:760px),(hover:none){
+ .wheel-ambient,.wheel-hero::after{display:none}
+ .wheel-hero{background:radial-gradient(70% 42% at 50% 52%,rgb(227 29 75 / .16),transparent 72%),radial-gradient(45% 30% at 50% 60%,rgb(244 197 66 / .07),transparent 70%)}
+ .header{backdrop-filter:none;-webkit-backdrop-filter:none;background:#050505}
+ .wheel-name>span[aria-hidden]{animation-duration:.42s;animation-delay:calc(var(--i) * 18ms)}
+ .wheel{animation-duration:.9s}
+ .wheel-desc{animation-duration:.3s}
+}
+/* The add-to-cart button stays reachable at the bottom of a long product sheet. */
+@media(max-width:760px){
+ .dolce-dialog>.btn-shine{position:sticky;bottom:0;z-index:3;box-shadow:0 -16px 22px 8px var(--card)}
+}

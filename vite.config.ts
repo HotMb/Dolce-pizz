@@ -13,18 +13,29 @@ const { d1, r2 } = hostingConfig;
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const managedLinux = readExecutionProfile() === "managed-linux";
 
+// Secrets for the dev server only (vinext loads `.env.local` into process.env);
+// builds never embed them, hosted values come from the platform's secret settings.
+const localVars: Record<string, string> = Object.fromEntries(
+  ["ADMIN_SETUP_CODE", "MARKETING_STOP_SECRET", "BREVO_API_KEY", "SMS_SENDER"]
+    .filter((name) => process.env[name])
+    .map((name) => [name, process.env[name] ?? ""]),
+);
+
+// A prototype deployed straight to Cloudflare, outside the Sites platform, names
+// its worker and real D1 database at build time (see scripts/deploy-demo.mjs).
+const deployName = process.env.CF_WORKER_NAME;
+const deployDatabase = process.env.CF_D1_DATABASE_ID;
+
 const localBindingConfig = {
   main: "vinext/server/fetch-handler",
   compatibility_flags: ["nodejs_compat"],
-  ...(process.env.ADMIN_SETUP_CODE
-    ? { vars: { ADMIN_SETUP_CODE: process.env.ADMIN_SETUP_CODE } }
-    : {}),
+  ...(deployName ? { name: deployName } : {}),
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: deployName ?? "site-creator-d1",
+          database_id: deployDatabase ?? SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
         },
       ]
     : [],
@@ -38,7 +49,7 @@ const localBindingConfig = {
     : [],
 };
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ command }) => {
   // Use Miniflare's local Request.cf placeholder unless fetching is requested.
   process.env.CLOUDFLARE_CF_FETCH_ENABLED ??= "false";
   process.env.WRANGLER_SEND_METRICS ??= "false";
@@ -64,7 +75,10 @@ export default defineConfig(async () => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
-        config: localBindingConfig,
+        config: {
+          ...localBindingConfig,
+          ...(command === "serve" && Object.keys(localVars).length ? { vars: localVars } : {}),
+        },
       }),
     ],
   };

@@ -8,6 +8,27 @@
       "when": 1790105656851,
       "tag": "0000_chilly_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790127357606,
+      "tag": "0001_comptes_sms_offres",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790338967497,
+      "tag": "0002_carte_ingredients_promos",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792695158973,
+      "tag": "0003_multi_location",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,39 @@
-# vinext-starter
+# Dolce Pizz’ — prototype de commande et fondations POS/KDS
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+Ce dépôt contient actuellement la démo de commande web de Ronchin et les premières fondations pour un produit multi-sites. Il ne contient pas encore une caisse de production, les bornes, le centre d’appels, les postes Make Line/Four/Expeditor, Uber Eats ou le relais hors ligne.
+
+- [Architecture cible et étapes](docs/architecture.md)
+- [Installation et exploitation](docs/installation.md)
+- [Offre produit et mise en service](docs/offre-commerciale.md)
+- [Revue de sécurité et limites connues](docs/security-review.md)
+
+## Dolce Pizz’ configuration
+
+Customers and staff sign in with a French mobile number and a 6-digit SMS code (see `lib/auth.ts`); the site no longer uses Sign in with ChatGPT, so it must be hosted as a public site.
+
+| Secret | Purpose |
+|---|---|
+| `BREVO_API_KEY` | Brevo transactional SMS key. Without it, production refuses to send codes; loopback previews show the code on screen instead. |
+| `SMS_SENDER` | Optional SMS sender name, 11 characters max (default `DolcePizz`). |
+| `ADMIN_SETUP_CODE` | Private code (20+ characters) that grants the admin role to the first account that enters it on `/admin`. |
+| `MARKETING_STOP_SECRET` | Separate random signing secret for recipient-bound marketing unsubscribe links. Keep it stable so links already sent remain usable. |
+| `SMS_CAMPAIGNS_DEMO` | Optional `1` to simulate promotional SMS campaigns without sending messages. It never exposes login codes. |
+
+For a local preview, put these in an ignored `.env.local` and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`. Apply `drizzle/0001_comptes_sms_offres.sql` to the local D1 database as described in "Local D1 migrations"; it also releases any admin role held by a former ChatGPT identity.
+
+The team validates orders on `/admin` (points are credited at that moment), sends them to the kitchen screen `/cuisine`, and can print 80 mm kitchen tickets from either screen.
+
+**Menu, ingredients and allergens.** The database is the only source of the menu (`lib/seed.ts` is the opening menu, written once). In `/admin`, the team adds, edits or deletes a product in **Carte** (recipe, prices, allergens, tagline, "2e offerte", photo); a product already ordered is archived rather than deleted, so past orders stay exact. **Ingrédients** holds each ingredient's allergens, its availability (out of stock tonight) and whether it is sold as a supplement; **Origines** holds meat origins (décret n° 2022-65), shown on each pizza and on `/allergenes`. Customers remove ingredients for free and add supplements at the single price set in **Réglages** (`extraPrice`, cents); the kitchen ticket prints the changes in capitals. Allergen data is prefilled from the printed menu and must be checked by the owner ("J’ai vérifié les allergènes").
+
+**Photos from the admin.** The tablet finds the pizza, centres and cuts it out, and uploads 320/640/1024 px WebP files (`app/admin/photo-tools.ts`, same treatment as `npm run photos`). They are stored in D1 (`product_photos`, no R2 bucket needed) and served by `/api/photos/<id>/<version>/<width>` with a one-year cache; each upload gets a new version.
+
+**Promotional SMS.** Customers opt in (never pre-ticked) at sign-up, at checkout or in Mon compte; the date and source of consent are stored on `users`. `/stop` unsubscribes without signing in, and every SMS ends with that link. **Promos SMS** in `/admin` composes a message (templates announce a new pizza), then sends it through Brevo (`type: marketing`) in batches of 20, Monday to Saturday 8:00–20:00. Without `BREVO_API_KEY`, local previews and a hosted prototype with `SMS_CAMPAIGNS_DEMO=1` simulate sending; no promotional messages are sent.
+
+**Local database.** `lancer-site.cmd` (or `npm run db:migrate:local`) applies the pending `drizzle/*.sql` files to the local preview database before starting the dev server.
+
+**Pizza photos.** Originals live in `assets-src/pizzas/<recipe-id>.(png|jpg|webp)`; `npm run photos` centres, cuts out and exports them to `public/assets/pizzas/<id>-{320,640,1024}.webp` and regenerates `lib/pizza-photos.ts`. Recipes without a photo show a named placeholder and stay off the home wheel. `assets-src/pizzas/A-GENERER.md` lists the missing ones with generation prompts. `npm test` runs the pricing, slot and lifecycle tests.
+
+**Prototype on your own Cloudflare account.** `mettre-en-ligne-demo.cmd` (or `node scripts/deploy-demo.mjs` with Node 22+) signs in to Cloudflare, creates the `dolce-pizz-demo` D1 database, builds with `CF_WORKER_NAME`/`CF_D1_DATABASE_ID`, applies `drizzle/*.sql` once each, deploys, and stores `ADMIN_SETUP_CODE` in the ignored local `.env.demo` before provisioning it to the Worker. The script never prints the code; retrieve it only from that local file and do not share deployment logs containing secrets. The public demo keeps promotional SMS in simulation mode by default (`SMS_CAMPAIGNS_DEMO=1`), while hosted sign-in codes are never returned by the API: configure `BREVO_API_KEY` to enable hosted authentication. Without it, only loopback development can display a login code. Run the same command again to publish updates.
 
 ## Prerequisites
 
