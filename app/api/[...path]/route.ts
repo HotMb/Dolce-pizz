@@ -6,6 +6,7 @@ import {slots,allowedSlot,nextStatus,parisParts} from '@/lib/rules';
 import {priceCart} from '@/lib/pricing';
 import {categories,type Product} from '@/lib/catalog';
 import {allergenIds,describe,slugify} from '@/lib/menu';
+import {snapshotPricedLines} from '@/lib/production-repository';
 import {createMarketingStopProof,matchesMarketingStopProof} from '@/lib/marketing-stop';
 export const dynamic='force-dynamic';
 const json=(data:unknown,status=200,cookie?:string)=>{const r=NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});if(cookie)r.headers.append('Set-Cookie',cookie);return r;};
@@ -97,12 +98,13 @@ async function handler(request:Request){
    const s=await settings();
    if(!s.hoursConfirmed)fail(409,'Les horaires de retrait doivent encore être confirmés par la pizzeria.');
    if(!allowedSlot(Date.parse(input.slot),s))fail(409,'Ce créneau n’est plus disponible. Choisissez un autre horaire.');
-   const priced=priceCart(input.items,{products:await productList(),ingredients:await ingredientList(),extraPrice:s.extraPrice},input.ticket);
+   const [products,ingredients]=await Promise.all([productList(),ingredientList()]);
+   const priced=priceCart(input.items,{products,ingredients,extraPrice:s.extraPrice},input.ticket);
    if(priced.problem)fail(409,priced.problem);
    if(priced.count>30)fail(400,'Pour plus de 30 articles, appelez la pizzeria.');
    if(input.ticket&&!s.loyaltyEnabled)fail(409,'La fidélité n’est pas encore activée.');
    if(input.ticket&&priced.ticketLine<0)fail(409,'Le ticket pizza offerte s’utilise sur une pizza hors offre « 2e pizza offerte ».');
-   const items=priced.lines.map((l,i)=>({id:l.id,name:l.name,size:l.size,option:l.option,quantity:l.quantity,unitPrice:l.unitPrice,total:l.total,...(l.without.length?{without:l.without}:{}),...(l.extra.length?{extra:l.extra}:{}),...(l.extras?{extrasPrice:l.extras}:{}),...(l.free?{free:l.free}:{}),...(i===priced.ticketLine?{ticket:true}:{})}));
+   const items=snapshotPricedLines(priced.lines,products,ingredients).map((line,i)=>({...line,...(i===priced.ticketLine?{ticket:true}:{})}));
    const redeemed=input.ticket?s.rewardPoints:0;const earned=s.loyaltyEnabled?Math.floor(priced.total/100)*s.pointsPerEuro:0;
    const id=crypto.randomUUID();const now=new Date().toISOString();
    const result=await db().batch([
@@ -152,6 +154,8 @@ async function handler(request:Request){
 }
 async function updateOrder(id:string,actor:string,data:unknown,admin:boolean){
  const input=z.object({status:z.enum(['confirmed','preparing','ready','completed','rejected','cancelled']),version:z.number().int().positive(),reason:z.string().trim().max(250).default('')}).parse(data);
+ // Ready is an Expeditor-only transition. Completion also requires the future pickup-payment flow.
+ if(admin&&['ready','completed'].includes(input.status))fail(409,'Utilisez les postes de production pour finaliser la commande; le retrait et l’encaissement seront validés dans le parcours de caisse.');
  const order=admin
   ?await db().prepare('SELECT user_id,status,version FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first<{user_id:string;status:string;version:number}>()
   :await db().prepare('SELECT user_id,status,version FROM orders WHERE id=?').bind(id).first<{user_id:string;status:string;version:number}>();if(!order||(!admin&&order.user_id!==actor))fail(404,'Commande introuvable.');

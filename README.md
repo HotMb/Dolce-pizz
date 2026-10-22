@@ -1,6 +1,6 @@
 # Dolce Pizz’ — prototype de commande et fondations POS/KDS
 
-Ce dépôt contient actuellement la démo de commande web de Ronchin et les premières fondations pour un produit multi-sites. Il ne contient pas encore une caisse de production, les bornes, le centre d’appels, les postes Make Line/Four/Expeditor, Uber Eats ou le relais hors ligne.
+Ce dépôt contient la commande web à emporter de Ronchin, les fondations organisation/site et un premier KDS persistant Make Line/Four/Expeditor. Il ne constitue pas encore une caisse de production ou un SaaS multi-tenant prêt à vendre : POS complet, centre d’appels, bornes, paiement au retrait, SMS de commande prête, Uber Eats et fonctionnement hors ligne restent à intégrer.
 
 - [Architecture cible et étapes](docs/architecture.md)
 - [Installation et exploitation](docs/installation.md)
@@ -19,9 +19,9 @@ Customers and staff sign in with a French mobile number and a 6-digit SMS code (
 | `MARKETING_STOP_SECRET` | Separate random signing secret for recipient-bound marketing unsubscribe links. Keep it stable so links already sent remain usable. |
 | `SMS_CAMPAIGNS_DEMO` | Optional `1` to simulate promotional SMS campaigns without sending messages. It never exposes login codes. |
 
-For a local preview, put these in an ignored `.env.local` and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`. Apply `drizzle/0001_comptes_sms_offres.sql` to the local D1 database as described in "Local D1 migrations"; it also releases any admin role held by a former ChatGPT identity.
+For a local preview, put these in an ignored `.env.local`, apply pending migrations with `npm run db:migrate:local`, and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`.
 
-The team validates orders on `/admin` (points are credited at that moment), sends them to the kitchen screen `/cuisine`, and can print 80 mm kitchen tickets from either screen.
+The team validates orders on `/admin` (points are credited at that moment) and sends them to `/production`. The production screen routes each item through Make Line, Oven and Expeditor; the legacy `/cuisine` path redirects to this screen. The cash register and payment-at-pickup flow are not implemented yet.
 
 **Menu, ingredients and allergens.** The database is the only source of the menu (`lib/seed.ts` is the opening menu, written once). In `/admin`, the team adds, edits or deletes a product in **Carte** (recipe, prices, allergens, tagline, "2e offerte", photo); a product already ordered is archived rather than deleted, so past orders stay exact. **Ingrédients** holds each ingredient's allergens, its availability (out of stock tonight) and whether it is sold as a supplement; **Origines** holds meat origins (décret n° 2022-65), shown on each pizza and on `/allergenes`. Customers remove ingredients for free and add supplements at the single price set in **Réglages** (`extraPrice`, cents); the kitchen ticket prints the changes in capitals. Allergen data is prefilled from the printed menu and must be checked by the owner ("J’ai vérifié les allergènes").
 

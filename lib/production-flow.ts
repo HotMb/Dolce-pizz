@@ -284,6 +284,7 @@ export function markOrderReady(
   if (order.status === 'ready') return {ok: false, error: 'order_already_ready'};
   const statusError = requireInProgress(order);
   if (statusError) return statusError;
+  if (order.items.length === 0) return {ok: false, error: 'empty_order'};
 
   const incompleteItemIds = order.items
     .filter((item) => item.steps.some((step) => step.status !== 'completed'))

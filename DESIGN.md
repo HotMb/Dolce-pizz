@@ -41,3 +41,10 @@ Pill buttons and chips, 16–26px panels and bands. The wheel frame and “2e of
 Dialogs, sheets, tabs, select, radio-group, checkbox, table, progress, alert-dialog and toasts reuse components/ui. Business wrappers in app/components.tsx localize and style them. No changes to vendor primitives. Single dark theme for consistent brand and no flash.
 ## Do's and Don'ts
 Preserve all flyer prices. Treat generated photography as illustrative. Keep forms calm. Never use menu imagery as evidence of exact toppings. Respect reduced motion, visible focus, stable scrollbars and 44px major touch targets.
+
+## KDS operational screens
+The kitchen is a high-attention, noisy, touch-first work surface used on a tablet. Keep the Dolce dark shell, but remove marketing decoration and use large, stable ticket cards. Use Anton only for station headings and ticket numbers; use the body face for recipe text, modifiers, and allergen warnings. Keep pickup times in 24-hour `Europe/Paris` time and use tabular numerals for timers.
+
+Operational states may use their own accessible colors: red for waiting or overdue, amber for in progress, and green for completed. Every state must also have a written label and, where useful, an icon; color alone never carries meaning. A blank allergen list is not proof of no allergens: unknown or unverified recipe data must be called out in text.
+
+The Make Line sees only items currently assigned to preparation; the Oven sees items whose preparation is complete and whose oven step is active; Expeditor sees the full ticket and can mark the order ready only after every item route is complete. Actions wait for server confirmation and use the order revision; a conflict refreshes the ticket and explains the change. Offline status is visible and production actions remain blocked until the server confirms them; the KDS does not claim local work is synced.

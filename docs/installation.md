@@ -1,6 +1,6 @@
 # Installation et exploitation — Dolce Pizz’
 
-Ce guide couvre l’installation du prototype existant et l’installation cible des postes POS/KDS. Les postes Make Line, Four, Expeditor, les bornes, le relais local et les connecteurs de livraison sont encore à développer; ils ne peuvent pas être activés par une simple installation aujourd’hui.
+Ce guide couvre le prototype web et le premier KDS pilote. Make Line, Four et Expeditor sont maintenant présents à `/production` et utilisent une API persistée pour Dolce Pizz’ à Ronchin. Cette tranche n’est pas encore une caisse exploitable ni un produit SaaS multi-tenant. POS comptoir/mobile, centre d’appels, bornes, SMS transactionnels, paiement au retrait, relais hors ligne et Uber Eats restent à intégrer.
 
 ## 1. Prérequis
 
@@ -40,7 +40,9 @@ Ce guide couvre l’installation du prototype existant et l’installation cible
    node --env-file=.env.local scripts/run-framework.mjs dev
    ```
 
-6. Ouvrir l’adresse locale indiquée par le serveur, vérifier la carte, passer une commande de test, puis consulter `/admin` et `/cuisine`.
+6. Ouvrir l’adresse locale indiquée par le serveur, vérifier la carte, passer une commande de test, puis consulter `/admin` et `/production`. L’ancien chemin `/cuisine` redirige vers `/production`.
+
+7. Pour éprouver les postes KDS, envoyer la commande de test en préparation depuis `/admin`; ouvrir `/production`, parcourir Make Line, Four puis Expeditor et confirmer que l’action « prête » reste bloquée tant que chaque unité n’a pas fini son parcours. Les allergènes et le routage doivent aussi être vérifiés dans les fiches menu; l’API applique ce contrôle côté serveur.
 
 Les scripts locaux utilisent une base locale. Ne branche pas cette configuration sur une base de production et n’y ajoute pas de données réelles de clients.
 
@@ -69,19 +71,17 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 
 ### Profils d’écran
 
-- **POS comptoir** : saisie, modification autorisée, paiement et clôture de caisse.
-- **POS mobile** : commandes en salle et notifications de commandes prêtes.
-- **Centre d’appels** : recherche client, adresse, établissement admissible et commande téléphonique.
-- **Borne** : menu publié, commande et ticket; selon la règle actuelle, paiement au comptoir au retrait.
-- **Make Line** : articles à assembler et allergènes.
-- **Four** : articles à enfourner, ordre et minuteurs.
-- **Expeditor** : commande regroupée, vérification, statut prête et remise.
+- **POS comptoir** : cible pour saisie et encaissement; paiement et clôture non livrés.
+- **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
+- **Centre d’appels** : cible pour choisir le site de retrait à partir de l’adresse confirmée; non livré.
+- **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
+- **Make Line, Four, Expeditor** : disponibles au pilote via `/production`; D1 journalise l’avancement. L’accès utilise encore un compte admin global, pas des identifiants d’équipier par poste.
 
 Un appareil doit être enrôlé auprès d’un tenant et d’un établissement. Les identifiants d’équipe sont nominatifs; les changements d’établissement et les remboursements sont audités.
 
 ## 5. Ouverture d’un nouvel établissement
 
-Préparer les informations suivantes avant d’activer la commande : nom public, adresse exacte, téléphone, horaires, mode de retrait, mode de livraison, zone (codes postaux ou polygone), capacités par créneau, menu/prix, taxes, imprimantes, postes de production et utilisateurs autorisés.
+Préparer les informations suivantes avant d’activer la commande : nom public, adresse exacte, téléphone, horaires, mode de retrait, zone de routage par codes postaux, capacités par créneau, menu/prix, TVA, imprimantes, postes de production et utilisateurs autorisés. Le pilote Dolce Pizz’ est en retrait uniquement; aucune livraison maison n’est disponible.
 
 Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 avenue Jean-Jaurès, 59790 Ronchin, téléphone 03 20 40 09 01. L’adresse et la zone de Tourcoing doivent être fournies et vérifiées avant d’activer le routage automatique.
 
@@ -97,9 +97,10 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 
 - Provisionnement de tenants et d’établissements, isolation des données et permissions par rôle/site.
 - Parcours POS, téléphone et borne, avec sélection d’établissement et règles d’encaissement.
-- KDS par poste, routage par article, minuteurs, complétude Expeditor et journal des actions.
-- Caisse, TPE, clôture de shift, rapprochement des transactions et reçus.
-- SMS de commande prête distinct des SMS marketing; gestion des erreurs et doublons.
-- Connecteurs Uber Eats/livraison et validation de leurs webhooks.
+- Identités et rôles d’équipe par organisation, établissement et poste.
+- Enrôlement des appareils et configuration multi-sites sans constantes pilote.
+- Caisse, TPE, paiement au retrait, clôture de shift, rapprochement des transactions et reçus.
+- Consommateur/reprise de l’outbox SMS de commande prête, distinct des SMS marketing.
+- Connecteur Uber Eats et validation de ses webhooks; aucune livraison directe maison n’est prévue pour le pilote.
 - Relais local, synchronisation hors ligne, procédures de sauvegarde/restauration et supervision.
 - Revue sécurité, tests d’accès croisé, conformité caisse France et pilote avec les équipes.

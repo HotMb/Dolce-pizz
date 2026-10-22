@@ -12,30 +12,30 @@ Le nom commercial du produit reste à choisir. Dolce Pizz’ sert de premier sit
 |---|---|---|
 | Commande web à emporter | Menu, personnalisation, créneau, suivi et fidélité | Prototype présent pour Ronchin |
 | POS comptoir et mobile | Saisie de commandes, encaissement, remise et clôture | À construire; la démo permet à l’équipe de valider les commandes web |
-| Centre d’appels | Recherche par téléphone, adresse, commande assistée et choix du site de livraison | À construire; routage postal pur et données d’organisation amorcés |
+| Centre d’appels | Recherche par téléphone, adresse, commande assistée et choix du site de retrait selon la zone | À construire; routage postal pur et données d’organisation amorcés |
 | Bornes | Commande autonome avec le menu publié du site | À construire |
-| KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | Écran cuisine simple existant et automate métier pur testé; écrans spécialisés et persistance restent à construire |
+| KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | Première tranche KDS spécialisée et persistée pour Ronchin; identités d’équipe et exploitation commerciale restent à construire |
 | Menu et recettes | Publication contrôlée des prix, disponibilité, suppléments et allergènes | Administration de carte, ingrédients et origines déjà dans la démo; versions par site à faire |
-| SMS de service et fidélité | Informer le client, attribuer des points, gérer les préférences marketing | Fidélité et campagnes de démonstration présentes; SMS de commande prête à faire |
-| Uber Eats et livraison propre | Recevoir et traiter les commandes externes dans le même flux de préparation | À construire; l’accès Uber partenaire et les zones de livraison restent à configurer |
+| SMS de service et fidélité | Informer le client, attribuer des points, gérer les préférences marketing | Fidélité et campagnes de démonstration présentes; l’outbox SMS « commande prête » existe, mais son worker d’envoi reste à faire |
+| Uber Eats | Recevoir les commandes Uber dans le même flux de préparation; Uber gère son propre transport | À construire; l’accès partenaire et le rattachement de chaque restaurant sont à configurer. Pas de livraison maison au pilote |
 | Tableau de bord réseau | Comparer les sites, gérer menus maîtres, permissions et performance | Fondation organisation/site ajoutée; back-office réseau à construire |
 | Caisse et rapports | Encaissements, moyens de paiement, clôture, écarts et exports | Non implémentée; ne pas la vendre comme caisse conforme aujourd’hui |
 
 ## Comment les équipes l’utilisent
 
-1. Le centre d’appels confirme le besoin et l’adresse. Pour une livraison, le système choisit un site admissible selon une zone configurée, puis vérifie sa capacité. Pour un retrait, le client choisit explicitement Ronchin ou Tourcoing.
+1. Le centre d’appels confirme le besoin et l’adresse, puis propose le site de retrait selon une zone postale configurée et sa capacité. Le client vient chercher la commande; aucune livraison maison n’est proposée. Le site web lui demande de choisir explicitement son restaurant.
 2. Le canal valide le menu, les prix, les allergènes, les disponibilités et le créneau auprès du service central.
 3. L’Expeditor ou le responsable accepte la commande; l’ordre part vers les tâches des postes concernés.
 4. Make Line monte les pizzas et vérifie les personnalisations. Le Four confirme l’enfournement et suit la durée. Les boissons et desserts avancent sur leur poste.
 5. L’Expeditor voit toute la commande. Il vérifie que chaque partie est prête avant de signaler « prête ».
-6. Le système informe le client par SMS si la commande est directe, si un numéro est fourni et si l’envoi a été accepté. Uber Eats suit ses propres notifications client. Une commande sans numéro garde son ticket et son statut sur les écrans.
-7. À la remise, le personnel rapproche la commande et le règlement au retrait. La caisse ne valide un paiement qu’après confirmation du terminal ou de l’employé autorisé.
+6. La tranche actuelle crée une entrée SMS durable quand une commande directe avec téléphone est marquée prête. Le service qui envoie puis retente le SMS reste à construire; Uber Eats garde ses propres notifications client.
+7. Le client paie au retrait. Le prototype n’enregistre pas encore ce paiement; une caisse conforme et son parcours terminal sont à construire avant de proposer cet encaissement.
 
 ## Installation chez un client
 
 ### Avant la visite
 
-- Fiche de chaque site : nom, adresse vérifiée, téléphone, horaires, zone de livraison, capacité, prix, taxes et modes de retrait/livraison.
+- Fiche de chaque site : nom, adresse vérifiée, téléphone, horaires, zone postale de suggestion de site pour le retrait téléphonique, capacité, prix, TVA et mode de retrait.
 - Matériel et réseau : tablettes/écrans, supports, Wi-Fi métier isolé, imprimantes, TPE et éventuel mini-PC relais.
 - Données du menu : recettes, options, allergènes, photos, disponibilités, prix par site et instructions de production.
 - Fournisseurs et accès : SMS, TPE, agrégateurs, imprimantes et comptes de gestion.
@@ -61,8 +61,8 @@ Ce découpage est une hypothèse produit; il faudra le tester avec des restaurat
 
 - **Ronchin** : adresse et téléphone confirmés dans la démo, 191 avenue Jean-Jaurès, 59790 Ronchin, 03 20 40 09 01.
 - **Tourcoing** : la page de démonstration publique ne montre que Ronchin et le dépôt ne contient pas l’adresse ni les zones de Tourcoing. Le lieu reste désactivé pour toute décision automatique tant que ses coordonnées et zones ne sont pas confirmées.
-- **Commande directe** : le client paie au retrait selon la règle communiquée.
+- **Commande directe** : web et téléphone à emporter seulement; le client paie au retrait selon la règle communiquée. Pas de livraison maison.
 - **Uber Eats** : le connecteur doit être autorisé par le programme partenaire, associer chaque identifiant de magasin au bon site et gérer les webhooks signés et les délais d’acceptation du fournisseur.
-- **Canaux** : le produit cible tous les canaux, mais les bornes, le téléphone, le POS complet, Uber, la caisse et les KDS spécialisés ne sont pas encore présents dans le dépôt.
+- **Canaux** : le produit cible tous les canaux demandés, mais le POS complet, le centre d’appels, les bornes, Uber Eats, la caisse et le SMS transactionnel effectif restent à livrer.
 
 Il faut donc présenter le projet comme un prototype enrichi et une plateforme en construction, pas comme un POS franchise déjà opérationnel. La phase commerciale pilote doit démarrer avec les fonctions effectivement terminées, puis activer les modules après leurs tests et l’accord des fournisseurs.

@@ -2,9 +2,9 @@
 
 ## Pourquoi cette architecture
 
-La démo actuelle est un site de commande en ligne pour Dolce Pizz’ à Ronchin, construit avec Next/vinext, React, Cloudflare Workers, D1/SQLite et Drizzle. Elle sait gérer une carte, les commandes web à emporter, le paiement au comptoir, la fidélité, les SMS promotionnels avec consentement, un espace équipe et un écran cuisine.
+La démo actuelle est un site de commande en ligne pour Dolce Pizz’ à Ronchin, construit avec Next/vinext, React, Cloudflare Workers, D1/SQLite et Drizzle. Elle gère une carte, les commandes web à emporter, la fidélité et les SMS promotionnels avec consentement. Le dépôt ajoute maintenant un premier parcours KDS persisté Make Line/Four/Expeditor et une outbox de notification; le paiement au retrait, l’envoi des SMS transactionnels, le POS, les bornes et les canaux d’agrégateurs ne sont pas encore opérationnels.
 
-Elle n’est pas encore un POS/KDS de production multi-sites. Le schéma contient un tenant Dolce Pizz’ et les fiches de Ronchin et Tourcoing, mais seul Ronchin est configuré et la plupart des données et permissions ne sont pas encore isolées par tenant. Il n’y a pas encore de caisse certifiée, de paiement par terminal, de bornes, de centre d’appels, de connecteur Uber Eats ni de fonctionnement local hors ligne. Un modèle métier pur décrit les étapes Make Line/Four/Expeditor, mais il n’est pas encore relié aux écrans ni à la base. Les sections ci-dessous distinguent la cible du produit des fonctions réellement installées.
+Elle n’est pas encore un POS/KDS de production multi-sites. Le schéma contient un tenant Dolce Pizz’ et les fiches de Ronchin et Tourcoing, mais seul Ronchin est configuré et la plupart des données et permissions ne sont pas encore isolées par tenant. Le KDS pilote a des écrans tactiles, un API protégé par le compte admin pilote, des tickets et événements persistés, des snapshots de recette/routage/allergènes, un contrôle de révision et un enregistrement d’envoi SMS à venir. Il manque encore les comptes employés par rôle, le service d’envoi SMS et ses reprises, le paiement au retrait, les bornes, le centre d’appels, le connecteur Uber Eats et le fonctionnement local hors ligne. Les sections ci-dessous distinguent la cible du produit des fonctions réellement installées.
 
 ## Cible technique
 
@@ -97,9 +97,9 @@ Les trois états doivent rester distincts :
 
 Le Make Line indique « assemblé, prêt à enfourner ». Le poste Four confirme le chargement et démarre le minuteur. L’Expeditor vérifie tous les articles avant de marquer la commande prête. Une annulation ou correction est un événement audité; une commande envoyée en cuisine n’est pas effacée.
 
-Le dépôt contient maintenant un premier automate métier pur dans `lib/production-flow.ts`, testé indépendamment : une pizza passe par Make Line, Four et Expeditor; les boissons passent directement à Expeditor; toute unité doit finir toutes ses étapes avant que la commande soit déclarée prête. Les transitions hors séquence sont rejetées, les commandes portent une révision pour détecter les actions concurrentes, et rouvrir une annulation exige une confirmation superviseur ainsi qu’une remise à zéro. Ce code de domaine n’est pas encore connecté à la base, aux écrans KDS ou à une véritable identité superviseur; il sert de fondation testée, pas de poste de production déployable.
+Le dépôt contient l’automate métier dans `lib/production-flow.ts` et un premier vertical slice persisté : les écrans `/production` appellent l’API, qui crée un ticket immuable à partir de la commande, applique les transitions dans D1, journalise les événements et refuse les conflits de révision. Une pizza passe par Make Line, Four et Expeditor; les boissons passent directement à Expeditor; toute unité doit finir toutes ses étapes avant que la commande soit déclarée prête. Les anciennes commandes sans snapshot d’allergènes/routage restent explicitement « à vérifier ». La validation du poste de préparation n’est toutefois pas encore fondée sur des comptes employés nominatifs; seul le compte admin global existe au pilote.
 
-Les commandes web, téléphone, comptoir, bornes, Uber Eats et livraison maison utilisent cette même chaîne. La différence entre les canaux reste enregistrée : une commande Uber Eats suit les règles de paiement et de règlement de la plateforme; une commande directe peut être encaissée au retrait.
+À terme, le web, le téléphone, le comptoir, les bornes et Uber Eats utilisent cette chaîne canonique. Le web et le téléphone sont au pilote des commandes à emporter, payées au retrait; aucune livraison maison n’est proposée. Uber Eats est un flux séparé, avec ses propres règles d’encaissement et de remise. Les autres canaux ne sont pas encore intégrés.
 
 ### Responsabilités des postes
 
@@ -109,7 +109,7 @@ Les commandes web, téléphone, comptoir, bornes, Uber Eats et livraison maison 
 | Four | Articles à cuire, ordre, durée et heure cible | Enfourné, minuterie démarrée, sorti du four |
 | Expeditor | Vue regroupée de toute la commande et avancement de chaque poste | Vérifier la complétude, marquer « prête », gérer l’attente et la remise |
 | POS comptoir/mobile | Vente, commandes du site, encaissements et demandes de service autorisées | Créer une commande, encaisser, remettre, annuler selon permission |
-| Centre d’appels | Commande, téléphone, adresse, disponibilité des sites | Choisir le site selon l’adresse pour livraison; proposer le retrait au client pour emporter |
+| Centre d’appels | Commande, téléphone, adresse servant à choisir le site de retrait, disponibilité des sites | Proposer/confirm­er l’établissement où le client viendra retirer; aucune livraison maison |
 | Borne | Menu publié, options et progression de la commande | Créer la commande; montrer clairement que le paiement se fait au retrait dans la règle actuelle |
 
 Les tâches sont générées depuis les lignes de commande et les règles de routage du menu; les écrans ne sont pas des rôles d’autorisation. Un employé nominatif reçoit les permissions, alors qu’un appareil enrôlé reçoit un poste et un établissement. Ainsi, remplacer une tablette ne nécessite pas de partager un compte administrateur.
@@ -118,14 +118,14 @@ Cette séparation reprend une pratique éprouvée des KDS de restauration : affe
 
 ## Routage des établissements
 
-- **Livraison :** comparer le code postal/adresse à une zone de service explicitement configurée. Si deux restaurants sont admissibles, recommander celui qui peut tenir le délai et la capacité; l’opérateur peut corriger avec un motif.
-- **Retrait :** demander au client de choisir le restaurant. Son adresse peut suggérer une option, mais ne remplace pas son choix.
+- **Retrait téléphonique :** proposer un site d’après l’adresse/le code postal et les zones explicitement configurées; le centre d’appels confirme le site avec le client. Le client se déplace pour retirer sa commande.
+- **Retrait web :** le client choisit le restaurant. Une suggestion selon l’adresse ne remplace pas son choix explicite.
 - **Appel téléphonique :** confirmer le numéro et l’adresse avec le client; ne pas faire confiance au seul numéro d’appelant pour choisir un lieu ou inscrire un contact marketing.
-- **Adresse absente ou zone inconnue :** demander une décision à l’opérateur. Ne jamais deviner l’adresse ou la zone de Tourcoing.
+- **Adresse absente ou zone inconnue :** demander une décision à l’opérateur. Ne jamais deviner l’adresse ou la zone de Tourcoing, qui n’est pas encore configurée.
 
 ## Communications et intégrations
 
-- API HTTPS pour les actions; WebSocket ou mécanisme équivalent pour l’affichage rapide des changements.
+- API HTTPS pour les actions; WebSocket/SSE avec curseur de reprise est la cible. Le KDS pilote utilise actuellement une interrogation HTTP toutes les quatre secondes et se met en lecture seule après une perte réseau.
 - Chaque commande externe est enregistrée avec un identifiant fournisseur et une clé d’idempotence pour résister aux webhooks répétés.
 - Les changements métier produisent des événements durables via une outbox transactionnelle; les écrans temps réel peuvent se reconnecter et reprendre depuis le dernier curseur. La commande demeure dans la base même si une tablette est éteinte.
 - Les commandes entrantes d’un agrégateur passent d’abord dans une boîte de réception d’intégration. La signature, l’identifiant fournisseur, l’établissement et la déduplication sont vérifiés avant d’accepter ou refuser chez le fournisseur.
@@ -143,9 +143,9 @@ Les fonctions hors ligne doivent être limitées explicitement. La première ver
 
 ## Priorisation et prévision
 
-Ne pas coder une règle universelle « sur place = 1,5 fois plus prioritaire ». Le mode de service (sur place, retrait, livraison) et le canal (comptoir, téléphone, web, borne, agrégateur) sont deux champs différents. La priorité doit d’abord protéger l’heure promise au client : heure de remise visée moins durée de préparation estimée, avec alertes de retard, capacité par poste et limites d’équité pour éviter qu’un canal soit toujours relégué.
+Ne pas coder une règle universelle « sur place = 1,5 fois plus prioritaire ». Le mode de service (sur place ou retrait au pilote) et le canal (comptoir, téléphone, web, borne, agrégateur) sont deux champs différents. La priorité doit d’abord protéger l’heure promise au client : heure de remise visée moins durée de préparation estimée, avec alertes de retard, capacité par poste et limites d’équité pour éviter qu’un canal soit toujours relégué.
 
-Au pilote, utiliser des règles simples et visibles par l’équipe : temps standard par type d’article, nombre d’articles, charge du Four et capacité configurée par créneau. Ensuite, une prévision peut apprendre les durées réelles par période et poste, afficher une heure estimée et son niveau de confiance, puis proposer de ralentir un canal. Le responsable garde la décision d’accepter, de modifier le créneau ou de mettre en pause; le modèle ne doit pas refuser une commande sans explication.
+Au pilote actuel, les tickets sont rangés par état de production, puis par créneau de retrait et heure de création; il n’y a pas encore de calcul de charge par poste. Prochaine étape : afficher des règles simples et explicables basées sur les temps standards, le nombre d’articles, la charge du Four et la capacité de chaque créneau. Ensuite, une prévision peut apprendre les durées réelles par période et poste, afficher une heure estimée et son niveau de confiance, puis proposer de ralentir un canal. Le responsable garde la décision d’accepter, de modifier le créneau ou de mettre en pause; le modèle ne doit pas refuser une commande sans explication.
 
 ## Mise en place commerciale
 
@@ -172,7 +172,7 @@ Le dépôt actuel ne contient pas de caisse certifiée. Jusqu’à ce que ce cha
 4. Ajouter les canaux POS/téléphone/borne et le routage explicable.
 5. Ajouter tâches de production et profils Make Line, Four et Expeditor.
 6. Ajouter encaissement au retrait, moyens de paiement, shifts et clôture de caisse.
-7. Ajouter SMS de commande prête, connecteurs livraison et intégration Uber après accès partenaire.
+7. Ajouter le consommateur de l’outbox SMS transactionnelle, puis le connecteur Uber Eats après accès partenaire.
 8. Ajouter le relais local, la reprise après coupure et le back-office enseigne.
 9. Piloter sur Ronchin et Tourcoing, puis ouvrir la configuration à d’autres tenants.
 
