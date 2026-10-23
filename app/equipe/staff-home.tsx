@@ -1,0 +1,92 @@
+'use client';
+
+import {useCallback,useEffect,useRef,useState} from 'react';
+import Link from 'next/link';
+import {ArrowLeft,ArrowUpRight,Building2,CheckCircle2,ChefHat,Copy,Flame,LoaderCircle,PackageCheck,RefreshCw,ShieldCheck,ShoppingBasket,UserRound,Users} from 'lucide-react';
+import {AlertDialog,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle} from '@/components/ui/alert-dialog';
+import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
+import {api,Button,ErrorBox,Field} from '../components';
+import {loginPath} from '../member-ui';
+import {productionHref,scopeQuery,useStaffAccess,type StaffScope,type StaffStation} from './staff-access';
+
+type Member={id:string;principalId:string;name:string;role:string;status:'active'|'revoked';locationId:string|null};
+type Confirmation={action:'grant';principalId:string;role:string;scope:StaffScope}|{action:'revoke';member:Member;scope:StaffScope};
+const stationLabels:Record<StaffStation,{name:string;icon:typeof ChefHat}>={make_line:{name:'Montage',icon:ChefHat},oven:{name:'Four',icon:Flame},expeditor:{name:'Expédition',icon:PackageCheck}};
+const faultStatus=(cause:unknown)=>(cause as {status?:number})?.status;
+
+export function StaffHome(){
+ const access=useStaffAccess();
+ const[selected,setSelected]=useState(''),[copyMessage,setCopyMessage]=useState(''),[dirty,setDirty]=useState(false),[pendingHref,setPendingHref]=useState('');
+ const copyInput=useRef<HTMLInputElement>(null),navigationTrigger=useRef<HTMLElement|null>(null);
+ const scopes=access.data?.scopes||[];
+ const scope=scopes.find(item=>scopeQuery(item)===selected)||scopes[0];
+ useEffect(()=>{if(!dirty)return;const guard=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};window.addEventListener('beforeunload',guard);return()=>window.removeEventListener('beforeunload',guard);},[dirty]);
+ const intercept=(event:React.MouseEvent<HTMLElement>)=>{
+  if(!dirty||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+  const anchor=(event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+  if(anchor&&anchor.target!=='_blank'){event.preventDefault();navigationTrigger.current=anchor;setPendingHref(anchor.href);}
+ };
+ const copy=async()=>{if(!access.data)return;try{await navigator.clipboard.writeText(access.data.account.id);setCopyMessage('Identifiant copié.');}catch{copyInput.current?.focus();copyInput.current?.select();setCopyMessage('Copie indisponible. L’identifiant est sélectionné : copiez-le manuellement.');}};
+
+ return <main id="contenu" className="page-shell staff-shell" onClickCapture={intercept}>
+  <header className="staff-heading"><div><Link href="/" className="staff-back"><ArrowLeft size={18}/> Retour au site</Link><p className="staff-eyebrow"><Users size={17}/> ESPACE ÉQUIPE</p><h1>Votre service<span>.</span></h1><p>Retrouvez les établissements et les postes auxquels votre compte a accès.</p></div><Button tone="outline" busy={access.refreshing} onClick={()=>void access.refresh()}><RefreshCw size={18}/> Actualiser les accès</Button></header>
+  {access.loading&&!access.data?<div className="staff-loading" role="status"><LoaderCircle size={24} className="spin"/>Vérification de vos accès…</div>:null}
+  {access.error&&<ErrorBox message={access.error} retry={()=>void access.refresh()}/>}
+  {access.status===401&&<p><Link className="btn btn-primary" href={loginPath('/equipe')}>Se reconnecter par SMS</Link></p>}
+  {access.data&&<>
+   <section className="panel staff-account" aria-labelledby="staff-account-title"><div><p className="staff-eyebrow"><UserRound size={16}/> VOTRE COMPTE</p><h2 id="staff-account-title">{access.data.account.name||'Compte de l’équipe'}</h2><p>Transmettez cet identifiant au propriétaire pour qu’il vous attribue un établissement et un rôle.</p></div><div className="staff-copy"><label htmlFor="staff-account-id">Identifiant du compte</label><div><input ref={copyInput} id="staff-account-id" value={access.data.account.id} readOnly spellCheck={false}/><Button tone="outline" onClick={()=>void copy()} aria-label="Copier mon identifiant de compte"><Copy size={18}/> Copier</Button></div><p role="status">{copyMessage}</p></div></section>
+   {!scopes.length?<section className="panel staff-empty"><ShieldCheck size={36}/><h2>Aucun établissement attribué.</h2><p>Votre compte est connecté. Le propriétaire doit maintenant vous donner un accès avec l’identifiant affiché ci-dessus.</p><Button tone="outline" busy={access.refreshing} onClick={()=>void access.refresh()}>Vérifier mes accès</Button></section>:<>
+    <section className="staff-site-choice" aria-labelledby="staff-site-title"><div><p className="staff-eyebrow"><Building2 size={17}/> ÉTABLISSEMENT</p><h2 id="staff-site-title">Choisissez votre lieu de travail.</h2></div><div className="staff-site-picker"><label htmlFor="staff-location">Établissement actif</label><Select value={scopeQuery(scope)} onValueChange={setSelected} disabled={!!access.error}><SelectTrigger id="staff-location" className="staff-select"><SelectValue/></SelectTrigger><SelectContent className="staff-select-popup" position="popper">{scopes.map(item=><SelectItem key={scopeQuery(item)} value={scopeQuery(item)}>{item.organizationName} · {item.locationName}</SelectItem>)}</SelectContent></Select></div></section>
+    <section className="staff-workspaces" aria-label={`Postes de ${scope.locationName}`}>
+     {scope.roles.some(role=>['owner','manager','pos','call_center'].includes(role))&&<article className="panel staff-workspace"><ShoppingBasket size={29}/><p className="staff-eyebrow">{scope.locationName}</p><h3>Prise de commande</h3><p>Créer une commande comptoir ou téléphone, choisir le retrait et transmettre le ticket à la production.</p>{access.error?<span className="staff-access-warning">Vérification des accès nécessaire.</span>:<Link href={`/equipe/commande?${scopeQuery(scope)}`} className="btn btn-primary">Ouvrir la caisse<ArrowUpRight size={18}/></Link>}</article>}
+     {scope.stations.map(station=>{const entry=stationLabels[station],Icon=entry.icon,readOnly=!scope.writeStations.includes(station);return <article className="panel staff-workspace" key={station}><Icon size={29}/><p className="staff-eyebrow">{scope.locationName}</p><h3>{entry.name}</h3><p>{readOnly?'Consulter les tickets. Vos droits ne permettent pas de valider les étapes.':'Consulter les tickets et confirmer les étapes de ce poste.'}</p>{access.error?<span className="staff-access-warning">Vérification des accès nécessaire.</span>:<Link href={productionHref(scope,station)} className="btn btn-primary">{readOnly?'Consulter le poste':'Ouvrir le poste'}<ArrowUpRight size={18}/></Link>}</article>;})}
+     {!scope.stations.length&&<div className="panel staff-empty"><h3>Aucun poste de production attribué.</h3><p>Vos rôles pour cet établissement : {scope.roles.map(role=>access.data?.roles.find(item=>item.id===role)?.label||(role==='owner'?'Propriétaire':role)).join(', ')}. Le responsable peut vous attribuer un poste si votre travail le nécessite.</p></div>}
+    </section>
+    {scope.canManageStaff&&<StaffManager scope={scope} roles={access.data.roles} locked={!!access.error} onAccessRefresh={access.refresh} onDirtyChange={setDirty}/>}
+   </>}
+  </>}
+  <AlertDialog open={!!pendingHref} onOpenChange={open=>{if(!open)setPendingHref('');}}><AlertDialogContent className="dolce-dialog staff-confirm" onCloseAutoFocus={event=>{event.preventDefault();navigationTrigger.current?.focus();}}><AlertDialogHeader><AlertDialogTitle>Quitter la saisie en cours ?</AlertDialogTitle><AlertDialogDescription>L’accès que vous préparez n’a pas été attribué. Votre saisie sera perdue en quittant cette page.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="btn btn-outline">Continuer la saisie</AlertDialogCancel><Button onClick={()=>window.location.assign(pendingHref)}>Quitter la page</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+ </main>;
+}
+
+function StaffManager({scope,roles,locked,onAccessRefresh,onDirtyChange}:{scope:StaffScope;roles:{id:string;label:string}[];locked:boolean;onAccessRefresh:()=>Promise<void>;onDirtyChange:(dirty:boolean)=>void}){
+ const[fetchedMembers,setMembers]=useState<Member[]>([]),[loadedScope,setLoadedScope]=useState(''),[truncated,setTruncated]=useState(false),[loading,setLoading]=useState(true),[listError,setListError]=useState(''),[principalId,setPrincipalId]=useState(''),[role,setRole]=useState(''),[fieldError,setFieldError]=useState(''),[mutationError,setMutationError]=useState(''),[confirmation,setConfirmation]=useState<Confirmation|null>(null),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(''),[page,setPage]=useState(0);
+ const accountField=useRef<HTMLInputElement>(null),request=useRef<AbortController|null>(null),serial=useRef(0),busyRef=useRef(false),mounted=useRef(true),confirmationTrigger=useRef<HTMLElement|null>(null);
+ const query=scopeQuery(scope);
+ const members=loadedScope===query?fetchedMembers:[];
+ const listPending=loading||loadedScope!==query;
+ const roleLabel=(id:string)=>roles.find(item=>item.id===id)?.label||(id==='owner'?'Propriétaire':id);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+ useEffect(()=>{onDirtyChange(!!principalId.trim()||!!role);return()=>onDirtyChange(false);},[principalId,role,onDirtyChange]);
+ const load=useCallback(async()=>{
+  request.current?.abort();const controller=new AbortController(),id=++serial.current;request.current=controller;setLoading(true);
+  try{const result=await api<{members:Member[];truncated?:boolean}>(`staff?${query}&members=1`,'GET',undefined,controller.signal);if(!Array.isArray(result.members))throw new Error('La liste reçue est incomplète. Réessayez.');if(id===serial.current&&!controller.signal.aborted){setMembers(result.members.filter(member=>member.status==='active'));setLoadedScope(query);setTruncated(result.truncated===true);setListError('');setPage(0);}}
+  catch(cause){if(id===serial.current&&!controller.signal.aborted){setMembers([]);setLoadedScope(query);setListError((cause as Error).message||'Impossible de charger les accès.');if(faultStatus(cause)===401||faultStatus(cause)===403)void onAccessRefresh();}}
+  finally{if(id===serial.current&&!controller.signal.aborted)setLoading(false);}
+ },[query,onAccessRefresh]);
+ useEffect(()=>{const tick=window.setTimeout(()=>{setMembers([]);setConfirmation(null);setMutationError('');setFeedback('');setTruncated(false);void load();},0);return()=>{window.clearTimeout(tick);request.current?.abort();};},[load]);
+ const submit=(event:React.FormEvent)=>{event.preventDefault();if(busyRef.current||locked)return;setFieldError('');setMutationError('');setFeedback('');if(!principalId.trim()){setFieldError('Collez l’identifiant du compte transmis par votre collègue.');accountField.current?.focus();return;}if(!roles.some(item=>item.id===role)){setFieldError('Choisissez un rôle pour ce compte.');document.getElementById('staff-role')?.focus();return;}confirmationTrigger.current=document.activeElement as HTMLElement;setConfirmation({action:'grant',scope,principalId:principalId.trim(),role});};
+ const mutate=async()=>{
+  if(!confirmation||locked||busyRef.current)return;const operation=confirmation;busyRef.current=true;setBusy(true);setMutationError('');
+  try{await api('staff','POST',operation.action==='grant'?{action:'grant',organizationId:operation.scope.organizationId,locationId:operation.scope.locationId,principalId:operation.principalId,role:operation.role}:{action:'revoke',organizationId:operation.scope.organizationId,locationId:operation.scope.locationId,membershipId:operation.member.id});if(!mounted.current)return;setConfirmation(null);setFeedback(operation.action==='grant'?'Accès attribué par le serveur.':'Accès retiré par le serveur.');if(operation.action==='grant'){setPrincipalId('');setRole('');}await load();await onAccessRefresh();}
+  catch(cause){if(!mounted.current)return;setMutationError((cause as Error).message||'La modification n’a pas été confirmée. Actualisez les accès avant de réessayer.');if(faultStatus(cause)===401||faultStatus(cause)===403){setConfirmation(null);void onAccessRefresh();}}
+  finally{busyRef.current=false;if(mounted.current)setBusy(false);}
+ };
+ const activePage=Math.min(page,Math.max(0,Math.ceil(members.length/10)-1)),visible=members.slice(activePage*10,activePage*10+10);
+ return <section className="panel staff-management" aria-labelledby="staff-management-title">
+  <div className="staff-section-heading"><div><p className="staff-eyebrow"><ShieldCheck size={17}/> PROPRIÉTAIRE</p><h2 id="staff-management-title">Accès à {scope.locationName}</h2><p>Chaque personne utilise son propre compte. Un rôle ouvre uniquement les fonctions prévues pour cet établissement.</p></div><Button tone="outline" disabled={locked||busy} busy={listPending} onClick={()=>void load()}><RefreshCw size={18}/> Actualiser la liste</Button></div>
+  {feedback&&<p className="staff-success" role="status"><CheckCircle2 size={18}/>{feedback}</p>}
+  {mutationError&&!confirmation&&<ErrorBox message={mutationError}/>}
+  <form noValidate className="staff-grant-form" onSubmit={submit}>
+   <Field label="Identifiant du compte" id="staff-principal" hint="Votre collègue le copie depuis son espace équipe." error={fieldError&&!principalId.trim()?fieldError:undefined}><input ref={accountField} id="staff-principal" value={principalId} onChange={event=>{setPrincipalId(event.target.value);setFieldError('');}} autoComplete="off" spellCheck={false} maxLength={160} disabled={locked||busy} aria-invalid={!!fieldError&&!principalId.trim()} aria-describedby={`staff-principal-hint${fieldError&&!principalId.trim()?' staff-principal-error':''}`}/></Field>
+   <Field label="Rôle dans cet établissement" id="staff-role" error={fieldError&&!!principalId.trim()?fieldError:undefined}><Select value={role} onValueChange={value=>{setRole(value);setFieldError('');}} disabled={locked||busy}><SelectTrigger id="staff-role" className="staff-select" aria-invalid={!!fieldError&&!!principalId.trim()} aria-describedby={fieldError&&principalId.trim()?'staff-role-error':undefined}><SelectValue placeholder="Choisir un rôle"/></SelectTrigger><SelectContent className="staff-select-popup" position="popper">{roles.map(item=><SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent></Select></Field>
+   <Button type="submit" disabled={locked||busy||listPending||!!listError} className="staff-grant-submit">Attribuer cet accès</Button>
+  </form>
+  <div className="staff-members-head"><h3>{truncated?'Accès actifs affichés':'Accès actifs'} <span>({members.length})</span></h3><p>Les accès à toute l’organisation sont protégés ici.</p></div>
+  {truncated&&loadedScope===query&&<p className="staff-access-warning" role="status">La liste est limitée aux 500 premiers accès. D’autres accès peuvent être actifs : cette liste ne constitue pas un inventaire complet.</p>}
+  {listError&&<ErrorBox message={listError} retry={()=>void load()}/>}
+  {listPending?<p className="staff-list-loading" role="status"><LoaderCircle size={20} className="spin"/>Chargement des accès…</p>:!listError&&!members.length?<p className="staff-list-empty">Aucun accès actif pour cet établissement.</p>:<ul className="staff-members">{visible.map(member=><li key={member.id}><div><strong>{member.name||'Compte de l’équipe'}</strong><code>{member.principalId}</code><span>{roleLabel(member.role)}{member.locationId===null?' · Toute l’organisation':''}</span></div>{member.locationId===null?<span className="staff-protected"><ShieldCheck size={17}/>Accès protégé</span>:<Button tone="outline" className="staff-revoke" disabled={locked||busy||!!listError} onClick={event=>{confirmationTrigger.current=event.currentTarget;setMutationError('');setConfirmation({action:'revoke',member,scope});}} aria-label={`Retirer le rôle ${roleLabel(member.role)} de ${member.name||'ce compte'}`}>Retirer l’accès</Button>}</li>)}</ul>}
+  {members.length>10&&<nav className="staff-pagination" aria-label="Pages des accès"><Button tone="outline" disabled={activePage===0} onClick={()=>setPage(activePage-1)}>Précédent</Button><span>Page {activePage+1} sur {Math.ceil(members.length/10)}</span><Button tone="outline" disabled={(activePage+1)*10>=members.length} onClick={()=>setPage(activePage+1)}>Suivant</Button></nav>}
+  <AlertDialog open={!!confirmation} onOpenChange={open=>{if(!open&&!busy){setConfirmation(null);setMutationError('');}}}><AlertDialogContent className="dolce-dialog staff-confirm" onCloseAutoFocus={event=>{event.preventDefault();const trigger=confirmationTrigger.current;if(trigger?.isConnected)trigger.focus();else accountField.current?.focus();}} onEscapeKeyDown={event=>{if(busy)event.preventDefault();}}><AlertDialogHeader><AlertDialogTitle>{confirmation?.action==='grant'?'Attribuer cet accès ?':'Retirer cet accès ?'}</AlertDialogTitle><AlertDialogDescription>{confirmation?.action==='grant'?<>Le compte <strong>{confirmation.principalId}</strong> recevra le rôle <strong>{roleLabel(confirmation.role)}</strong> pour <strong>{confirmation.scope.locationName}</strong>. Il pourra utiliser les fonctions prévues par ce rôle.</>:confirmation?<>Le compte <strong>{confirmation.member.name||confirmation.member.principalId}</strong> perdra le rôle <strong>{roleLabel(confirmation.member.role)}</strong> pour <strong>{confirmation.scope.locationName}</strong>. Ses autres rôles resteront actifs.</>:''}</AlertDialogDescription></AlertDialogHeader>{mutationError&&<ErrorBox message={mutationError}/>}<AlertDialogFooter><AlertDialogCancel className="btn btn-outline" disabled={busy}>Annuler</AlertDialogCancel><Button busy={busy} disabled={locked} tone={confirmation?.action==='revoke'?'danger':'primary'} onClick={()=>void mutate()}>{confirmation?.action==='grant'?'Attribuer l’accès':'Retirer l’accès'}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+ </section>;
+}

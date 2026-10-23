@@ -1,6 +1,6 @@
 # Installation et exploitation — Dolce Pizz’
 
-Ce guide couvre le prototype web et le premier KDS pilote. Make Line, Four et Expeditor sont maintenant présents à `/production` et utilisent une API persistée pour Dolce Pizz’ à Ronchin. Cette tranche n’est pas encore une caisse exploitable ni un produit SaaS multi-tenant. POS comptoir/mobile, centre d’appels, bornes, SMS transactionnels, paiement au retrait, relais hors ligne et Uber Eats restent à intégrer.
+Ce guide couvre le prototype web, le KDS, la prise de commande simple par le personnel et les accès nominatifs par établissement. Make Line, Four et Expeditor sont présents à `/production`; `/equipe` permet d’ouvrir les postes autorisés et de gérer leurs accès. L’écran `/equipe/commande` accepte les commandes comptoir et téléphone à retirer, recalcule les prix côté serveur et les envoie à la production. Le paiement reste à faire en personne et n’est pas encaissé par cet écran. Un consommateur SMS « commande prête » est livré, mais son fournisseur et son ordonnanceur doivent être configurés avant l’envoi réel. POS mobile de salle, bornes, caisse/TPE, routage automatique du centre d’appels, relais hors ligne et Uber Eats restent à intégrer.
 
 ## 1. Prérequis
 
@@ -26,6 +26,7 @@ Ce guide couvre le prototype web et le premier KDS pilote. Make Line, Four et Ex
    SMS_SENDER=DolcePizz
    ADMIN_SETUP_CODE=<secret de test long et unique>
    MARKETING_STOP_SECRET=<secret aléatoire long, différent du code admin>
+   NOTIFICATION_DISPATCH_SECRET=<secret aléatoire distinct, 32 caractères ou plus, facultatif sans ordonnanceur>
    ```
 
 4. Appliquer les migrations locales :
@@ -43,6 +44,12 @@ Ce guide couvre le prototype web et le premier KDS pilote. Make Line, Four et Ex
 6. Ouvrir l’adresse locale indiquée par le serveur, vérifier la carte, passer une commande de test, puis consulter `/admin` et `/production`. L’ancien chemin `/cuisine` redirige vers `/production`.
 
 7. Pour éprouver les postes KDS, envoyer la commande de test en préparation depuis `/admin`; ouvrir `/production`, parcourir Make Line, Four puis Expeditor et confirmer que l’action « prête » reste bloquée tant que chaque unité n’a pas fini son parcours. Les allergènes et le routage doivent aussi être vérifiés dans les fiches menu; l’API applique ce contrôle côté serveur.
+
+8. Ouvrir `/equipe`. Sur une installation neuve, le premier compte activé avec le code administrateur reçoit l’adhésion propriétaire de Dolce Pizz’. La migration `0005` attribue cette adhésion aux administrateurs déjà présents du pilote. Un nouveau collègue se connecte avec son propre mobile, copie l’identifiant affiché dans `/equipe` et le transmet au propriétaire. Celui-ci choisit l’établissement, l’identifiant et le rôle, puis confirme l’attribution. Retirer un accès bloque les requêtes suivantes et les mutations en attente vérifient aussi sa révocation. La gestion actuelle ne permet ni de transférer ni de retirer le propriétaire organisationnel.
+
+9. Pour éprouver la saisie du personnel, attribuer le rôle Comptoir ou Centre d’appels, ouvrir `/equipe/commande`, choisir le canal, saisir les articles et confirmer l’établissement et le créneau. La commande apparaît en préparation dans les postes KDS. Un SMS de retrait ne sera mis en file que si le client donne son mobile et confirme explicitement ce SMS. Le code postal téléphone est actuellement une aide de saisie : tant que les zones et l’établissement de Tourcoing ne sont pas configurés, l’employé choisit le point de retrait dans la liste, qui ne propose que les établissements autorisés et actifs.
+
+10. Pour vérifier les notifications sans envoi, configurer seulement le secret interne et suivre le mode `dryRun` de [notifications.md](notifications.md). Il n’utilise pas Brevo et ne modifie pas l’outbox. Pour l’exploitation, configurer une clé SMS et un ordonnanceur serveur sécurisé; le navigateur ne doit jamais connaître le secret. Les anciennes commandes sans contact confirmé ne sont pas notifiées automatiquement.
 
 Les scripts locaux utilisent une base locale. Ne branche pas cette configuration sur une base de production et n’y ajoute pas de données réelles de clients.
 
@@ -71,11 +78,11 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 
 ### Profils d’écran
 
-- **POS comptoir** : cible pour saisie et encaissement; paiement et clôture non livrés.
+- **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; encaissement, caisse, TPE et clôture non livrés.
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
-- **Centre d’appels** : cible pour choisir le site de retrait à partir de l’adresse confirmée; non livré.
+- **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; le point de retrait se choisit manuellement, le routage à partir des zones postales n’est pas livré.
 - **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
-- **Make Line, Four, Expeditor** : disponibles au pilote via `/production`; D1 journalise l’avancement. L’accès utilise encore un compte admin global, pas des identifiants d’équipier par poste.
+- **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les accès se gèrent par site/poste dans `/equipe`; les sessions mobiles existantes restent à renforcer avant exploitation avec appareils partagés.
 
 Un appareil doit être enrôlé auprès d’un tenant et d’un établissement. Les identifiants d’équipe sont nominatifs; les changements d’établissement et les remboursements sont audités.
 
@@ -96,11 +103,12 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 ## 7. Ce qui reste à livrer avant une installation de production
 
 - Provisionnement de tenants et d’établissements, isolation des données et permissions par rôle/site.
-- Parcours POS, téléphone et borne, avec sélection d’établissement et règles d’encaissement.
-- Identités et rôles d’équipe par organisation, établissement et poste.
+- Encaissement au retrait, TPE, caisse/clôture de shift et reçus.
+- POS mobile de salle, bornes client et routage du centre d’appels par zones postales vérifiées.
+- Renforcement des sessions d’équipe, enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.
 - Enrôlement des appareils et configuration multi-sites sans constantes pilote.
 - Caisse, TPE, paiement au retrait, clôture de shift, rapprochement des transactions et reçus.
-- Consommateur/reprise de l’outbox SMS de commande prête, distinct des SMS marketing.
+- Configuration et supervision de l’ordonnanceur SMS, essai fournisseur contrôlé et écran de réconciliation des résultats incertains; le consommateur est livré.
 - Connecteur Uber Eats et validation de ses webhooks; aucune livraison directe maison n’est prévue pour le pilote.
 - Relais local, synchronisation hors ligne, procédures de sauvegarde/restauration et supervision.
 - Revue sécurité, tests d’accès croisé, conformité caisse France et pilote avec les équipes.

@@ -7,6 +7,8 @@ declare namespace Cloudflare {
     BREVO_API_KEY?: string;
     SMS_SENDER?: string;
     SMS_DEMO?: string;
+    SMS_CAMPAIGNS_DEMO?: string;
+    NOTIFICATION_DISPATCH_SECRET?: string;
   }
 }
 

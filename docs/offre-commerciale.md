@@ -14,9 +14,9 @@ Le nom commercial du produit reste à choisir. Dolce Pizz’ sert de premier sit
 | POS comptoir et mobile | Saisie de commandes, encaissement, remise et clôture | À construire; la démo permet à l’équipe de valider les commandes web |
 | Centre d’appels | Recherche par téléphone, adresse, commande assistée et choix du site de retrait selon la zone | À construire; routage postal pur et données d’organisation amorcés |
 | Bornes | Commande autonome avec le menu publié du site | À construire |
-| KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | Première tranche KDS spécialisée et persistée pour Ronchin; identités d’équipe et exploitation commerciale restent à construire |
+| KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | KDS persisté avec comptes nominatifs et permissions par organisation/site/poste; Ronchin configuré, exploitation commerciale et appareils à finaliser |
 | Menu et recettes | Publication contrôlée des prix, disponibilité, suppléments et allergènes | Administration de carte, ingrédients et origines déjà dans la démo; versions par site à faire |
-| SMS de service et fidélité | Informer le client, attribuer des points, gérer les préférences marketing | Fidélité et campagnes de démonstration présentes; l’outbox SMS « commande prête » existe, mais son worker d’envoi reste à faire |
+| SMS de service et fidélité | Informer le client, attribuer des points, gérer les préférences marketing | Fidélité et campagnes présentes; outbox et consommateur transactionnel livrés, fournisseur/ordonnanceur et essais de délivrance à configurer |
 | Uber Eats | Recevoir les commandes Uber dans le même flux de préparation; Uber gère son propre transport | À construire; l’accès partenaire et le rattachement de chaque restaurant sont à configurer. Pas de livraison maison au pilote |
 | Tableau de bord réseau | Comparer les sites, gérer menus maîtres, permissions et performance | Fondation organisation/site ajoutée; back-office réseau à construire |
 | Caisse et rapports | Encaissements, moyens de paiement, clôture, écarts et exports | Non implémentée; ne pas la vendre comme caisse conforme aujourd’hui |
@@ -28,7 +28,7 @@ Le nom commercial du produit reste à choisir. Dolce Pizz’ sert de premier sit
 3. L’Expeditor ou le responsable accepte la commande; l’ordre part vers les tâches des postes concernés.
 4. Make Line monte les pizzas et vérifie les personnalisations. Le Four confirme l’enfournement et suit la durée. Les boissons et desserts avancent sur leur poste.
 5. L’Expeditor voit toute la commande. Il vérifie que chaque partie est prête avant de signaler « prête ».
-6. La tranche actuelle crée une entrée SMS durable quand une commande directe avec téléphone est marquée prête. Le service qui envoie puis retente le SMS reste à construire; Uber Eats garde ses propres notifications client.
+6. La tranche actuelle crée une entrée SMS durable pour les commandes directes avec mobile confirmé. Le consommateur serveur peut l’envoyer via Brevo après configuration du fournisseur et de son ordonnanceur. Il écarte les événements périmés et conserve les résultats incertains pour rapprochement manuel; Uber Eats garde ses propres notifications client.
 7. Le client paie au retrait. Le prototype n’enregistre pas encore ce paiement; une caisse conforme et son parcours terminal sont à construire avant de proposer cet encaissement.
 
 ## Installation chez un client

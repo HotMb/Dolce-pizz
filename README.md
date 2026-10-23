@@ -1,11 +1,16 @@
 # Dolce Pizz’ — prototype de commande et fondations POS/KDS
 
-Ce dépôt contient la commande web à emporter de Ronchin, les fondations organisation/site et un premier KDS persistant Make Line/Four/Expeditor. Il ne constitue pas encore une caisse de production ou un SaaS multi-tenant prêt à vendre : POS complet, centre d’appels, bornes, paiement au retrait, SMS de commande prête, Uber Eats et fonctionnement hors ligne restent à intégrer.
+Ce dépôt contient la commande web à emporter de Ronchin, un KDS persistant Make Line/Four/Expeditor, des accès nominatifs par organisation/site/poste et un consommateur de SMS « commande prête ». Le consommateur nécessite des secrets et un ordonnanceur serveur; aucun SMS réel n’est envoyé par les tests. POS complet, centre d’appels, bornes, paiement au retrait, Uber Eats, menu par site et fonctionnement hors ligne restent à construire avant une offre SaaS de production.
+
+> **Clone de travail Dolce Pizz’.** L’historique de `main` commence par `Build Dolce Pizz online ordering site`; le code, l’organisation `dolce-pizza`, le site `ronchin` et le script de mise en ligne ciblent Dolce Pizz’ et le Worker `dolce-pizz-demo`. Le libellé **Pizza Delizio — Commande & fidélité** correspond au projet Sites du clone utilisé pour modifier ce code, pas à la marque de l’application. La branche de travail est `codex/dolce-pos-saas-foundation`. Le Worker public reste une cible distincte : une mise en ligne doit être vérifiée séparément. Détails : [état des exigences](docs/implementation-status.md) et [revue de sécurité](docs/security-review.md).
 
 - [Architecture cible et étapes](docs/architecture.md)
 - [Installation et exploitation](docs/installation.md)
 - [Offre produit et mise en service](docs/offre-commerciale.md)
 - [Revue de sécurité et limites connues](docs/security-review.md)
+- [État des exigences du produit complet](docs/implementation-status.md)
+- [Accès de l’équipe et contrat API](docs/staff-api.md)
+- [SMS de commande prête et exploitation de l’outbox](docs/notifications.md)
 
 ## Dolce Pizz’ configuration
 
@@ -18,10 +23,11 @@ Customers and staff sign in with a French mobile number and a 6-digit SMS code (
 | `ADMIN_SETUP_CODE` | Private code (20+ characters) that grants the admin role to the first account that enters it on `/admin`. |
 | `MARKETING_STOP_SECRET` | Separate random signing secret for recipient-bound marketing unsubscribe links. Keep it stable so links already sent remain usable. |
 | `SMS_CAMPAIGNS_DEMO` | Optional `1` to simulate promotional SMS campaigns without sending messages. It never exposes login codes. |
+| `NOTIFICATION_DISPATCH_SECRET` | Separate 32–256 character random secret for the server scheduler calling the ready-SMS consumer. Never put it in a browser or URL. |
 
 For a local preview, put these in an ignored `.env.local`, apply pending migrations with `npm run db:migrate:local`, and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`.
 
-The team validates orders on `/admin` (points are credited at that moment) and sends them to `/production`. The production screen routes each item through Make Line, Oven and Expeditor; the legacy `/cuisine` path redirects to this screen. The cash register and payment-at-pickup flow are not implemented yet.
+L’équipe valide les commandes sur `/admin` (les points sont alors crédités) et les envoie en production. `/equipe` affiche les établissements et postes autorisés; le propriétaire y attribue ou retire les accès nominatifs. Le KDS vérifie une adhésion active et les permissions du poste à chaque action; l’ancien rôle admin seul ne suffit plus. La migration `0005` convertit les administrateurs historiques du pilote en propriétaires de Dolce Pizz’; une installation neuve crée ce propriétaire lors de l’activation initiale par code privé. `/cuisine` redirige vers `/production`. La caisse et l’encaissement au retrait restent à livrer.
 
 **Menu, ingredients and allergens.** The database is the only source of the menu (`lib/seed.ts` is the opening menu, written once). In `/admin`, the team adds, edits or deletes a product in **Carte** (recipe, prices, allergens, tagline, "2e offerte", photo); a product already ordered is archived rather than deleted, so past orders stay exact. **Ingrédients** holds each ingredient's allergens, its availability (out of stock tonight) and whether it is sold as a supplement; **Origines** holds meat origins (décret n° 2022-65), shown on each pizza and on `/allergenes`. Customers remove ingredients for free and add supplements at the single price set in **Réglages** (`extraPrice`, cents); the kitchen ticket prints the changes in capitals. Allergen data is prefilled from the printed menu and must be checked by the owner ("J’ai vérifié les allergènes").
 

@@ -16,7 +16,7 @@ const managedLinux = readExecutionProfile() === "managed-linux";
 // Secrets for the dev server only (vinext loads `.env.local` into process.env);
 // builds never embed them, hosted values come from the platform's secret settings.
 const localVars: Record<string, string> = Object.fromEntries(
-  ["ADMIN_SETUP_CODE", "MARKETING_STOP_SECRET", "BREVO_API_KEY", "SMS_SENDER"]
+  ["ADMIN_SETUP_CODE", "MARKETING_STOP_SECRET", "BREVO_API_KEY", "SMS_SENDER", "SMS_CAMPAIGNS_DEMO", "NOTIFICATION_DISPATCH_SECRET"]
     .filter((name) => process.env[name])
     .map((name) => [name, process.env[name] ?? ""]),
 );

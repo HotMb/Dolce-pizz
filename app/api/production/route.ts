@@ -1,7 +1,15 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {db, isAdmin} from '@/lib/server';
+import {db} from '@/lib/server';
 import {sessionUser} from '@/lib/auth';
+import {
+  canOperateStation,
+  loadStaffScope,
+  productionWriteGuardSql,
+  readBoundedRequestText,
+  staffScopeSchema,
+  type StaffScopeKey,
+} from '@/lib/staff-access';
 import {
   completeStation,
   markOrderReady,
@@ -21,8 +29,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const ORGANIZATION_ID = 'dolce-pizza';
-const LOCATION_ID = 'ronchin';
 const json = (body: unknown, status = 200) =>
   NextResponse.json(body, {status, headers: {'Cache-Control': 'no-store'}});
 
@@ -60,15 +66,21 @@ type TicketRow = {
 async function requireOperator(request: Request) {
   const user = await sessionUser(request.headers.get('cookie'));
   if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
-  // The pilot only has a single administrator claim. Staff memberships and per-station roles are not provisioned yet.
-  if (!(await isAdmin(user.id))) throw new ApiError(403, 'Cet espace est réservé à l’équipe autorisée.');
-  const location = await db().prepare("SELECT id FROM locations WHERE id=? AND organization_id=? AND status='active'")
-    .bind(LOCATION_ID, ORGANIZATION_ID).first<{id: string}>();
-  if (!location) throw new ApiError(503, 'Le poste de production de Ronchin est indisponible.');
-  return user;
+  const query = new URL(request.url).searchParams;
+  if (query.getAll('organizationId').length > 1 || query.getAll('locationId').length > 1) {
+    throw new ApiError(400, 'Choisissez un seul établissement.');
+  }
+  const scope = staffScopeSchema.parse(query.has('organizationId') || query.has('locationId')
+    ? {organizationId: query.get('organizationId'), locationId: query.get('locationId')}
+    : {organizationId: 'dolce-pizza', locationId: 'ronchin'});
+  const access = await loadStaffScope(db(), user.id, scope);
+  if (!access) throw new ApiError(403, 'Votre compte n’a pas accès à cet établissement actif.');
+  return {user, scope, access};
 }
 
 async function ensureTicket(order: OrderRow) {
+  const ORGANIZATION_ID = order.organization_id;
+  const LOCATION_ID = order.location_id;
   const existing = await db().prepare(
     'SELECT t.order_id,t.ticket_number,t.status,t.revision,t.ticket_payload,t.production_state,o.version AS order_version FROM production_tickets t JOIN orders o ON o.id=t.order_id WHERE t.order_id=? AND t.organization_id=? AND t.location_id=? AND o.organization_id=? AND o.location_id=?',
   ).bind(order.id, ORGANIZATION_ID, LOCATION_ID, ORGANIZATION_ID, LOCATION_ID).first<TicketRow>();
@@ -88,7 +100,9 @@ async function ensureTicket(order: OrderRow) {
   ).bind(order.id, ORGANIZATION_ID, LOCATION_ID, ORGANIZATION_ID, LOCATION_ID).first<TicketRow>();
 }
 
-async function activeOrders(): Promise<OrderRow[]> {
+async function activeOrders(scope: StaffScopeKey): Promise<OrderRow[]> {
+  const ORGANIZATION_ID = scope.organizationId;
+  const LOCATION_ID = scope.locationId;
   const result = await db().prepare(
     "SELECT id,organization_id,location_id,status,version,created_at,updated_at,slot,channel,fulfillment,note,items FROM orders WHERE organization_id=? AND location_id=? AND (status='preparing' OR (status='ready' AND updated_at>?)) ORDER BY CASE WHEN status='preparing' THEN 0 ELSE 1 END,slot,created_at LIMIT 150",
   ).bind(ORGANIZATION_ID, LOCATION_ID, new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()).all<OrderRow>();
@@ -97,12 +111,13 @@ async function activeOrders(): Promise<OrderRow[]> {
 
 export async function GET(request: Request) {
   try {
-    await requireOperator(request);
+    const {scope, access} = await requireOperator(request);
     const requested = new URL(request.url).searchParams.get('station');
     const parsedStation = z.enum(['make_line', 'oven', 'expeditor']).safeParse(requested);
     if (!parsedStation.success) throw new ApiError(400, 'Choisissez un poste de production valide.');
     const station: Station = parsedStation.data;
-    const orders = await activeOrders();
+    if (!canOperateStation(access, station, 'read')) throw new ApiError(403, 'Votre rôle ne permet pas de consulter ce poste.');
+    const orders = await activeOrders(scope);
     const tickets = [];
     for (const order of orders) {
       const ticket = await ensureTicket(order);
@@ -122,7 +137,7 @@ export async function GET(request: Request) {
       });
       if (projected) tickets.push(projected);
     }
-    return json({orders: tickets});
+    return json({orders: tickets, scope: access});
   } catch (error) {
     return handleError(error);
   }
@@ -134,9 +149,10 @@ export async function POST(request: Request) {
     const origin = request.headers.get('origin');
     if (!origin || origin !== url.origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
     if (Number(request.headers.get('content-length') || 0) > 10000) throw new ApiError(413, 'La demande est trop volumineuse.');
-    const user = await requireOperator(request);
-    const serialized = await request.text();
-    if (serialized.length > 10000) throw new ApiError(413, 'La demande est trop volumineuse.');
+    const {user, scope, access} = await requireOperator(request);
+    const ORGANIZATION_ID = scope.organizationId;
+    const LOCATION_ID = scope.locationId;
+    const serialized = await readBoundedRequestText(request, 10000);
     let body: unknown;
     try {
       body = JSON.parse(serialized);
@@ -144,6 +160,9 @@ export async function POST(request: Request) {
       throw new ApiError(400, 'La demande est illisible.');
     }
     const input = parseProductionCommand(body);
+    if (!canOperateStation(access, input.station, input.action)) {
+      throw new ApiError(403, 'Votre rôle ne permet pas cette action à ce poste.');
+    }
     const order = await db().prepare(
       "SELECT id,organization_id,location_id,status,version,created_at,updated_at,slot,channel,fulfillment,note,items FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='preparing'",
     ).bind(input.orderId, ORGANIZATION_ID, LOCATION_ID).first<OrderRow>();
@@ -189,7 +208,7 @@ export async function POST(request: Request) {
         ? startStation(current, input.itemId, input.station, command)
         : completeStation(current, input.itemId, input.station, command);
     if (!transitioned.ok) {
-      const latest = await currentTicketRevision(input.orderId);
+      const latest = await currentTicketRevision(input.orderId, scope);
       const message = transitioned.error === 'revision_conflict'
         ? 'Le ticket a été modifié sur un autre poste. Actualisez la liste.'
         : transitionMessage(transitioned.error);
@@ -209,8 +228,8 @@ export async function POST(request: Request) {
 
     const results = await db().batch([
       db().prepare(
-        'UPDATE production_tickets SET status=?,revision=?,production_state=?,last_command_id=?,updated_at=? WHERE order_id=? AND organization_id=? AND location_id=? AND revision=? AND EXISTS(SELECT 1 FROM orders o WHERE o.id=production_tickets.order_id AND o.organization_id=? AND o.location_id=? AND o.status=\'preparing\' AND o.version=?)',
-      ).bind(next.status, next.revision, JSON.stringify(next), operationId, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, input.expectedRevision, ORGANIZATION_ID, LOCATION_ID, order.version),
+        `UPDATE production_tickets SET status=?,revision=?,production_state=?,last_command_id=?,updated_at=? WHERE order_id=? AND organization_id=? AND location_id=? AND revision=? AND EXISTS(SELECT 1 FROM orders o WHERE o.id=production_tickets.order_id AND o.organization_id=? AND o.location_id=? AND o.status='preparing' AND o.version=?) AND ${productionWriteGuardSql}`,
+      ).bind(next.status, next.revision, JSON.stringify(next), operationId, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, input.expectedRevision, ORGANIZATION_ID, LOCATION_ID, order.version, LOCATION_ID, ORGANIZATION_ID, user.id, input.station),
       db().prepare(
         "UPDATE orders SET status='ready',version=version+1,updated_at=? WHERE id=? AND organization_id=? AND location_id=? AND status='preparing' AND version=? AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
       ).bind(now, input.orderId, ORGANIZATION_ID, LOCATION_ID, order.version, ready ? 1 : 0, input.orderId, operationId, next.revision),
@@ -221,11 +240,11 @@ export async function POST(request: Request) {
         "INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,'ready',?,'Commande prête',? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
       ).bind(`${input.orderId}:production:${next.revision}`, user.id, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),
       db().prepare(
-        "INSERT INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,sent_at) SELECT ?,?,?,?,?,'order_ready',?,'pending',0,?,?,NULL FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND fulfillment='pickup' AND channel IN ('web','phone','pos','kiosk','counter') AND phone<>'' AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
-      ).bind(`${operationId}:notification`, `${operationId}:notification`, ORGANIZATION_ID, LOCATION_ID, input.orderId, JSON.stringify({orderId: input.orderId, eventType: 'order_ready'}), now, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),
+        "INSERT INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,updated_at,sent_at) SELECT ?,?,?,?,?,'order_ready',?,'pending',0,?,?,?,NULL FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND fulfillment='pickup' AND channel IN ('web','phone','pos','kiosk','counter') AND phone<>'' AND notification_phone<>'' AND notification_phone_basis IN ('account_otp','staff_confirmed') AND notification_phone_captured_at IS NOT NULL AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
+      ).bind(`${operationId}:notification`, `${operationId}:notification`, ORGANIZATION_ID, LOCATION_ID, input.orderId, JSON.stringify({orderId: input.orderId, eventType: 'order_ready'}), now, now, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),
     ]);
     if (!results[0].meta.changes) {
-      const latest = await currentTicketRevision(input.orderId);
+      const latest = await currentTicketRevision(input.orderId, scope);
       return json({error: 'Le ticket a été modifié sur un autre poste. Actualisez la liste.', refresh: true, revision: latest}, 409);
     }
     return json({ok: true, revision: next.revision, status: next.status, refresh: true});
@@ -234,10 +253,10 @@ export async function POST(request: Request) {
   }
 }
 
-async function currentTicketRevision(orderId: string): Promise<number | null> {
+async function currentTicketRevision(orderId: string, scope: StaffScopeKey): Promise<number | null> {
   const row = await db().prepare(
     'SELECT revision FROM production_tickets WHERE order_id=? AND organization_id=? AND location_id=?',
-  ).bind(orderId, ORGANIZATION_ID, LOCATION_ID).first<{revision: number}>();
+  ).bind(orderId, scope.organizationId, scope.locationId).first<{revision: number}>();
   return row?.revision ?? null;
 }
 
@@ -256,6 +275,7 @@ function transitionMessage(error: string): string {
 }
 
 function handleError(error: unknown) {
+  if (error instanceof RangeError) return json({error: 'La demande est trop volumineuse.'}, 413);
   if (error instanceof z.ZodError) return json({error: error.issues[0]?.message || 'Vérifiez les informations.'}, 400);
   if (error instanceof ApiError) return json({error: error.message}, error.status);
   console.error('Production API error', error instanceof Error ? error.message : 'unknown');

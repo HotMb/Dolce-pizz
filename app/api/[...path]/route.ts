@@ -67,13 +67,16 @@ async function handler(request:Request){
    return json({ok:true},200,stopProofCookie('',secure,0));
   }
   if(path[0]==='slots'&&method==='GET'){
-   const s=await settings();const r=await db().prepare("SELECT slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND slot>? GROUP BY slot").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date().toISOString()).all<{slot:string;n:number}>();
+   const active=await db().prepare("SELECT l.id FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first();
+   if(!active)return json({slots:[],settings:await settings()});
+   const s=await settings();const r=await db().prepare("SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date().toISOString()).all<{slot:string;n:number}>();
    return json({slots:slots(s,Object.fromEntries(r.results.map(v=>[v.slot,v.n]))),settings:s});
   }
   if(path[0]==='me'&&method==='GET'){
    const s=await settings();const loyalty={enabled:s.loyaltyEnabled,pointsPerEuro:s.pointsPerEuro,rewardPoints:s.rewardPoints};
    if(!user)return json({user:null,admin:false,balance:0,orders:[],loyalty});
-   const rows=await db().prepare('SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 100').bind(user.id).all();
+   // Staff-entered orders share the employee's account id for attribution, but are not customer orders.
+   const rows=await db().prepare("SELECT * FROM orders WHERE user_id=? AND channel='web' ORDER BY created_at DESC LIMIT 100").bind(user.id).all();
    const consent=await db().prepare('SELECT marketing FROM users WHERE id=?').bind(user.id).first<{marketing:number}>();
    return json({user:{name:user.name,phone:localPhone(user.phone),marketing:!!consent?.marketing},admin:await isAdmin(user.id),balance:await balance(user.id),orders:rows.results.map(orderView),loyalty});
   }
@@ -88,16 +91,19 @@ async function handler(request:Request){
   }
   if(path[0]==='orders'&&method==='POST'&&!path[1]){
    const input=orderInput.parse(await body());
-   const previous=await db().prepare('SELECT * FROM orders WHERE user_id=? AND idempotency=?').bind(actor,input.key).first();
+   const previous=await db().prepare("SELECT * FROM orders WHERE user_id=? AND idempotency=? AND channel='web'").bind(actor,input.key).first();
    if(previous)return json({order:orderView(previous)});
    // This public web flow is currently configured for the verified Ronchin pickup site.
    // Never create a new unscoped order or silently route to the unconfigured Tourcoing site.
    const organizationId=PILOT_ORGANIZATION_ID,locationId=PILOT_LOCATION_ID;
-   const location=await db().prepare("SELECT id FROM locations WHERE id=? AND organization_id=? AND status='active'").bind(locationId,organizationId).first();
+   const location=await db().prepare("SELECT l.id FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.id=? AND l.organization_id=? AND l.status='active'").bind(locationId,organizationId).first();
    if(!location)fail(503,'La prise de commande pour le retrait à Ronchin est momentanément indisponible.');
    const s=await settings();
    if(!s.hoursConfirmed)fail(409,'Les horaires de retrait doivent encore être confirmés par la pizzeria.');
-   if(!allowedSlot(Date.parse(input.slot),s))fail(409,'Ce créneau n’est plus disponible. Choisissez un autre horaire.');
+   const slotMs=Date.parse(input.slot);
+   if(!Number.isFinite(slotMs))fail(400,'Choisissez un créneau valide.');
+   const slot=new Date(slotMs).toISOString();
+   if(!allowedSlot(slotMs,s))fail(409,'Ce créneau n’est plus disponible. Choisissez un autre horaire.');
    const [products,ingredients]=await Promise.all([productList(),ingredientList()]);
    const priced=priceCart(input.items,{products,ingredients,extraPrice:s.extraPrice},input.ticket);
    if(priced.problem)fail(409,priced.problem);
@@ -108,23 +114,27 @@ async function handler(request:Request){
    const redeemed=input.ticket?s.rewardPoints:0;const earned=s.loyaltyEnabled?Math.floor(priced.total/100)*s.pointsPerEuro:0;
    const id=crypto.randomUUID();const now=new Date().toISOString();
    const result=await db().batch([
-    db().prepare("INSERT INTO orders(id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,created_at,updated_at,version) SELECT ?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,'pending',?,?,?,'pickup','due_at_pickup',NULL,?,?,1 WHERE (SELECT version FROM config WHERE id=1)=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND slot=? AND status NOT IN ('rejected','cancelled'))<? AND (SELECT COALESCE(SUM(delta),0) FROM ledger WHERE user_id=?)>=? AND (SELECT COUNT(*) FROM orders WHERE user_id=? AND status='pending')<5 ON CONFLICT(user_id,idempotency) DO NOTHING").bind(id,actor,input.key,input.name,localPhone(user.phone),JSON.stringify(items),input.note,input.slot,priced.subtotal,priced.offer,priced.ticketDiscount,priced.total,redeemed,earned,organizationId,locationId,'web',now,now,s.version,organizationId,locationId,input.slot,s.capacity,actor,redeemed,actor),
+    db().prepare("INSERT INTO orders(id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version) SELECT ?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,'pending',?,?,?,'pickup','due_at_pickup',NULL,?,'account_otp',?,?,?,1 WHERE EXISTS(SELECT 1 FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active') AND (SELECT version FROM config WHERE id=1)=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled'))<? AND (SELECT COALESCE(SUM(delta),0) FROM ledger WHERE user_id=?)>=? AND (SELECT COUNT(*) FROM orders WHERE user_id=? AND status='pending')<5 ON CONFLICT(user_id,idempotency) DO NOTHING").bind(id,actor,input.key,input.name,localPhone(user.phone),JSON.stringify(items),input.note,slot,priced.subtotal,priced.offer,priced.ticketDiscount,priced.total,redeemed,earned,organizationId,locationId,'web',user.phone,now,now,now,organizationId,locationId,s.version,organizationId,locationId,slot,s.capacity,actor,redeemed,actor),
     db().prepare("INSERT OR IGNORE INTO ledger(id,user_id,order_id,delta,kind,created_at) SELECT ?,user_id,id,-redeemed,'redemption',? FROM orders WHERE id=? AND redeemed>0").bind(`${id}:redemption`,now,id),
     db().prepare("INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,'pending',?,'Commande envoyée',? FROM orders WHERE id=?").bind(`${id}:1`,actor,now,id)
    ]);
-   if(!result[0].meta.changes){const repeat=await db().prepare('SELECT * FROM orders WHERE user_id=? AND idempotency=?').bind(actor,input.key).first();if(repeat)return json({order:orderView(repeat)});fail(409,'Le créneau, votre solde ou la carte a changé. Actualisez les disponibilités et réessayez.');}
+   if(!result[0].meta.changes){const repeat=await db().prepare("SELECT * FROM orders WHERE user_id=? AND idempotency=? AND channel='web'").bind(actor,input.key).first();if(repeat)return json({order:orderView(repeat)});fail(409,'Le créneau, votre solde ou la carte a changé. Actualisez les disponibilités et réessayez.');}
    return json({order:orderView(await db().prepare('SELECT * FROM orders WHERE id=?').bind(id).first())},201);
   }
   if(path[0]==='orders'&&path[1]&&method==='GET'){
-   const order=await db().prepare('SELECT * FROM orders WHERE id=? AND user_id=?').bind(path[1],actor).first();if(!order)fail(404,'Commande introuvable.');
+   const order=await db().prepare("SELECT * FROM orders WHERE id=? AND user_id=? AND channel='web'").bind(path[1],actor).first();if(!order)fail(404,'Commande introuvable.');
    const events=await db().prepare('SELECT status,note,created_at FROM events WHERE order_id=? ORDER BY created_at').bind(path[1]).all();return json({order:orderView(order),events:events.results});
   }
   if(path[0]==='admin'&&path[1]==='claim'&&method==='POST'){
    const input=z.object({code:z.string().min(20).max(200)}).parse(await body());const required=secret();
    const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));const a=await digest(input.code),b=await digest(required);let difference=0;for(let i=0;i<a.length;i++)difference|=a[i]^b[i];
    if(!required||difference)fail(403,'Code d’installation incorrect.');
-   const result=await db().prepare("INSERT INTO roles(user_id,role) SELECT ?,'admin' WHERE NOT EXISTS(SELECT 1 FROM roles WHERE role='admin')").bind(actor).run();
-   if(!result.meta.changes&&!(await isAdmin(actor)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
+   const now=new Date().toISOString();
+   const result=await db().batch([
+    db().prepare("INSERT INTO roles(user_id,role) SELECT ?,'admin' WHERE NOT EXISTS(SELECT 1 FROM roles WHERE role='admin')").bind(actor),
+    db().prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) SELECT ?,?,NULL,?,'owner','active',?,? WHERE EXISTS(SELECT 1 FROM roles WHERE user_id=? AND role='admin') AND EXISTS(SELECT 1 FROM organizations WHERE id=? AND status='active') AND NOT EXISTS(SELECT 1 FROM organization_memberships WHERE organization_id=? AND role='owner' AND location_id IS NULL)").bind(`bootstrap-owner:${PILOT_ORGANIZATION_ID}:${actor}`,PILOT_ORGANIZATION_ID,actor,now,now,actor,PILOT_ORGANIZATION_ID,PILOT_ORGANIZATION_ID),
+   ]);
+   if(!result[0].meta.changes&&!(await isAdmin(actor)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
   }
   if(path[0]==='orders'&&path[1]&&method==='PATCH')return await updateOrder(path[1],actor,await body(),false);
   if(path[0]!=='admin')fail(404,'Page introuvable.');
@@ -158,7 +168,7 @@ async function updateOrder(id:string,actor:string,data:unknown,admin:boolean){
  if(admin&&['ready','completed'].includes(input.status))fail(409,'Utilisez les postes de production pour finaliser la commande; le retrait et l’encaissement seront validés dans le parcours de caisse.');
  const order=admin
   ?await db().prepare('SELECT user_id,status,version FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first<{user_id:string;status:string;version:number}>()
-  :await db().prepare('SELECT user_id,status,version FROM orders WHERE id=?').bind(id).first<{user_id:string;status:string;version:number}>();if(!order||(!admin&&order.user_id!==actor))fail(404,'Commande introuvable.');
+  :await db().prepare("SELECT user_id,status,version FROM orders WHERE id=? AND user_id=? AND channel='web'").bind(id,actor).first<{user_id:string;status:string;version:number}>();if(!order||(!admin&&order.user_id!==actor))fail(404,'Commande introuvable.');
  if(!admin&&(order.status!=='pending'||input.status!=='cancelled'))fail(409,'Cette commande a déjà été prise en charge. Appelez la pizzeria.');
  if(!nextStatus(order.status,input.status))fail(409,'Cette commande a changé d’état. Actualisez la liste.');
  if(admin&&['cancelled','rejected'].includes(input.status)&&input.reason.length<3)fail(400,'Indiquez le motif communiqué au client.');
@@ -176,7 +186,7 @@ async function updateOrder(id:string,actor:string,data:unknown,admin:boolean){
  if(!result[0].meta.changes)fail(409,'Une autre action a modifié cette commande. Actualisez la liste.');
  const updated=admin
   ?await db().prepare('SELECT * FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first()
-  :await db().prepare('SELECT * FROM orders WHERE id=?').bind(id).first();
+  :await db().prepare("SELECT * FROM orders WHERE id=? AND channel='web'").bind(id).first();
  return json({order:orderView(updated)});
 }
 
