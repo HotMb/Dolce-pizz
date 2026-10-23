@@ -33,7 +33,7 @@ const MAX_PHOTO=1900000;
 async function handler(request:Request){
  try{
   const url=new URL(request.url);const path=url.pathname.slice(5).split('/'); const method=request.method;
-  if(path[0]==='photos'&&method==='GET')return await photo(request,path[1],path[2],Number(path[3]));
+  if(path[0]==='photos'&&method==='GET')return await photo(request,path[1],path[2],Number(path[3]),PILOT_ORGANIZATION_ID);
   // Photos arrive already cut out and compressed by the tablet: 3 WebP files, under 2 MB each.
   const upload=method==='POST'&&path[0]==='admin'&&path[1]==='products'&&path[3]==='photo';
   if(method!=='GET'){
@@ -69,11 +69,11 @@ async function handler(request:Request){
   if(path[0]==='slots'&&method==='GET'){
    const active=await db().prepare("SELECT l.id FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first();
    if(!active)return json({slots:[],settings:await settings()});
-   const s=await settings();const r=await db().prepare("SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date().toISOString()).all<{slot:string;n:number}>();
+   const s=await settings(PILOT_ORGANIZATION_ID);const r=await db().prepare("SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date().toISOString()).all<{slot:string;n:number}>();
    return json({slots:slots(s,Object.fromEntries(r.results.map(v=>[v.slot,v.n]))),settings:s});
   }
   if(path[0]==='me'&&method==='GET'){
-   const s=await settings();const loyalty={enabled:s.loyaltyEnabled,pointsPerEuro:s.pointsPerEuro,rewardPoints:s.rewardPoints};
+   const s=await settings(PILOT_ORGANIZATION_ID);const loyalty={enabled:s.loyaltyEnabled,pointsPerEuro:s.pointsPerEuro,rewardPoints:s.rewardPoints};
    if(!user)return json({user:null,admin:false,balance:0,orders:[],loyalty});
    // Staff-entered orders share the employee's account id for attribution, but are not customer orders.
    const rows=await db().prepare("SELECT * FROM orders WHERE user_id=? AND channel='web' ORDER BY created_at DESC LIMIT 100").bind(user.id).all();
@@ -91,20 +91,20 @@ async function handler(request:Request){
   }
   if(path[0]==='orders'&&method==='POST'&&!path[1]){
    const input=orderInput.parse(await body());
-   const previous=await db().prepare("SELECT * FROM orders WHERE user_id=? AND idempotency=? AND channel='web'").bind(actor,input.key).first();
+   const previous=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND location_id=? AND user_id=? AND idempotency=? AND channel='web'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,actor,input.key).first();
    if(previous)return json({order:orderView(previous)});
    // This public web flow is currently configured for the verified Ronchin pickup site.
    // Never create a new unscoped order or silently route to the unconfigured Tourcoing site.
    const organizationId=PILOT_ORGANIZATION_ID,locationId=PILOT_LOCATION_ID;
    const location=await db().prepare("SELECT l.id FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.id=? AND l.organization_id=? AND l.status='active'").bind(locationId,organizationId).first();
    if(!location)fail(503,'La prise de commande pour le retrait à Ronchin est momentanément indisponible.');
-   const s=await settings();
+   const s=await settings(organizationId);
    if(!s.hoursConfirmed)fail(409,'Les horaires de retrait doivent encore être confirmés par la pizzeria.');
    const slotMs=Date.parse(input.slot);
    if(!Number.isFinite(slotMs))fail(400,'Choisissez un créneau valide.');
    const slot=new Date(slotMs).toISOString();
    if(!allowedSlot(slotMs,s))fail(409,'Ce créneau n’est plus disponible. Choisissez un autre horaire.');
-   const [products,ingredients]=await Promise.all([productList(),ingredientList()]);
+   const [products,ingredients]=await Promise.all([productList(false,organizationId),ingredientList(organizationId)]);
    const priced=priceCart(input.items,{products,ingredients,extraPrice:s.extraPrice},input.ticket);
    if(priced.problem)fail(409,priced.problem);
    if(priced.count>30)fail(400,'Pour plus de 30 articles, appelez la pizzeria.');
@@ -114,11 +114,11 @@ async function handler(request:Request){
    const redeemed=input.ticket?s.rewardPoints:0;const earned=s.loyaltyEnabled?Math.floor(priced.total/100)*s.pointsPerEuro:0;
    const id=crypto.randomUUID();const now=new Date().toISOString();
    const result=await db().batch([
-    db().prepare("INSERT INTO orders(id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version) SELECT ?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,'pending',?,?,?,'pickup','due_at_pickup',NULL,?,'account_otp',?,?,?,1 WHERE EXISTS(SELECT 1 FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active') AND (SELECT version FROM config WHERE id=1)=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled'))<? AND (SELECT COALESCE(SUM(delta),0) FROM ledger WHERE user_id=?)>=? AND (SELECT COUNT(*) FROM orders WHERE user_id=? AND status='pending')<5 ON CONFLICT(user_id,idempotency) DO NOTHING").bind(id,actor,input.key,input.name,localPhone(user.phone),JSON.stringify(items),input.note,slot,priced.subtotal,priced.offer,priced.ticketDiscount,priced.total,redeemed,earned,organizationId,locationId,'web',user.phone,now,now,now,organizationId,locationId,s.version,organizationId,locationId,slot,s.capacity,actor,redeemed,actor),
-    db().prepare("INSERT OR IGNORE INTO ledger(id,user_id,order_id,delta,kind,created_at) SELECT ?,user_id,id,-redeemed,'redemption',? FROM orders WHERE id=? AND redeemed>0").bind(`${id}:redemption`,now,id),
-    db().prepare("INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,'pending',?,'Commande envoyée',? FROM orders WHERE id=?").bind(`${id}:1`,actor,now,id)
+    db().prepare("INSERT INTO orders(id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version) SELECT ?,?,?,?,?,'',?,?,?,?,?,?,?,?,?,'pending',?,?,?,'pickup','due_at_pickup',NULL,?,'account_otp',?,?,?,1 WHERE EXISTS(SELECT 1 FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active') AND (SELECT version FROM config WHERE organization_id=?)=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled'))<? AND (SELECT COALESCE(SUM(delta),0) FROM ledger WHERE user_id=?)>=? AND (SELECT COUNT(*) FROM orders WHERE user_id=? AND status='pending')<5 ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING").bind(id,actor,input.key,input.name,localPhone(user.phone),JSON.stringify(items),input.note,slot,priced.subtotal,priced.offer,priced.ticketDiscount,priced.total,redeemed,earned,organizationId,locationId,'web',user.phone,now,now,now,organizationId,locationId,organizationId,s.version,organizationId,locationId,slot,s.capacity,actor,redeemed,actor),
+    db().prepare("INSERT OR IGNORE INTO ledger(id,user_id,order_id,delta,kind,created_at) SELECT ?,user_id,id,-redeemed,'redemption',? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND redeemed>0").bind(`${id}:redemption`,now,id,organizationId,locationId),
+    db().prepare("INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,'pending',?,'Commande envoyée',? FROM orders WHERE id=? AND organization_id=? AND location_id=?").bind(`${id}:1`,actor,now,id,organizationId,locationId)
    ]);
-   if(!result[0].meta.changes){const repeat=await db().prepare("SELECT * FROM orders WHERE user_id=? AND idempotency=? AND channel='web'").bind(actor,input.key).first();if(repeat)return json({order:orderView(repeat)});fail(409,'Le créneau, votre solde ou la carte a changé. Actualisez les disponibilités et réessayez.');}
+   if(!result[0].meta.changes){const repeat=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND location_id=? AND user_id=? AND idempotency=? AND channel='web'").bind(organizationId,locationId,actor,input.key).first();if(repeat)return json({order:orderView(repeat)});fail(409,'Le créneau, votre solde ou la carte a changé. Actualisez les disponibilités et réessayez.');}
    return json({order:orderView(await db().prepare('SELECT * FROM orders WHERE id=?').bind(id).first())},201);
   }
   if(path[0]==='orders'&&path[1]&&method==='GET'){
@@ -143,7 +143,7 @@ async function handler(request:Request){
    const orders=await db().prepare('SELECT * FROM orders WHERE organization_id=? AND location_id=? ORDER BY created_at DESC LIMIT 300').bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).all();
    const stats=await db().prepare("SELECT COUNT(*) AS count,COALESCE(SUM(total),0) AS revenue FROM orders WHERE organization_id=? AND location_id=? AND status='completed'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first();
    const audience=await db().prepare('SELECT COUNT(*) AS customers,COALESCE(SUM(marketing),0) AS subscribers FROM users').first<{customers:number;subscribers:number}>();
-   return json({orders:orders.results.map(orderView),settings:await settings(),products:await productList(true),ingredients:await ingredientList(),stats,audience,sms:smsMode(local)});
+   return json({orders:orders.results.map(orderView),settings:await settings(PILOT_ORGANIZATION_ID),products:await productList(true,PILOT_ORGANIZATION_ID),ingredients:await ingredientList(PILOT_ORGANIZATION_ID),stats,audience,sms:smsMode(local)});
   }
   if(path[1]==='kitchen'&&method==='GET'){
    const orders=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND location_id=? AND (status='preparing' OR (status='ready' AND updated_at>?)) ORDER BY slot LIMIT 100").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date(Date.now()-2*3600000).toISOString()).all();
@@ -153,11 +153,11 @@ async function handler(request:Request){
   if(path[1]==='settings'&&method==='PUT'){
    const s=settingsInput.parse(await body());
    for(const h of s.hours){if(!h.closed&&h.close!=='00:00'&&h.open>=h.close)fail(400,'L’heure de fermeture doit suivre l’ouverture, ou être minuit.');}
-   const result=await db().prepare('UPDATE config SET value=?,version=version+1 WHERE id=1 AND version=?').bind(JSON.stringify(s),s.version).run();
-   if(!result.meta.changes)fail(409,'Les réglages ont changé. Rechargez-les avant d’enregistrer.');return json({settings:await settings()});
+   const result=await db().prepare('UPDATE config SET value=?,version=version+1 WHERE organization_id=? AND version=?').bind(JSON.stringify(s),PILOT_ORGANIZATION_ID,s.version).run();
+   if(!result.meta.changes)fail(409,'Les réglages ont changé. Rechargez-les avant d’enregistrer.');return json({settings:await settings(PILOT_ORGANIZATION_ID)});
   }
-  if(path[1]==='products')return await products(request,path[2],path[3],method,body);
-  if(path[1]==='ingredients'||path[1]==='origins')return await ingredients(path[1],path[2],method,body);
+  if(path[1]==='products')return await products(request,path[2],path[3],method,body,PILOT_ORGANIZATION_ID);
+  if(path[1]==='ingredients'||path[1]==='origins')return await ingredients(path[1],path[2],method,body,PILOT_ORGANIZATION_ID);
   if(path[1]==='campaigns')return await campaigns(url,path[2],path[3],method,body,actor,local);
   fail(404,'Cette action est introuvable.');
  }catch(e){if(e instanceof z.ZodError)return json({error:e.issues[0]?.message||'Vérifiez les champs du formulaire.',fields:e.flatten().fieldErrors},400);if(e instanceof HttpError||e instanceof AuthError)return json({error:e.message},e.status);console.error('Dolce API error',e instanceof Error?e.message:'unknown');return json({error:'Le service est momentanément indisponible. Vos informations sont conservées ; réessayez.'},503);}
@@ -191,56 +191,56 @@ async function updateOrder(id:string,actor:string,data:unknown,admin:boolean){
 }
 
 // ── Menu administration ────────────────────────────────────────────────
-const productRow=(id:string)=>db().prepare('SELECT * FROM products WHERE id=?').bind(id).first<Parameters<typeof toProduct>[0]>();
+const productRow=(id:string,organizationId=PILOT_ORGANIZATION_ID)=>db().prepare('SELECT * FROM products WHERE organization_id=? AND id=?').bind(organizationId,id).first<Parameters<typeof toProduct>[0]>();
 async function uniqueId(table:'products'|'ingredients',name:string,fallback:string){
  const base=slugify(name)||fallback;for(let n=1;n<100;n++){const id=n===1?base:`${base}-${n}`;if(!await db().prepare(`SELECT 1 FROM ${table} WHERE id=?`).bind(id).first())return id;}
  return `${base}-${crypto.randomUUID().slice(0,6)}`;
 }
-async function checkProduct(p:z.infer<typeof productFields>){
- const known=new Set((await ingredientList()).map(i=>i.id));
+async function checkProduct(p:z.infer<typeof productFields>,organizationId=PILOT_ORGANIZATION_ID){
+ const known=new Set((await ingredientList(organizationId)).map(i=>i.id));
  if(p.xxl!==null&&p.xxl<=p.price)fail(400,'Le prix XXL doit être supérieur au prix Senior.');
  if(p.offer&&p.xxl===null)fail(400,'L’offre « 2e pizza offerte » concerne uniquement les pizzas Senior et XXL.');
  if(new Set(p.ingredients).size!==p.ingredients.length)fail(400,'Un ingrédient apparaît deux fois dans la recette.');
  const unknown=p.ingredients.find(id=>!known.has(id));if(unknown)fail(400,'Un ingrédient de la recette n’existe plus. Rechargez la page.');
  if(p.xxl!==null&&p.status==='published'&&p.ingredients.length<2)fail(400,'Ajoutez les ingrédients de la pizza avant de la publier.');
- return {...p,description:p.description||describe(p.ingredients,await ingredientList())};
+ return {...p,description:p.description||describe(p.ingredients,await ingredientList(organizationId))};
 }
-async function products(request:Request,id:string|undefined,sub:string|undefined,method:string,body:()=>Promise<unknown>){
+async function products(request:Request,id:string|undefined,sub:string|undefined,method:string,body:()=>Promise<unknown>,organizationId=PILOT_ORGANIZATION_ID){
  const now=new Date().toISOString();
  if(!id&&method==='POST'){
-  const p=await checkProduct(productFields.parse(await body()));
+  const p=await checkProduct(productFields.parse(await body()),organizationId);
   const newId=await uniqueId('products',p.name,'article');
-  const last=await db().prepare('SELECT COALESCE(MAX(sort),0) AS sort FROM products').first<{sort:number}>();
-  await insertProduct({...p,id:newId,photo:'none',sort:(last?.sort||0)+1}).run();
-  return json({product:toProduct((await productRow(newId))!)},201);
+  const last=await db().prepare('SELECT COALESCE(MAX(sort),0) AS sort FROM products WHERE organization_id=?').bind(organizationId).first<{sort:number}>();
+  await insertProduct({...p,id:newId,photo:'none',sort:(last?.sort||0)+1},organizationId).run();
+  return json({product:toProduct((await productRow(newId,organizationId))!)},201);
  }
  if(!id)fail(404,'Cette action est introuvable.');
- const row=await productRow(id);if(!row)fail(404,'Cet article n’existe plus. Rechargez la carte.');const current=toProduct(row);
- if(sub==='photo')return await productPhoto(request,current,method);
+ const row=await productRow(id,organizationId);if(!row)fail(404,'Cet article n’existe plus. Rechargez la carte.');const current=toProduct(row);
+ if(sub==='photo')return await productPhoto(request,current,method,organizationId);
  if(method==='PUT'){
   const input=productFields.partial().extend({version:z.number().int().positive()}).parse(await body());
   const merged={name:current.name,category:current.category,description:current.description,tagline:current.tagline||'',price:current.price,xxl:current.xxl,ingredients:current.ingredients||[],allergens:current.allergens||[],allergensChecked:!!current.allergensChecked,options:current.options||[],spicy:!!current.spicy,offer:!!current.offer,available:current.available,status:current.status||'published',...input};
   if((current.xxl===null)!==(merged.xxl===null))fail(400,'Conservez les tailles proposées pour cet article.');
-  const p=await checkProduct(merged);
-  const r=await db().prepare('UPDATE products SET name=?,category=?,description=?,tagline=?,price=?,xxl=?,ingredients=?,allergens=?,allergens_checked=?,options=?,spicy=?,offer=?,available=?,status=?,version=version+1,updated_at=? WHERE id=? AND version=?')
-   .bind(p.name,p.category,p.description,p.tagline,p.price,p.xxl,JSON.stringify(p.ingredients),JSON.stringify(p.allergens),p.allergensChecked?1:0,JSON.stringify(p.options),p.spicy?1:0,p.offer?1:0,p.available?1:0,p.status,now,id,input.version).run();
+  const p=await checkProduct(merged,organizationId);
+  const r=await db().prepare('UPDATE products SET name=?,category=?,description=?,tagline=?,price=?,xxl=?,ingredients=?,allergens=?,allergens_checked=?,options=?,spicy=?,offer=?,available=?,status=?,version=version+1,updated_at=? WHERE organization_id=? AND id=? AND version=?')
+   .bind(p.name,p.category,p.description,p.tagline,p.price,p.xxl,JSON.stringify(p.ingredients),JSON.stringify(p.allergens),p.allergensChecked?1:0,JSON.stringify(p.options),p.spicy?1:0,p.offer?1:0,p.available?1:0,p.status,now,organizationId,id,input.version).run();
   if(!r.meta.changes)fail(409,'Cet article a été modifié sur un autre appareil. Rechargez-le avant d’enregistrer.');
-  return json({product:toProduct((await productRow(id))!)});
+  return json({product:toProduct((await productRow(id,organizationId))!)});
  }
  if(method==='DELETE'){
   // A product already ordered stays in the database, hidden, so past orders and loyalty stay exact.
-  const ordered=await db().prepare('SELECT 1 FROM orders WHERE instr(items,?) LIMIT 1').bind(`"id":"${id}"`).first();
-  if(ordered){await db().prepare("UPDATE products SET status='archived',version=version+1,updated_at=? WHERE id=?").bind(now,id).run();return json({archived:true});}
-  await db().batch([db().prepare('DELETE FROM products WHERE id=?').bind(id),db().prepare('DELETE FROM product_photos WHERE product_id=?').bind(id)]);
+  const ordered=await db().prepare('SELECT 1 FROM orders WHERE organization_id=? AND instr(items,?) LIMIT 1').bind(organizationId,`"id":"${id}"`).first();
+  if(ordered){await db().prepare("UPDATE products SET status='archived',version=version+1,updated_at=? WHERE organization_id=? AND id=?").bind(now,organizationId,id).run();return json({archived:true});}
+  await db().batch([db().prepare('DELETE FROM products WHERE organization_id=? AND id=?').bind(organizationId,id),db().prepare('DELETE FROM product_photos WHERE organization_id=? AND product_id=?').bind(organizationId,id)]);
   return json({archived:false});
  }
  fail(404,'Cette action est introuvable.');
 }
 const isWebp=(b:Uint8Array)=>b.length>12&&String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';
 const isPng=(b:Uint8Array)=>b.length>8&&b[0]===0x89&&String.fromCharCode(...b.slice(1,4))==='PNG';
-async function productPhoto(request:Request,p:Product,method:string){
+async function productPhoto(request:Request,p:Product,method:string,organizationId=PILOT_ORGANIZATION_ID){
  const now=new Date().toISOString();const previous=(p.photo||'').split(':')[0];
- if(method==='DELETE'){await db().batch([db().prepare("UPDATE products SET photo='none',version=version+1,updated_at=? WHERE id=?").bind(now,p.id),db().prepare('DELETE FROM product_photos WHERE product_id=?').bind(p.id)]);return json({product:toProduct((await productRow(p.id))!)});}
+ if(method==='DELETE'){await db().batch([db().prepare("UPDATE products SET photo='none',version=version+1,updated_at=? WHERE organization_id=? AND id=?").bind(now,organizationId,p.id),db().prepare('DELETE FROM product_photos WHERE organization_id=? AND product_id=?').bind(organizationId,p.id)]);return json({product:toProduct((await productRow(p.id,organizationId))!)});}
  if(method!=='POST')fail(404,'Cette action est introuvable.');
  const form=await request.formData().catch(()=>fail(400,'La photo n’a pas pu être lue. Réessayez.'));
  const files:{width:number;mime:string;data:ArrayBuffer}[]=[];
@@ -255,50 +255,50 @@ async function productPhoto(request:Request,p:Product,method:string){
  const version=crypto.randomUUID().replace(/-/g,'').slice(0,10);
  // Keeps the previous version too: a page opened a minute ago may still show it.
  await db().batch([
-  ...files.map(f=>db().prepare('INSERT INTO product_photos(product_id,version,width,mime,data,created_at) VALUES(?,?,?,?,?,?)').bind(p.id,version,f.width,f.mime,f.data,now)),
-  db().prepare('DELETE FROM product_photos WHERE product_id=? AND version NOT IN (?,?)').bind(p.id,version,previous||'-'),
-  db().prepare('UPDATE products SET photo=?,version=version+1,updated_at=? WHERE id=?').bind(`${version}:${files.map(f=>f.width).join(',')}`,now,p.id),
+  ...files.map(f=>db().prepare('INSERT INTO product_photos(product_id,version,width,mime,data,created_at,organization_id) VALUES(?,?,?,?,?,?,?)').bind(p.id,version,f.width,f.mime,f.data,now,organizationId)),
+  db().prepare('DELETE FROM product_photos WHERE organization_id=? AND product_id=? AND version NOT IN (?,?)').bind(organizationId,p.id,version,previous||'-'),
+  db().prepare('UPDATE products SET photo=?,version=version+1,updated_at=? WHERE organization_id=? AND id=?').bind(`${version}:${files.map(f=>f.width).join(',')}`,now,organizationId,p.id),
  ]);
- return json({product:toProduct((await productRow(p.id))!)});
+ return json({product:toProduct((await productRow(p.id,organizationId))!)});
 }
-async function photo(request:Request,id='',version='',width:number){
+async function photo(request:Request,id='',version='',width:number,organizationId=PILOT_ORGANIZATION_ID){
  const cache=(globalThis as unknown as {caches?:{default?:Cache}}).caches?.default;
  const hit=await cache?.match(request).catch(()=>undefined);if(hit)return hit;
- const row=/^[a-z0-9-]{1,80}$/.test(id)&&/^[a-f0-9]{10}$/.test(version)?await db().prepare('SELECT mime,data FROM product_photos WHERE product_id=? AND version=? AND width=?').bind(id,version,width).first<{mime:string;data:ArrayBuffer}>():null;
+ const row=/^[a-z0-9-]{1,80}$/.test(id)&&/^[a-f0-9]{10}$/.test(version)?await db().prepare('SELECT mime,data FROM product_photos WHERE organization_id=? AND product_id=? AND version=? AND width=?').bind(organizationId,id,version,width).first<{mime:string;data:ArrayBuffer}>():null;
  if(!row)return new Response('Photo introuvable',{status:404,headers:{'Cache-Control':'no-store'}});
  // Each upload gets a new version in its address, so a photo never changes once published.
  const response=new Response(new Uint8Array(row.data),{headers:{'Content-Type':row.mime,'Cache-Control':'public, max-age=31536000, immutable'}});
  await cache?.put(request,response.clone()).catch(()=>{});
  return response;
 }
-async function ingredients(kind:string,id:string|undefined,method:string,body:()=>Promise<unknown>){
+async function ingredients(kind:string,id:string|undefined,method:string,body:()=>Promise<unknown>,organizationId=PILOT_ORGANIZATION_ID){
  if(kind==='origins'&&method==='PUT'){
   const rows=z.array(z.object({id:clean.max(80),meat:ingredientFields.shape.meat,origin:clean.max(80)})).max(200).parse(await body());
-  if(rows.length)await db().batch(rows.map(r=>db().prepare('UPDATE ingredients SET meat=?,origin=? WHERE id=?').bind(r.meat,r.origin,r.id)));
-  return json({ingredients:await ingredientList()});
+  if(rows.length)await db().batch(rows.map(r=>db().prepare('UPDATE ingredients SET meat=?,origin=? WHERE organization_id=? AND id=?').bind(r.meat,r.origin,organizationId,r.id)));
+  return json({ingredients:await ingredientList(organizationId)});
  }
  if(kind!=='ingredients')fail(404,'Cette action est introuvable.');
  if(!id&&method==='POST'){
   const i=ingredientFields.parse(await body());
-  const same=(await ingredientList()).find(x=>slugify(x.name)===slugify(i.name));if(same)fail(409,`« ${same.name} » existe déjà.`);
-  const newId=await uniqueId('ingredients',i.name,'ingredient');const last=await db().prepare('SELECT COALESCE(MAX(sort),0) AS sort FROM ingredients').first<{sort:number}>();
-  await db().prepare('INSERT INTO ingredients(id,name,allergens,meat,origin,extra,available,locked,sort) VALUES(?,?,?,?,?,?,?,0,?)').bind(newId,i.name,JSON.stringify(i.allergens),i.meat,i.origin,i.extra?1:0,i.available?1:0,(last?.sort||0)+1).run();
-  const row=await db().prepare('SELECT * FROM ingredients WHERE id=?').bind(newId).first<Parameters<typeof toIngredient>[0]>();
+  const same=(await ingredientList(organizationId)).find(x=>slugify(x.name)===slugify(i.name));if(same)fail(409,`« ${same.name} » existe déjà.`);
+  const newId=await uniqueId('ingredients',i.name,'ingredient');const last=await db().prepare('SELECT COALESCE(MAX(sort),0) AS sort FROM ingredients WHERE organization_id=?').bind(organizationId).first<{sort:number}>();
+  await db().prepare('INSERT INTO ingredients(id,name,allergens,meat,origin,extra,available,locked,sort,organization_id) VALUES(?,?,?,?,?,?,?,0,?,?)').bind(newId,i.name,JSON.stringify(i.allergens),i.meat,i.origin,i.extra?1:0,i.available?1:0,(last?.sort||0)+1,organizationId).run();
+  const row=await db().prepare('SELECT * FROM ingredients WHERE organization_id=? AND id=?').bind(organizationId,newId).first<Parameters<typeof toIngredient>[0]>();
   return json({ingredient:toIngredient(row!)},201);
  }
  if(!id)fail(404,'Cette action est introuvable.');
- const current=(await ingredientList()).find(i=>i.id===id);if(!current)fail(404,'Cet ingrédient n’existe plus.');
+ const current=(await ingredientList(organizationId)).find(i=>i.id===id);if(!current)fail(404,'Cet ingrédient n’existe plus.');
  if(method==='PUT'){
   const i={...current,...ingredientFields.partial().parse(await body())};
-  await db().prepare('UPDATE ingredients SET name=?,allergens=?,meat=?,origin=?,extra=?,available=? WHERE id=?').bind(i.name,JSON.stringify(i.allergens),i.meat,i.origin,i.extra&&!current.locked?1:0,i.available?1:0,id).run();
-  return json({ingredients:await ingredientList()});
+  await db().prepare('UPDATE ingredients SET name=?,allergens=?,meat=?,origin=?,extra=?,available=? WHERE organization_id=? AND id=?').bind(i.name,JSON.stringify(i.allergens),i.meat,i.origin,i.extra&&!current.locked?1:0,i.available?1:0,organizationId,id).run();
+  return json({ingredients:await ingredientList(organizationId)});
  }
  if(method==='DELETE'){
   if(current.locked)fail(409,'La pâte fait partie de toutes les pizzas : modifiez ses allergènes, mais ne la supprimez pas.');
-  const users=(await productList(true)).filter(p=>p.status!=='archived'&&p.ingredients?.includes(id));
+  const users=(await productList(true,organizationId)).filter(p=>p.status!=='archived'&&p.ingredients?.includes(id));
   if(users.length)fail(409,`${current.name} est utilisé dans : ${users.map(p=>p.name).join(', ')}. Retirez-le de ces recettes d’abord.`);
-  await db().prepare('DELETE FROM ingredients WHERE id=?').bind(id).run();
-  return json({ingredients:await ingredientList()});
+  await db().prepare('DELETE FROM ingredients WHERE organization_id=? AND id=?').bind(organizationId,id).run();
+  return json({ingredients:await ingredientList(organizationId)});
  }
  fail(404,'Cette action est introuvable.');
 }

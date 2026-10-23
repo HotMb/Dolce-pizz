@@ -10,7 +10,7 @@ import {Checkbox} from '@/components/ui/checkbox';
 import {allergensOf,allergenLabel,type Ingredient} from '@/lib/menu';
 import {categories,type Product,money} from '@/lib/catalog';
 import {MAX_EXTRAS,priceCart,type CartLine,type Menu} from '@/lib/pricing';
-import {api,Button,ErrorBox,Field,useShop} from '../../components';
+import {api,Button,ErrorBox,Field} from '../../components';
 import {loginPath} from '../../member-ui';
 import {scopeQuery,useStaffAccess,type StaffScope} from '../staff-access';
 import '../staff.css';
@@ -20,6 +20,8 @@ type Channel='counter'|'phone';
 type Slot={iso:string;date:string;label:string;remaining:number};
 type LocationInfo={name:string;addressLine1:string|null;postalCode:string|null;locality:string|null;phone:string|null};
 type Schedule={slots:Slot[];location:LocationInfo};
+type StaffCatalog={products:Product[];ingredients:Ingredient[];extraPrice:number};
+type CatalogState={scopeKey:string;data:StaffCatalog|null;error:string};
 type OrderReceipt={id:string;total:number;status:string;slot:string;locationId:string;channel:Channel};
 type Attempt={key:string;payload:{key:string;organizationId:string;locationId:string;channel:Channel;customerName:string;customerPhone:string;readySmsConfirmed:boolean;postalCode?:string;slot:string;note:string;items:CartLine[]}};
 type ProductDraft={product:Product;size:CartLine['size'];quantity:number;option:string;removed:string[];added:string[];freeId:string;freeOption:string};
@@ -32,7 +34,6 @@ const lineFromDraft=(draft:ProductDraft):CartLine=>({id:draft.product.id,size:dr
 
 export function StaffOrderComposer(){
  const access=useStaffAccess();
- const shop=useShop();
  const [requestedChannel,setRequestedChannel]=useState<Channel>('counter');
  const [selected,setSelected]=useState('');
  const [schedule,setSchedule]=useState<Schedule|null>(null);
@@ -55,6 +56,9 @@ export function StaffOrderComposer(){
  const [confirmOpen,setConfirmOpen]=useState(false);
  const [busy,setBusy]=useState(false);
  const [receipt,setReceipt]=useState<OrderReceipt|null>(null);
+ const [catalogState,setCatalogState]=useState<CatalogState>({scopeKey:'',data:null,error:''});
+ const [catalogRefresh,setCatalogRefresh]=useState(0);
+ const [previousScope,setPreviousScope]=useState('');
  const busyRef=useRef(false);
  const request=useRef<AbortController|null>(null);
  const serial=useRef(0);
@@ -65,8 +69,15 @@ export function StaffOrderComposer(){
  const channel:Channel=requestedChannel==='counter'?(showCounter?'counter':showCallCenter?'phone':'counter'):(showCallCenter?'phone':showCounter?'counter':'phone');
  const selectable=scopes.filter(scope=>roleCan(scope,channel));
  const scope=selectable.find(item=>scopeQuery(item)===selected)||selectable[0];
- const menu:Menu=shop.menu;
- const availableProducts=shop.products.filter(product=>product.available&&product.status!=='archived'&&product.status!=='draft');
+ const catalogKey=scope?scopeQuery(scope):'';
+ if(previousScope!==catalogKey){setPreviousScope(catalogKey);setCart([]);setDraft(null);setSlot('');setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setFieldErrors({});}
+ const catalog=catalogState.scopeKey===catalogKey?catalogState.data:null;
+ const catalogLoading=!!scope&&(!catalog&&!catalogState.error||catalogState.scopeKey!==catalogKey);
+ const catalogError=catalogState.scopeKey===catalogKey?catalogState.error:'';
+ const menu=useMemo<Menu>(()=>({products:catalog?.products||[],ingredients:catalog?.ingredients||[],extraPrice:catalog?.extraPrice||0}),[catalog]);
+ const products=menu.products;
+ const ingredients=menu.ingredients;
+ const availableProducts=products.filter(product=>product.available&&product.status!=='archived'&&product.status!=='draft');
  const menuCategories=categories.filter(item=>availableProducts.some(product=>product.category===item.id));
  const activeCategory=menuCategories.some(item=>item.id===category)?category:menuCategories[0]?.id||'';
  const shownProducts=availableProducts.filter(product=>product.category===activeCategory);
@@ -82,6 +93,19 @@ export function StaffOrderComposer(){
   },0);
   return()=>window.clearTimeout(timer);
  },[]);
+
+ useEffect(()=>{
+  if(!catalogKey)return;
+  const controller=new AbortController();
+  let active=true;
+  void api<StaffCatalog>(`staff/catalog?${catalogKey}`,'GET',undefined,controller.signal)
+   .then(value=>{
+    if(!Array.isArray(value?.products)||!Array.isArray(value?.ingredients)||!Number.isInteger(value?.extraPrice)||value.extraPrice<0)throw new Error('La carte reçue est incomplète. Actualisez la page.');
+    if(active&&!controller.signal.aborted)setCatalogState({scopeKey:catalogKey,data:value,error:''});
+   })
+   .catch(error=>{if(active&&!controller.signal.aborted)setCatalogState({scopeKey:catalogKey,data:null,error:(error as Error).message||'Impossible de charger la carte.'});});
+  return()=>{active=false;controller.abort();};
+ },[catalogKey,catalogRefresh]);
 
  useEffect(()=>{
   request.current?.abort();
@@ -101,11 +125,12 @@ export function StaffOrderComposer(){
 
  const changeChannel=(next:Channel)=>{
   if(!showCounter||!showCallCenter||!canEdit)return;
-  setRequestedChannel(next);setSelected('');setSlot('');setPageError('');setFieldErrors({});
+  setRequestedChannel(next);setSelected('');setSlot('');setCart([]);setDraft(null);setPageError('');setFieldErrors({});
  };
  const changeScope=(value:string)=>{
   if(!canEdit)return;
-  setSelected(value);setSlot('');setPageError('');
+  if(value===selected)return;
+  setSelected(value);setSlot('');setCart([]);setDraft(null);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setPageError('');setFieldErrors({});
   const target=selectable.find(item=>scopeQuery(item)===value);
   if(target)window.history.replaceState(null,'',`/equipe/commande?${scopeQuery(target)}&channel=${channel}`);
  };
@@ -188,9 +213,9 @@ export function StaffOrderComposer(){
     <label className={`pos-sms-choice ${!customerPhone.trim()?'is-disabled':''}`}><Checkbox checked={readySmsConfirmed} disabled={!canEdit||!customerPhone.trim()} onCheckedChange={value=>setReadySmsConfirmed(value===true)}/><span><b>Envoyer un SMS quand la commande sera prête</b><small>À cocher uniquement avec l’accord du client. Cette préférence ne l’inscrit pas aux promotions.</small></span></label>
     </section>
     <section className="panel pos-products" aria-labelledby="pos-products-title"><div className="pos-section-title"><ShoppingBasket size={21}/><div><h2 id="pos-products-title">Ajouter au ticket</h2><p>Les prix et les disponibilités seront revérifiés par le serveur.</p></div></div>
-     {!shop.loaded&&<p className="pos-loading" role="status">Chargement de la carte…</p>}
-     {shop.error&&<ErrorBox message={`La carte n’a pas pu être actualisée. ${shop.error}`} retry={shop.refresh}/>}
-     {shop.loaded&&!menuCategories.length&&<p className="pos-empty">Aucun article n’est disponible dans la carte.</p>}
+     {catalogLoading&&<p className="pos-loading" role="status">Chargement de la carte de cet établissement…</p>}
+     {catalogError&&<ErrorBox message={`La carte n’a pas pu être actualisée. ${catalogError}`} retry={()=>setCatalogRefresh(value=>value+1)}/>}
+     {catalog&&!menuCategories.length&&<p className="pos-empty">Aucun article n’est disponible dans la carte.</p>}
      {menuCategories.length>0&&<div className="pos-category-list" role="group" aria-label="Catégories de la carte">{menuCategories.map(item=><button key={item.id} type="button" className={activeCategory===item.id?'is-active':''} aria-pressed={activeCategory===item.id} onClick={()=>setCategory(item.id)} disabled={!canEdit}>{item.name}</button>)}</div>}
      <div className="pos-product-grid">{shownProducts.map(product=><article className="pos-product" key={product.id}><div><p className="pos-product-category">{categories.find(item=>item.id===product.category)?.name}</p><h3>{product.name}</h3><p>{product.description}</p>{product.allergensChecked?<small>Allergènes vérifiés</small>:<small className="pos-warning">Allergènes à vérifier avant préparation</small>}</div><div className="pos-product-footer"><span>{product.xxl===null?money(product.price):`${money(product.price)} · ${money(product.xxl)} XXL`}</span><Button type="button" tone="outline" disabled={!canEdit||!product.available} onClick={()=>setDraft(initialDraft(product))}>Personnaliser</Button></div></article>)}</div>
     </section>
@@ -207,11 +232,11 @@ export function StaffOrderComposer(){
     {pageError&&<ErrorBox message={pageError}/>}
     {scheduleError&&<ErrorBox message={scheduleError}/>}
     {access.error&&<ErrorBox message="Confirmez à nouveau les accès avant d’envoyer la commande." retry={()=>void access.refresh()}/>}
-    <Button type="submit" busy={busy} disabled={!canEdit||!cart.length||!!priced.problem||scheduleLoading||!!scheduleError||!schedule?.slots.length||!shop.loaded||!!access.error} className="pos-submit">Vérifier la commande <ArrowUpRight size={18}/></Button>
+    <Button type="submit" busy={busy} disabled={!canEdit||!cart.length||!!priced.problem||scheduleLoading||!!scheduleError||!schedule?.slots.length||!catalog||!!catalogError||!!access.error} className="pos-submit">Vérifier la commande <ArrowUpRight size={18}/></Button>
    </aside>
   </form>
 
-  <ProductDialog draft={draft} menu={menu} products={availableProducts} ingredients={shop.ingredients} disabled={!canEdit} onChange={setDraft} onClose={()=>setDraft(null)} onAdd={addDraft}/>
+  <ProductDialog draft={draft} menu={menu} products={availableProducts} ingredients={ingredients} disabled={!canEdit||!catalog} onChange={setDraft} onClose={()=>setDraft(null)} onAdd={addDraft}/>
   <AlertDialog open={confirmOpen} onOpenChange={open=>{if(!open&&!busy&&!attemptUncertain){setConfirmOpen(false);setAttempt(null);}}}><AlertDialogContent className="dolce-dialog pos-confirm" onEscapeKeyDown={event=>{if(busy||attemptUncertain)event.preventDefault();}}><AlertDialogHeader><AlertDialogTitle>{attemptUncertain?'Confirmer le résultat de la tentative':'Envoyer cette commande en cuisine ?'}</AlertDialogTitle><AlertDialogDescription>La commande sera envoyée à <strong>{scope.locationName}</strong> pour le retrait{slot&&schedule?` à ${schedule.slots.find(item=>item.iso===slot)?.label||''}`:''}. Le client réglera <strong>{money(priced.total)}</strong> au comptoir en venant la chercher.{readySmsConfirmed?' Un SMS de retrait sera envoyé quand l’expédition la marquera prête.':''}</AlertDialogDescription></AlertDialogHeader>{attemptError&&<div className="pos-confirm-error"><ErrorBox message={attemptError}/>{attemptUncertain?<p>Le résultat peut être incertain. Réessayez avec le même identifiant de tentative; ne modifiez pas la commande entre-temps.</p>:null}</div>}<AlertDialogFooter><AlertDialogCancel className="btn btn-outline" disabled={busy||attemptUncertain} onClick={()=>{setAttempt(null);setAttemptError('');}}>Modifier la commande</AlertDialogCancel><Button busy={busy} disabled={!attempt} onClick={()=>void sendAttempt()}>{attemptError?'Réessayer la même commande':'Confirmer et envoyer'}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
  </main>;
 }

@@ -6,7 +6,7 @@ import {allowedSlot, slots} from '@/lib/rules';
 import {priceCart} from '@/lib/pricing';
 import {snapshotPricedLines} from '@/lib/production-repository';
 import {loadStaffScope} from '@/lib/staff-access';
-import {hasStaffOrderAccess, pilotOrderScope, staffOrderChannelAllowed, staffOrderInputSchema, staffOrderSqlGuard} from '@/lib/staff-orders';
+import {hasStaffOrderAccess, staffOrderChannelAllowed, staffOrderInputSchema, staffOrderSqlGuard} from '@/lib/staff-orders';
 import {readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic = 'force-dynamic';
@@ -30,9 +30,6 @@ async function authenticatedRequest(request: Request, url: URL, requireOrigin: b
 async function loadAuthorizedScope(organizationId: string, locationId: string, principalId: string) {
   const scope = await loadStaffScope(db(), principalId, {organizationId, locationId});
   if (!scope || !hasStaffOrderAccess(scope.roles)) fail(403, 'Vous n’avez pas accès à la prise de commande de cet établissement.');
-  if (organizationId !== pilotOrderScope.organizationId || locationId !== pilotOrderScope.locationId) {
-    fail(503, 'La prise de commande équipe n’est pas encore configurée pour cet établissement.');
-  }
   return scope;
 }
 
@@ -57,7 +54,9 @@ async function getSlots(request: Request, url: URL) {
   }>();
   if (!location) fail(503, 'Cet établissement ne peut pas encore recevoir de commandes.');
 
-  const currentSettings = await settings();
+  let currentSettings: Awaited<ReturnType<typeof settings>>;
+  try {currentSettings = await settings(query.data.organizationId);}
+  catch {fail(503, 'Les horaires et créneaux ne sont pas configurés pour cette enseigne.');}
   const now = new Date().toISOString();
   const countRows = await db().prepare(
     "SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'",
@@ -95,13 +94,15 @@ async function postOrder(request: Request, url: URL) {
   }>();
   if (previous) return json({order: orderResponse(previous)});
 
-  const currentSettings = await settings();
+  let currentSettings: Awaited<ReturnType<typeof settings>>;
+  try {currentSettings = await settings(input.organizationId);}
+  catch {fail(503, 'Les horaires et créneaux ne sont pas configurés pour cette enseigne.');}
   const slot = new Date(Date.parse(input.slot)).toISOString();
   const slotMs = Date.parse(slot);
   if (!currentSettings.hoursConfirmed || !allowedSlot(slotMs, currentSettings)) {
     fail(409, 'Ce créneau de retrait n’est plus disponible. Choisissez un autre horaire.');
   }
-  const [products, ingredients] = await Promise.all([productList(), ingredientList()]);
+  const [products, ingredients] = await Promise.all([productList(false, input.organizationId), ingredientList(input.organizationId)]);
   // Offers use the same server-owned product flags and calculation as web orders. Loyalty is never applied here.
   const priced = priceCart(input.items, {
     products,
@@ -110,7 +111,7 @@ async function postOrder(request: Request, url: URL) {
   });
   if (priced.problem) fail(409, priced.problem);
   if (priced.count > 30) fail(400, 'Pour plus de 30 articles, appelez la pizzeria.');
-  const latestSettings = await settings();
+  const latestSettings = await settings(input.organizationId);
   if (latestSettings.version !== currentSettings.version || !latestSettings.hoursConfirmed || !allowedSlot(slotMs, latestSettings)) {
     fail(409, 'La carte ou ce créneau vient de changer. Actualisez les disponibilités et réessayez.');
   }
@@ -132,15 +133,15 @@ async function postOrder(request: Request, url: URL) {
     )
     SELECT ?,?,?,?,?,'',?,?,?,?,?,0,?,0,0,'preparing','',?,?,?,'pickup','due_at_pickup',NULL,?,?,?,?,?,1
     WHERE ${sqlGuard}
-      AND (SELECT version FROM config WHERE id=1)=?
+      AND (SELECT version FROM config WHERE organization_id=?)=?
       AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled')) < ?
-    ON CONFLICT(user_id,idempotency) DO NOTHING`,
+    ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING`,
   ).bind(
     id, user.id, input.key, input.customerName, storedPhone, JSON.stringify(items), input.note, slot,
     priced.subtotal, priced.offer, priced.total,
     input.organizationId, input.locationId, input.channel, notificationPhone, contactBasis, contactCapturedAt, now, now,
     input.organizationId, input.locationId, input.organizationId, user.id, input.locationId,
-    latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
+    input.organizationId, latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
   );
   const event = db().prepare(
     `INSERT INTO events(id,order_id,status,actor,note,created_at)
