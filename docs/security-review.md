@@ -10,7 +10,7 @@ Le manifeste local `.openai/hosting.json` et le projet Sites attaché portent le
 
 ## Correctifs appliqués
 
-- Les réponses web portent des en-têtes de défense en profondeur (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` et `Permissions-Policy`) via la configuration de l’application. Une CSP stricte reste à ajuster après inventaire des scripts tiers et des besoins de la borne; elle ne doit pas être ajoutée avec des exceptions larges sans test des parcours POS/KDS.
+- Les réponses web portent des en-têtes de défense en profondeur (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` et `Permissions-Policy`) ainsi qu’une CSP de base en mode `Report-Only`. La CSP est volontairement observatoire pendant l’inventaire des scripts de la borne et des écrans POS/KDS; il reste à supprimer les exceptions `unsafe-inline`/`unsafe-eval`, vérifier les rapports et passer à une politique appliquée avant une mise en production générale.
 
 - Les codes de connexion par SMS ne sont plus renvoyés par l’API hébergée. En l’absence de fournisseur SMS, l’authentification hébergée échoue proprement; seul un appel local sur loopback peut afficher un code de test.
 - Le script de publication ne met plus `SMS_DEMO=1` sur le Worker et n’affiche plus `ADMIN_SETUP_CODE` dans la sortie du déploiement. Il le conserve dans `.env.demo`, ignoré par Git.
