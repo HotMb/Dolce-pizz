@@ -140,7 +140,7 @@ Cette séparation reprend une pratique éprouvée des KDS de restauration : affe
 
 Le service local et le cloud utilisent des identifiants d’événements, des commandes idempotentes et une synchronisation persistante. Après une coupure, les événements en attente sont repris et les paiements ambigus sont rapprochés; le logiciel ne doit pas inventer un encaissement réussi.
 
-Les fonctions hors ligne doivent être limitées explicitement. La première version locale peut maintenir l’affichage cuisine et les commandes locales déjà acceptées. Le paiement carte, les remboursements, la fidélité, les commandes Uber et les SMS ne sont pas réputés fonctionner hors ligne sans validation de leurs fournisseurs.
+Les fonctions hors ligne doivent être limitées explicitement. Le KDS conserve l’affichage validé et peut mettre en file une action de station dans le navigateur, sans l’exécuter localement. La file est bornée, rejouée séquentiellement et contrôlée par la révision serveur; un conflit retire l’action et demande une lecture fraîche. Le paiement carte, les remboursements, la fidélité, les commandes Uber et les SMS ne sont pas réputés fonctionner hors ligne sans validation de leurs fournisseurs.
 
 ## Priorisation et prévision
 

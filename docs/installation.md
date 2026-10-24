@@ -82,7 +82,7 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
 - **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; `/api/staff/routing` permet de configurer les codes postaux par site et de proposer les établissements actifs, avec validation serveur avant création de la commande.
 - **Borne** : enrôler un appareil depuis `/equipe` avec le rôle `kiosk`, conserver le jeton affiché une seule fois, puis ouvrir `/borne` sur l’appareil et le saisir dans l’écran de configuration. L’interface charge le catalogue, utilise un panier `dolce-kiosk-cart` séparé des autres écrans, demande le créneau, transmet une commande `channel=kiosk` avec prix recalculé côté serveur et affiche un reçu après acceptation. En production, verrouiller le navigateur par MDM, ne pas partager le jeton entre bornes et prévoir sa révocation en cas de remplacement.
-- **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les appareils se préparent dans `/api/staff/devices` avec un rôle et un jeton expirant; le heartbeat `/api/device/heartbeat` permet de vérifier leur identité sans stocker le jeton en clair. La dernière vue KDS est conservée dans la session du navigateur pour consultation hors connexion; aucune validation n’est acceptée sans retour serveur.
+- **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les appareils se préparent depuis le bloc Appareils de `/equipe` avec un rôle et un jeton expirant; le heartbeat `/api/device/heartbeat` permet de vérifier leur identité sans stocker le jeton en clair. La dernière vue KDS est conservée dans la session du navigateur. Une validation faite hors connexion est placée dans une file locale limitée à 50 actions; au retour réseau, chaque action est rejouée avec sa révision attendue. Une action devenue obsolète est retirée et signalée, jamais appliquée silencieusement.
 
 Un appareil doit être enrôlé auprès d’un tenant et d’un établissement. Les identifiants d’équipe sont nominatifs; les changements d’établissement et les remboursements sont audités.
 
@@ -106,11 +106,11 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 
 - Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
 - TPE réel, annulations/remboursements, certification caisse et exports comptables.
-- POS mobile de salle, bornes client et routage du centre d’appels par zones postales vérifiées.
+- POS mobile de salle et routage du centre d’appels par zones postales vérifiées.
 - Renforcement des sessions d’équipe, enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.
 - Enrôlement des appareils et configuration multi-sites sans constantes pilote.
 - Caisse, TPE, paiement au retrait, clôture de shift, rapprochement des transactions et reçus.
 - Configuration et supervision de l’ordonnanceur SMS, essai fournisseur contrôlé et écran de réconciliation des résultats incertains; le consommateur est livré.
 - Connecteur Uber Eats et validation de ses webhooks; aucune livraison directe maison n’est prévue pour le pilote.
-- Outbox serveur d’impression tenant-scopée livrée; il reste à fournir l’adaptateur matériel concret (ESC/POS ou pilote constructeur), la synchronisation hors ligne des actions KDS, les procédures de sauvegarde/restauration et la supervision.
+- Outbox serveur d’impression tenant-scopée livrée; il reste à fournir l’adaptateur matériel concret (ESC/POS ou pilote constructeur), les procédures de sauvegarde/restauration et la supervision.
 - Revue sécurité, tests d’accès croisé, conformité caisse France et pilote avec les équipes.
