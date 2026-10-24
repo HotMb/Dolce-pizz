@@ -21,8 +21,8 @@ const cartKey='dolce-cart';
 const optionalText=(v:unknown)=>v===undefined||typeof v==='string';
 const optionalIds=(v:unknown)=>v===undefined||Array.isArray(v)&&v.length<=20&&v.every(x=>typeof x==='string');
 function validCart(value:unknown):CartLine[]{return Array.isArray(value)?value.filter((v:unknown):v is CartLine=>{if(!v||typeof v!=='object')return false;const line=v as Partial<CartLine>;return typeof line.id==='string'&&typeof line.size==='string'&&['senior','xxl','unique'].includes(line.size)&&typeof line.option==='string'&&optionalText(line.freeId)&&optionalText(line.freeOption)&&optionalIds(line.removed)&&optionalIds(line.added)&&optionalIds(line.freeRemoved)&&optionalIds(line.freeAdded)&&Number.isInteger(line.quantity)&&Number(line.quantity)>0&&Number(line.quantity)<=20;}):[];}
-function readCart(){let raw='';try{raw=localStorage.getItem(cartKey)||'';}catch{}if(!raw){const cookie=document.cookie.split('; ').find(v=>v.startsWith(`${cartKey}=`));if(cookie)try{raw=decodeURIComponent(cookie.slice(cartKey.length+1));}catch{return [];}}try{return validCart(JSON.parse(raw||'[]'));}catch{return [];}}
-function writeCart(cart:CartLine[]){const raw=JSON.stringify(cart);try{localStorage.setItem(cartKey,raw);}catch{}document.cookie=`${cartKey}=${encodeURIComponent(raw)}; Path=/; Max-Age=604800; SameSite=Lax`;}
+function readCart(key=cartKey){let raw='';try{raw=localStorage.getItem(key)||'';}catch{}if(!raw){const cookie=document.cookie.split('; ').find(v=>v.startsWith(`${key}=`));if(cookie)try{raw=decodeURIComponent(cookie.slice(key.length+1));}catch{return [];}}try{return validCart(JSON.parse(raw||'[]'));}catch{return [];}}
+function writeCart(cart:CartLine[],key=cartKey){const raw=JSON.stringify(cart);try{localStorage.setItem(key,raw);}catch{}document.cookie=`${key}=${encodeURIComponent(raw)}; Path=/; Max-Age=604800; SameSite=Lax`;}
 export async function api<T=unknown>(path:string,method='GET',body?:unknown,signal?:AbortSignal):Promise<T>{
  const timeout=AbortSignal.timeout(20000);
  let r:Response;
@@ -53,17 +53,17 @@ const sorted=(v?:string[])=>[...(v||[])].sort().join(',');
 const sameLine=(a:CartLine,b:CartLine)=>a.id===b.id&&a.size===b.size&&a.option===b.option&&(a.freeId||'')===(b.freeId||'')&&(a.freeOption||'')===(b.freeOption||'')&&sorted(a.removed)===sorted(b.removed)&&sorted(a.added)===sorted(b.added)&&sorted(a.freeRemoved)===sorted(b.freeRemoved)&&sorted(a.freeAdded)===sorted(b.freeAdded);
 // Only non-empty changes are stored, so a plain pizza keeps the same cart line as before customisation existed.
 const withMods=(key:'removed'|'added'|'freeRemoved'|'freeAdded',ids:string[])=>ids.length?{[key]:ids}:{};
-export function Providers({children}:{children:React.ReactNode}){
+export function Providers({children,cartDrawer=true,storageKey=cartKey}:{children:React.ReactNode;cartDrawer?:boolean;storageKey?:string}){
  const source=useResource<{products:Product[];ingredients:Ingredient[];settings:Settings}>('catalog',45000);const[cart,setCart]=useState<CartLine[]>([]);const[ready,setReady]=useState(false);const[cartOpen,setCartOpen]=useState(false);
- useEffect(()=>{const hydrate=window.setTimeout(()=>{setCart(readCart());setReady(true);},0);return()=>window.clearTimeout(hydrate);},[]);
- useEffect(()=>{if(ready)writeCart(cart);},[cart,ready]);
+ useEffect(()=>{const hydrate=window.setTimeout(()=>{setCart(readCart(storageKey));setReady(true);},0);return()=>window.clearTimeout(hydrate);},[storageKey]);
+ useEffect(()=>{if(ready)writeCart(cart,storageKey);},[cart,ready,storageKey]);
  // Until the live menu arrives, the opening menu keeps the page complete (it is what the database starts with).
  const products=source.data?.products||seedCatalog,ingredients=source.data?.ingredients||seedIngredients,settings=source.data?.settings||defaultSettings;
  const menu:Menu={products,ingredients,extraPrice:settings.extraPrice};const priced=priceCart(cart,menu);
  // On phones, toasts sit at the top so they never cover the cart bar or the drawer's checkout button.
  const mobile=useIsMobile();
  const add=(p:Product,size:CartLine['size'],option:string,quantity:number,mods:Mods,free?:FreeChoice)=>{const line:CartLine={id:p.id,size,option,quantity,...withMods('removed',mods.removed),...withMods('added',mods.added),...(free?{freeId:free.id,freeOption:free.option,...withMods('freeRemoved',free.removed),...withMods('freeAdded',free.added)}:{})};setCart(rows=>{const at=rows.findIndex(l=>sameLine(l,line));return at<0?[...rows,line]:rows.map((l,i)=>i===at?{...l,quantity:Math.min(20,l.quantity+quantity)}:l);});toast.success(free?`${p.name} + pizza offerte ajoutées au panier`:`${p.name} ajoutée au panier`);};
- return <Context.Provider value={{products,ingredients,menu,settings,loaded:!!source.data,cartReady:ready,error:source.error,cart,setCart,add,cartOpen,setCartOpen,priced,subtotal:priced.subtotal,refresh:source.refresh}}>{children}<CartDrawer/><Toaster position={mobile?'top-center':'bottom-center'} theme="dark" closeButton toastOptions={{className:'dolce-toast'}}/></Context.Provider>;
+ return <Context.Provider value={{products,ingredients,menu,settings,loaded:!!source.data,cartReady:ready,error:source.error,cart,setCart,add,cartOpen,setCartOpen,priced,subtotal:priced.subtotal,refresh:source.refresh}}>{children}{cartDrawer&&<CartDrawer/>}<Toaster position={mobile?'top-center':'bottom-center'} theme="dark" closeButton toastOptions={{className:'dolce-toast'}}/></Context.Provider>;
 }
 // Add-to-cart feedback: the pizza photo flies into the header cart, which then bounces.
 export function bumpCart(){document.querySelectorAll('.cart-button, .cart-bar').forEach(el=>el.animate([{transform:'scale(1)'},{transform:'scale(1.22)'},{transform:'scale(.96)'},{transform:'scale(1)'}],{duration:520,easing:'cubic-bezier(.3,1.5,.5,1)'}));}

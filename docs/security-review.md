@@ -47,6 +47,8 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 
 - Un jeton `kiosk` est accepté uniquement pour l’organisation et l’établissement qui l’ont enrôlé, avec appareil actif et credential non expiré ou révoqué.
 - Une borne ne peut créer que des commandes `channel='kiosk'`; elle ne peut pas appeler les canaux comptoir ou téléphone ni choisir un autre site.
+- `/borne` n’utilise pas de session employé: le jeton est envoyé en Bearer à chaque appel, le panier est séparé par une clé de stockage dédiée et le bouton de verrouillage efface le jeton local.
+- Le stockage navigateur est adapté au prototype et à une borne verrouillée par MDM; en déploiement, le navigateur doit être en mode kiosque, le poste doit être dédié et un jeton compromis doit être révoqué puis remplacé.
 - Le client est invité sans session partagée; les prix, allergènes, créneaux, capacité et snapshots de production restent calculés et validés côté serveur.
 
 ## Limites ouvertes avant une vraie exploitation
@@ -57,7 +59,7 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 4. **Les anciennes URL `/stop` ne sont plus compatibles.** La nouvelle signature inclut l’organisation. Les liens génériques ou signés selon l’ancien format doivent être traités par le support; ils ne peuvent pas désabonner anonymement un client.
 5. **La campagne applique une stratégie at-most-once.** Brevo ne fournit pas de clé d’idempotence documentée dans l’adaptateur actuel. Une interruption après réservation peut donc manquer un SMS et laisser un échec à réconcilier, mais le claim n’est jamais renvoyé automatiquement et ne crée pas de doublon. Avant un gros volume, ajouter une outbox marketing durable, une clé d’idempotence fournisseur et un webhook de statut.
 6. **La caisse commerciale reste partielle.** L’écran, les shifts et le rapprochement espèces sont livrés; il manque le terminal réel, les annulations/remboursements, les exports et la validation des obligations françaises de la version concernée.
-7. **Plusieurs parcours métier restent à livrer.** Le POS enregistre les commandes comptoir/téléphone et l’API capture le paiement au retrait, mais il manque l’écran de caisse, le routage du centre d’appels par zone, le relais hors ligne, les bornes, Uber Eats et les équipements. Leurs futurs webhooks, droits et synchronisations ne sont pas couverts par cette revue.
+7. **Plusieurs parcours métier restent à livrer.** Le POS, la caisse, le routage de base, le KDS et l’interface borne sont présents, mais le relais hors ligne complet, le MDM, Uber Eats, les équipements et les essais de terrain restent à intégrer. Leurs futurs webhooks, droits et synchronisations ne sont pas couverts par cette revue.
 8. **Les contrôles SMS n’établissent pas la délivrabilité réelle.** Le consommateur transactionnel existe, mais l’ordonnanceur, le crédit, l’expéditeur et les webhooks Brevo doivent être configurés. Aucun SMS réel n’a été envoyé par les tests. La facturation, les quotas et l’expéditeur restent communs au déploiement.
 9. **L’audit des dépendances couvre uniquement la production.** Le registre npm ne signale actuellement aucun avis pour les 199 dépendances de production. Les dépendances de développement et la chaîne de compilation restent hors de ce contrôle ciblé et doivent conserver leur propre suivi.
 10. **Aucun audit externe ni test d’intrusion n’a été réalisé.** Les tests locaux ne remplacent pas une vérification du déploiement D1, des courses réelles, de la charge, de la rotation des secrets et des procédures d’exploitation.
