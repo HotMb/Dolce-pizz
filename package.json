@@ -18,6 +18,7 @@
     "db:verify-backup": "node scripts/verify-backup.mjs",
     "preflight:production": "npm run security:scan && node scripts/preflight-production.mjs",
     "security:scan": "node scripts/security-scan.mjs",
+    "security:http": "node scripts/check-http-security.mjs",
     "db:verify": "node scripts/verify-migrations.mjs",
     "photos": "node scripts/optimize-photos.mjs",
     "test": "node --import ./tests/ts-resolve.mjs --test \"tests/**/*.test.ts\""

@@ -82,6 +82,14 @@ Avant une publication de production, charger les variables du coffre dans l’en
 
 Les réponses web ajoutent aussi des en-têtes de protection contre l’encodage MIME, l’intégration dans une iframe, la fuite de référent et l’accès aux capteurs. Après chaque publication, vérifier ces en-têtes sur le domaine public et tester les parcours borne, POS et KDS avant d’ajouter une politique CSP plus stricte.
 
+Le contrôle automatisé se lance depuis une machine qui peut joindre le domaine :
+
+```powershell
+npm run security:http -- --url=https://restaurant.exemple.fr
+```
+
+Le script n’affiche pas le contenu de la réponse et refuse les redirections ainsi que les origines HTTP non locales.
+
 ## 4. Installation cible dans un restaurant
 
 ### Réseau et matériel
