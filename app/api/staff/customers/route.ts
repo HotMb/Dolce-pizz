@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {sessionUser,normalizePhone} from '@/lib/auth';
+import {staffSessionUser,normalizePhone} from '@/lib/auth';
 import {db,ensureSeed} from '@/lib/server';
 
 export const dynamic='force-dynamic';
@@ -10,7 +10,7 @@ const querySchema=z.object({organizationId:z.string().min(1).max(128),locationId
 
 export async function GET(request:Request){
  try{
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new CustomerApiError(401,'Connectez-vous pour rechercher un client.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new CustomerApiError(401,'Connectez-vous pour rechercher un client.');
   const query=querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams.entries()));
   if(!query.success)throw new CustomerApiError(400,'Indiquez une enseigne et un mobile valides.');
   const phone=normalizePhone(query.data.phone);if(!phone)throw new CustomerApiError(400,'Saisissez un mobile français valide.');

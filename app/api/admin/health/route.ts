@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {db, ensureSeed} from '@/lib/server';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ type HealthCheck = {id: string; status: CheckStatus; details: Record<string, num
 export async function GET(request: Request) {
   try {
     const parsed = querySchema.parse(Object.fromEntries(new URL(request.url).searchParams.entries()));
-    const user = await sessionUser(request.headers.get('cookie'));
+    const user = await staffSessionUser(request.headers.get('cookie'));
     if (!user) throw new HealthApiError(401, 'Connectez-vous pour consulter la santé de l’enseigne.');
     await ensureSeed();
     const owner = await db().prepare("SELECT 1 AS ok FROM organization_memberships WHERE organization_id=? AND principal_id=? AND role='owner' AND location_id IS NULL AND status='active' LIMIT 1").bind(parsed.organizationId, user.id).first<{ok: number}>();

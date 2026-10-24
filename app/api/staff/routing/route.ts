@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db,ensureSeed} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic='force-dynamic';
@@ -14,7 +14,7 @@ const configInput=z.object({organizationId:z.string().min(1).max(128),locationId
 async function authorize(request:Request,organizationId:string,write:boolean,locationId?:string){
   const origin=request.headers.get('origin'); const url=new URL(request.url);
   if(write&&(!origin||origin!==url.origin))throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await sessionUser(request.headers.get('cookie')); if(!user)throw new ApiError(401,'Connectez-vous avec un compte autorisé.');
+  const user=await staffSessionUser(request.headers.get('cookie')); if(!user)throw new ApiError(401,'Connectez-vous avec un compte autorisé.');
   await ensureSeed();
   const row=await db().prepare(`SELECT 1 AS ok FROM organization_memberships m JOIN organizations o ON o.id=m.organization_id AND o.status='active' WHERE m.organization_id=? AND m.principal_id=? AND m.status='active' AND ((m.role IN ('owner','call_center') AND m.location_id IS NULL) OR (m.role='manager' AND m.location_id=?)) LIMIT 1`).bind(organizationId,user.id,locationId||'').first<{ok:number}>();
   if(!row)throw new ApiError(403,write?'Seul un responsable autorisé peut modifier le routage.':'Vous n’avez pas accès au routage de cette enseigne.');

@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/server';
-import {sessionUser,underLimit} from '@/lib/auth';
+import {staffSessionUser,underLimit} from '@/lib/auth';
 
 export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -16,7 +16,7 @@ const owner=async(userId:string,organizationId:string)=>!!await db().prepare("SE
 
 export async function GET(request:Request){
  try{
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les intégrations.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les intégrations.');
   const organizationId=new URL(request.url).searchParams.get('organizationId')||'';if(!id.safeParse(organizationId).success||!await owner(user.id,organizationId))throw new ApiError(403,'Cette action est réservée au propriétaire de l’enseigne.');
   const rows=await db().prepare('SELECT organization_id,location_id,provider,external_store_id,status,created_at FROM delivery_integrations WHERE organization_id=? ORDER BY created_at DESC').bind(organizationId).all();return json({integrations:rows.results});
  }catch(error){if(error instanceof ApiError)return json({error:error.message},error.status);return json({error:'Impossible de charger les intégrations.'},503);}
@@ -25,7 +25,7 @@ export async function GET(request:Request){
 export async function POST(request:Request){
  try{
   const url=new URL(request.url),origin=request.headers.get('origin');if(!origin||origin!==url.origin)throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les intégrations.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les intégrations.');
   const ip=request.headers.get('cf-connecting-ip')||'local';if(!await underLimit(`delivery-integrations:${user.id}:${ip}`,20))throw new ApiError(429,'Trop de tentatives. Réessayez plus tard.');
   const raw=await request.text();if(raw.length>8000)throw new ApiError(413,'La demande est trop volumineuse.');
   const parsed=input.parse(JSON.parse(raw));if(!await owner(user.id,parsed.organizationId))throw new ApiError(403,'Cette action est réservée au propriétaire de l’enseigne.');

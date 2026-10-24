@@ -2,7 +2,7 @@ import {env} from 'cloudflare:workers';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/server';
-import {sessionUser,underLimit} from '@/lib/auth';
+import {staffSessionUser,underLimit} from '@/lib/auth';
 
 export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -24,7 +24,7 @@ const dnsTxt=async(domain:string)=>{
 /** Register a domain and verify ownership with a DNS TXT record before public activation. */
 export async function GET(request:Request){
  try{
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les domaines.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les domaines.');
   const organizationId=new URL(request.url).searchParams.get('organizationId')||'';if(!id.safeParse(organizationId).success||!await owner(user.id,organizationId))throw new ApiError(403,'Cette action est réservée au propriétaire de l’enseigne.');
   const rows=await db().prepare('SELECT host,organization_id,location_id,status,created_at,verified_at FROM tenant_domains WHERE organization_id=? ORDER BY created_at DESC').bind(organizationId).all();return json({domains:rows.results});
  }catch(error){if(error instanceof ApiError)return json({error:error.message},error.status);return json({error:'Impossible de charger les domaines.'},503);}
@@ -32,7 +32,7 @@ export async function GET(request:Request){
 export async function POST(request:Request){
  try{
   const url=new URL(request.url),origin=request.headers.get('origin');if(!origin||origin!==url.origin)throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les domaines.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de gérer les domaines.');
   const ip=request.headers.get('cf-connecting-ip')||'local';if(!await underLimit(`domains:${user.id}:${ip}`,10))throw new ApiError(429,'Trop de tentatives. Réessayez plus tard.');
   const raw=await request.text();if(raw.length>8000)throw new ApiError(413,'La demande est trop volumineuse.');let parsed:unknown;try{parsed=JSON.parse(raw);}catch{throw new ApiError(400,'La demande est illisible.');}
   if(typeof parsed!=='object'||!parsed)throw new ApiError(400,'Vérifiez les informations.');

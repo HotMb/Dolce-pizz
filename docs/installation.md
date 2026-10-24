@@ -147,7 +147,7 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 - Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
 - TPE réel, annulations/remboursements, certification caisse et exports comptables.
 - POS mobile de salle et provisionnement des zones postales réelles pour le routage du centre d’appels.
-- Renforcement des sessions d’équipe, enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.
+- Les routes d’équipe et d’administration exigent une session OTP récente de moins de 12 heures; enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.
 - Enrôlement des appareils et configuration multi-sites sans constantes pilote.
 - Caisse, TPE, paiement au retrait, clôture de shift, rapprochement des transactions et reçus.
 - Configuration et supervision de l’ordonnanceur SMS, essai fournisseur contrôlé et écran de réconciliation des résultats incertains; le consommateur est livré.

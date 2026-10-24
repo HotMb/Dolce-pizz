@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db,ensureSeed} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {loadStaffScope,readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic='force-dynamic';
@@ -14,7 +14,7 @@ const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte
 
 async function actor(request:Request,scopeKey:{organizationId:string;locationId:string},write:boolean){
   const url=new URL(request.url);const origin=request.headers.get('origin');if(write&&(!origin||origin!==url.origin))throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous pour gérer les appareils.');await ensureSeed();
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous pour gérer les appareils.');await ensureSeed();
   const access=await loadStaffScope(db(),user.id,scopeKey);if(!access?.canManageStaff)throw new ApiError(403,'Seul le propriétaire peut gérer les appareils de cet établissement.');return user;
 }
 export async function GET(request:Request){

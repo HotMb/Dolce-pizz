@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {loadStaffScope, readBoundedRequestText, type StaffScopeKey} from '@/lib/staff-access';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
     if (request.headers.get('origin') !== url.origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
-    const actor = await sessionUser(request.headers.get('cookie'));
+    const actor = await staffSessionUser(request.headers.get('cookie'));
     if (!actor) throw new ApiError(401, 'Connectez-vous pour révoquer une session.');
     const raw = await readBoundedRequestText(request, 4000);
     let body: unknown;

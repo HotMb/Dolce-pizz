@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {db, ingredientList, productList, settings} from '@/lib/server';
 import {loadStaffScope} from '@/lib/staff-access';
 import {hasStaffOrderAccess} from '@/lib/staff-orders';
@@ -13,7 +13,7 @@ class CatalogApiError extends Error {
 
 export async function GET(request: Request) {
   try {
-    const user = await sessionUser(request.headers.get('cookie'));
+    const user = await staffSessionUser(request.headers.get('cookie'));
     if (!user) throw new CatalogApiError(401, 'Connectez-vous avec un compte de l’équipe.');
     const url = new URL(request.url);
     if ([...url.searchParams.keys()].some(key => !['organizationId', 'locationId'].includes(key))

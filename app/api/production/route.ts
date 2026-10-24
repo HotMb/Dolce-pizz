@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {
   canOperateStation,
   loadStaffScope,
@@ -67,7 +67,7 @@ type TicketRow = {
 };
 
 async function requireOperator(request: Request) {
-  const user = await sessionUser(request.headers.get('cookie'));
+  const user = await staffSessionUser(request.headers.get('cookie'));
   if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
   const query = new URL(request.url).searchParams;
   if (query.getAll('organizationId').length > 1 || query.getAll('locationId').length > 1) {

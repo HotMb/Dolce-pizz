@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db, ensureSeed, ingredientList, productList, settings} from '@/lib/server';
-import {sessionUser, normalizePhone} from '@/lib/auth';
+import {staffSessionUser, normalizePhone} from '@/lib/auth';
 import {allowedSlot, slots} from '@/lib/rules';
 import {priceCart} from '@/lib/pricing';
 import {snapshotPricedLines} from '@/lib/production-repository';
@@ -40,7 +40,7 @@ async function deviceTokenActor(request: Request): Promise<OrderActor | null> {
 async function authenticatedRequest(request: Request, url: URL, requireOrigin: boolean) {
   const origin = request.headers.get('origin');
   if ((requireOrigin && !origin) || (origin && origin !== url.origin)) fail(403, 'Cette demande doit être envoyée depuis le site.');
-  const user = await sessionUser(request.headers.get('cookie'));
+  const user = await staffSessionUser(request.headers.get('cookie'));
   const actor = user ? {id:user.id, phone:user.phone, name:user.name} : await deviceTokenActor(request);
   if (!actor) fail(401, 'Connectez-vous avec un compte de l’équipe ou un appareil borne autorisé.');
   await ensureSeed();

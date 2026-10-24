@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db, ensureSeed} from '@/lib/server';
-import {normalizePhone, sessionUser} from '@/lib/auth';
+import {normalizePhone, staffSessionUser} from '@/lib/auth';
 import {loadStaffScope, readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,7 @@ const digest = async (value:string) => Array.from(new Uint8Array(await crypto.su
 
 async function authorize(request:Request, organizationId:string, locationId:string, write:boolean) {
   if (write && request.headers.get('origin') !== new URL(request.url).origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
-  const user = await sessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous pour gérer l’historique d’appel.');
+  const user = await staffSessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous pour gérer l’historique d’appel.');
   await ensureSeed();
   const access = await loadStaffScope(db(), user.id, {organizationId, locationId});
   if (!access || !access.roles.some(role => role === 'owner' || role === 'call_center')) throw new ApiError(403, 'L’historique d’appel est réservé au centre d’appels de l’enseigne.');

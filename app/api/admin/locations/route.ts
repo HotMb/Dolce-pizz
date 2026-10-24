@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/server';
 import {defaultSettings} from '@/lib/rules';
-import {sessionUser, underLimit} from '@/lib/auth';
+import {staffSessionUser, underLimit} from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, {status, headers: {'Cache-Control': 'no-store'}});
@@ -19,7 +19,7 @@ const normalizeLocationPhone = (raw: string) => {
 /** Return only sites belonging to an organization owned by the caller. */
 export async function GET(request: Request) {
   try {
-    const user = await sessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous pour consulter les établissements.');
+    const user = await staffSessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous pour consulter les établissements.');
     const organizationId = new URL(request.url).searchParams.get('organizationId') || '';
     if (!id.safeParse(organizationId).success || !await owner(user.id, organizationId)) throw new ApiError(403, 'Cette action est réservée au propriétaire de l’enseigne.');
     const rows = await db().prepare('SELECT id,code,name,status,address_line1,postal_code,locality,phone,country_code,timezone,created_at,updated_at FROM locations WHERE organization_id=? ORDER BY name,id').bind(organizationId).all();
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const url = new URL(request.url); if (request.headers.get('origin') !== url.origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
-    const user = await sessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous avant d’ajouter un établissement.');
+    const user = await staffSessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous avant d’ajouter un établissement.');
     const ip = request.headers.get('cf-connecting-ip') || 'local'; if (!await underLimit(`locations:${user.id}:${ip}`, 10)) throw new ApiError(429, 'Trop de tentatives. Réessayez plus tard.');
     const length = Number(request.headers.get('content-length') || 0); if (Number.isFinite(length) && length > 8000) throw new ApiError(413, 'La demande est trop volumineuse.');
     const raw = await request.text(); if (raw.length > 8000) throw new ApiError(413, 'La demande est trop volumineuse.');

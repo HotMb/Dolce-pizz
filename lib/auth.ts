@@ -3,7 +3,7 @@ import {headers} from 'next/headers';
 import {db} from './server';
 export type Member={id:string;phone:string;name:string};
 export class AuthError extends Error{constructor(public status:number,message:string){super(message);}}
-const COOKIE='dolce_session',SESSION_DAYS=90,CODE_MINUTES=10,MAX_ATTEMPTS=5,RESEND_MS=60000,HOUR=3600000;
+const COOKIE='dolce_session',SESSION_DAYS=90,STAFF_SESSION_HOURS=12,CODE_MINUTES=10,MAX_ATTEMPTS=5,RESEND_MS=60000,HOUR=3600000;
 const vars=env as unknown as Record<string,string|undefined>;
 const hex=(bytes:Uint8Array)=>Array.from(bytes,v=>v.toString(16).padStart(2,'0')).join('');
 const sha256=async(s:string)=>hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));
@@ -14,6 +14,12 @@ const readCookie=(header:string|null)=>header?.split(/;\s*/).find(v=>v.startsWit
 export async function sessionUser(cookieHeader:string|null):Promise<Member|null>{
  const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
  return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?').bind(await sha256(token),Date.now()).first<Member>();
+}
+/** Staff and administration routes require a recent OTP session on shared devices. */
+export async function staffSessionUser(cookieHeader:string|null):Promise<Member|null>{
+ const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ const cutoff=new Date(Date.now()-STAFF_SESSION_HOURS*HOUR).toISOString();
+ return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? AND s.created_at>=?').bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
 export const sessionCookie=(token:string,secure:boolean)=>`${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?SESSION_DAYS*86400:0}${secure?'; Secure':''}`;

@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db,ensureSeed} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {loadStaffScope,readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic='force-dynamic';
@@ -12,7 +12,7 @@ const inputSchema=z.object({organizationId:z.string().min(1).max(128),locationId
 export async function POST(request:Request){
  try{
   const origin=request.headers.get('origin'),url=new URL(request.url);if(!origin||origin!==url.origin)throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avec un compte autorisé.');await ensureSeed();
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avec un compte autorisé.');await ensureSeed();
   const raw=JSON.parse(await readBoundedRequestText(request,8000));const input=inputSchema.parse(raw);
   const access=await loadStaffScope(db(),user.id,{organizationId:input.organizationId,locationId:input.locationId});
   if(!access||!access.roles.some(role=>role==='owner'||role==='manager'))throw new ApiError(403,'Seul un propriétaire ou responsable peut enregistrer un remboursement.');

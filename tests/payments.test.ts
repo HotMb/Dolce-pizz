@@ -127,6 +127,10 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
     return `dolce_session=${token}`;
   }
   const ownerCookie = await session('owner', 'a'.repeat(64));
+  const staleStaffToken = 'c'.repeat(64);
+  database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at) VALUES(?,?,?,?)').run(await sha256(staleStaffToken), 'owner', Date.now() + 3_600_000, new Date(Date.now() - 13 * 3_600_000).toISOString());
+  const staleHealth = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:`dolce_session=${staleStaffToken}`})}));
+  assert.equal(staleHealth.status, 401);
   const workerCookie = await session('worker', 'b'.repeat(64));
   const now = new Date().toISOString();
   database.prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) VALUES('owner-membership','dolce-pizza',NULL,'owner','owner','active',?,?),('worker-membership','dolce-pizza','ronchin','worker','pos','active',?,?)").run(now, now, now, now);

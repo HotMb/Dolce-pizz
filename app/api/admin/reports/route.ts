@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {reportCsv,type ReportExport} from '@/lib/report-export';
 
 export const dynamic='force-dynamic';
@@ -15,7 +15,7 @@ const dayAfter=(value:string)=>{const parsed=new Date(`${value}T00:00:00.000Z`);
 /** Consolidated organization metrics; raw order/customer records never cross this owner scope. */
 export async function GET(request:Request){
  try{
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous pour consulter les rapports.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous pour consulter les rapports.');
   const query=new URL(request.url).searchParams;const parsed=z.object({organizationId:id,from:date.optional(),to:date.optional(),format:z.enum(['json','csv']).default('json')}).strict().parse(Object.fromEntries(query));
   if(!await owner(user.id,parsed.organizationId))throw new ApiError(403,'Les rapports sont réservés au propriétaire de l’enseigne.');
   const now=new Date();const to=parsed.to||now.toISOString().slice(0,10),from=parsed.from||new Date(now.getTime()-29*86400000).toISOString().slice(0,10);if(new Date(`${from}T00:00:00Z`)>new Date(`${to}T00:00:00Z`))throw new ApiError(400,'La période est inversée.');

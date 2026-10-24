@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {db,ensureSeed} from '@/lib/server';
 import {z} from 'zod';
 
@@ -10,7 +10,7 @@ class NotificationApiError extends Error{constructor(public status:number,messag
 
 export async function GET(request:Request){
  try{
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new NotificationApiError(401,'Connectez-vous pour consulter la supervision SMS.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new NotificationApiError(401,'Connectez-vous pour consulter la supervision SMS.');
   const query=querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams.entries()));if(!query.success)throw new NotificationApiError(400,'Choisissez une enseigne valide.');
   await ensureSeed();
   const owner=await db().prepare("SELECT 1 AS ok FROM organization_memberships WHERE organization_id=? AND principal_id=? AND role='owner' AND status='active' AND location_id IS NULL LIMIT 1").bind(query.data.organizationId,user.id).first<{ok:number}>();

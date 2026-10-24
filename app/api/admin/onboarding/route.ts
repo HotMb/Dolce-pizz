@@ -5,7 +5,7 @@ import {db,insertProduct} from '@/lib/server';
 import {seedCatalog} from '@/lib/seed';
 import {seedIngredients} from '@/lib/menu';
 import {defaultSettings} from '@/lib/rules';
-import {sessionUser,normalizePhone,underLimit} from '@/lib/auth';
+import {staffSessionUser,normalizePhone,underLimit} from '@/lib/auth';
 
 export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -20,7 +20,7 @@ const equalSecret=async(a:string,b:string)=>{if(!b)return false;const left=await
 export async function POST(request:Request){
  try{
   const url=new URL(request.url);const origin=request.headers.get('origin');if(!origin||origin!==url.origin)throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de créer une enseigne.');
+  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de créer une enseigne.');
   const ip=request.headers.get('cf-connecting-ip')||'local';if(!await underLimit(`onboarding:${ip}`,5))throw new ApiError(429,'Trop de tentatives. Réessayez plus tard.');
   const length=Number(request.headers.get('content-length')||0);if(Number.isFinite(length)&&length>12000)throw new ApiError(413,'La demande est trop volumineuse.');
   const raw=await request.text();if(raw.length>12000)throw new ApiError(413,'La demande est trop volumineuse.');

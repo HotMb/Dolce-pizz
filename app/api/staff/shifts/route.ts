@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db, ensureSeed} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {loadStaffScope, readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ const inputSchema = z.object({
 async function authorize(request: Request, scope: {organizationId: string; locationId: string}, requireOrigin: boolean) {
   const url = new URL(request.url); const origin = request.headers.get('origin');
   if (requireOrigin && (!origin || origin !== url.origin)) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
-  const user = await sessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
+  const user = await staffSessionUser(request.headers.get('cookie')); if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
   await ensureSeed();
   const access = await loadStaffScope(db(), user.id, scope);
   if (!access || !access.roles.some(role => role === 'owner' || role === 'manager' || role === 'pos')) throw new ApiError(403, 'Votre rôle ne permet pas de gérer cette caisse.');

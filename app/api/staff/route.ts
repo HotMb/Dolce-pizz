@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {db} from '@/lib/server';
 import {
   assignableStaffRoles,
@@ -29,7 +29,7 @@ const fail = (error: unknown) => {
 
 export async function GET(request: Request) {
   try {
-    const user = await sessionUser(request.headers.get('cookie'));
+    const user = await staffSessionUser(request.headers.get('cookie'));
     if (!user) throw new StaffApiError(401, 'Connectez-vous pour consulter vos accès.');
     const query = new URL(request.url).searchParams;
     if ([...query.keys()].some(key => !['organizationId', 'locationId', 'members'].includes(key))
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       throw new StaffApiError(400, 'La demande doit contenir uniquement les informations de gestion des accès.');
     }
     if (Number(request.headers.get('content-length') || 0) > 4000) throw new StaffApiError(413, 'La demande est trop volumineuse.');
-    const user = await sessionUser(request.headers.get('cookie'));
+    const user = await staffSessionUser(request.headers.get('cookie'));
     if (!user) throw new StaffApiError(401, 'Connectez-vous pour gérer les accès.');
     const serialized = await readBoundedRequestText(request, 4000);
     let body: unknown;

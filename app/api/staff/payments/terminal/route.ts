@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db, ensureSeed} from '@/lib/server';
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {loadStaffScope, readBoundedRequestText, type StaffScopeKey} from '@/lib/staff-access';
 import {paymentTerminalAdapter} from '@/lib/payment-terminal';
 
@@ -17,7 +17,7 @@ const inputSchema = z.object({
 async function requireCashier(request: Request, scope: StaffScopeKey) {
   const origin = request.headers.get('origin');
   if (!origin || origin !== new URL(request.url).origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
-  const user = await sessionUser(request.headers.get('cookie'));
+  const user = await staffSessionUser(request.headers.get('cookie'));
   if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
   await ensureSeed();
   const access = await loadStaffScope(db(), user.id, scope);

@@ -1,4 +1,4 @@
-import {sessionUser} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {db,ensureSeed} from '@/lib/server';
 import {canOperateStation,loadStaffScope} from '@/lib/staff-access';
 import {z} from 'zod';
@@ -10,7 +10,7 @@ const encoder=new TextEncoder();
 export async function GET(request:Request){
  const parsed=querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams.entries()));
  if(!parsed.success)return new Response('invalid_scope',{status:400});
- const user=await sessionUser(request.headers.get('cookie'));if(!user)return new Response('unauthorized',{status:401});
+ const user=await staffSessionUser(request.headers.get('cookie'));if(!user)return new Response('unauthorized',{status:401});
  await ensureSeed();const scope=await loadStaffScope(db(),user.id,{organizationId:parsed.data.organizationId,locationId:parsed.data.locationId});
  if(!scope||!canOperateStation(scope,parsed.data.station,'read'))return new Response('forbidden',{status:403});
  let closed=false;let timer:number|undefined;let closeTimer:number|undefined;
