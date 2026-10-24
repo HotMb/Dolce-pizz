@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 import {useEffect,useRef,useState} from 'react';
-import {Plus,Pencil,Trash2,Camera,ImageOff,Search,X,RotateCcw,AlertTriangle,Flame,Megaphone} from 'lucide-react';
+import {Plus,Pencil,Trash2,Camera,ImageOff,Search,X,RotateCcw,AlertTriangle,Flame,Megaphone,History,LoaderCircle} from 'lucide-react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription,DialogClose} from '@/components/ui/dialog';
 import {Switch} from '@/components/ui/switch';
 import {Checkbox} from '@/components/ui/checkbox';
@@ -19,7 +19,7 @@ const cents=(v:string)=>{const n=Math.round(Number(v.replace(/\s|€/g,'').repla
 
 /** The whole menu for the team: add, edit, pause, remove. Quick switches save at once (a stock-out cannot wait). */
 export function MenuAdmin({products,ingredients,refresh,onAnnounce}:Props){
- const[filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[editing,setEditing]=useState<Product|'pizza'|'unique'|null>(null),[error,setError]=useState('');
+ const[filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[editing,setEditing]=useState<Product|'pizza'|'unique'|null>(null),[history,setHistory]=useState<Product|null>(null),[error,setError]=useState('');
  const live=products.filter(p=>p.status!=='archived'),drafts=products.filter(p=>p.status==='draft').length,archived=products.filter(p=>p.status==='archived').length;
  const noPhoto=live.filter(p=>isPizza(p)&&!hasPhoto(p)).length,unchecked=live.filter(p=>!p.allergensChecked&&((p.ingredients||[]).length||(p.allergens||[]).length)).length;
  const visible=products.filter(p=>(filter==='archived'?p.status==='archived':filter==='draft'?p.status==='draft':p.status!=='archived'&&(filter==='all'||p.category===filter))&&normalizeText(`${p.name} ${p.description}`).includes(normalizeText(query)));
@@ -29,19 +29,28 @@ export function MenuAdmin({products,ingredients,refresh,onAnnounce}:Props){
   {(noPhoto>0||unchecked>0)&&<div className="banner admin-alerts">{noPhoto>0&&<span><ImageOff size={16}/> {noPhoto} pizza{noPhoto>1?'s':''} sans photo : absente{noPhoto>1?'s':''} de la roue d’accueil.</span>}{unchecked>0&&<span><AlertTriangle size={16}/> {unchecked} article{unchecked>1?'s':''} aux allergènes à vérifier puis à valider.</span>}</div>}
   <div className="admin-toolbar"><div className="category-tabs">{filters.map(([v,l])=><button className={`category-tab ${filter===v?'active-admin-filter':''}`} key={v} onClick={()=>setFilter(v)}>{l}</button>)}</div><div className="search-field"><Search size={17}/><input aria-label="Rechercher un article" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nom, ingrédient…"/>{query&&<button aria-label="Effacer la recherche" onClick={()=>setQuery('')}><X size={16}/></button>}</div></div>
   <ErrorBox message={error}/>
-  {!visible.length?<div className="empty"><h3>Aucun article ici</h3></div>:<div className="menu-admin-list">{visible.map(p=><MenuItem key={p.id} product={p} onEdit={()=>setEditing(p)} refresh={refresh} onError={setError}/>)}</div>}
+  {!visible.length?<div className="empty"><h3>Aucun article ici</h3></div>:<div className="menu-admin-list">{visible.map(p=><MenuItem key={p.id} product={p} onEdit={()=>setEditing(p)} onHistory={()=>setHistory(p)} refresh={refresh} onError={setError}/>)}</div>}
   {editing&&<ProductEditor key={typeof editing==='string'?editing:editing.id} initial={typeof editing==='string'?null:editing} pizza={typeof editing==='string'?editing==='pizza':isPizza(editing)} ingredients={ingredients} refresh={refresh} onClose={()=>setEditing(null)} onAnnounce={onAnnounce}/>}
+  {history&&<ProductHistory product={history} onClose={()=>setHistory(null)}/>}
  </section>;
 }
-function MenuItem({product:p,onEdit,refresh,onError}:{product:Product;onEdit:()=>void;refresh:()=>Promise<void>;onError:(e:string)=>void}){
+function MenuItem({product:p,onEdit,onHistory,refresh,onError}:{product:Product;onEdit:()=>void;onHistory:()=>void;refresh:()=>Promise<void>;onError:(e:string)=>void}){
  const[busy,setBusy]=useState('');
  const patch=async(key:string,changes:Partial<Product>,done:string)=>{setBusy(key);onError('');try{await api(`admin/products/${p.id}`,'PUT',{...changes,version:p.version});toast.success(done);await refresh();}catch(e){onError((e as Error).message);await refresh();}finally{setBusy('');}};
  return <article className={`menu-item ${p.status!=='published'?'is-muted':''}`}>
   <button type="button" className="menu-item-photo" onClick={onEdit} aria-label={`Modifier ${p.name}`}>{isPizza(p)?<PizzaPhoto product={p} decorative sizes="64px"/>:<span className="menu-item-icon">{p.name.slice(0,1)}</span>}</button>
   <div className="menu-item-main"><strong>{p.name}{p.spicy&&<Flame size={14} aria-label="Piquante"/>}</strong><p>{p.description}</p><div className="menu-badges">{p.status==='draft'&&<span className="badge">Brouillon</span>}{p.status==='archived'&&<span className="badge">Retirée de la carte</span>}{isPizza(p)&&!hasPhoto(p)&&<span className="badge warn">Sans photo</span>}{!p.allergensChecked&&((p.ingredients||[]).length>0||(p.allergens||[]).length>0)&&<span className="badge warn">Allergènes à vérifier</span>}{!p.available&&p.status!=='archived'&&<span className="badge warn">En rupture</span>}{p.offer&&<span className="offer-badge">2e offerte</span>}</div></div>
   <div className="menu-item-price">{money(p.price)}{p.xxl!==null&&<small>XXL {money(p.xxl)}</small>}</div>
-  <div className="menu-item-actions">{p.status==='archived'?<Button tone="outline" busy={busy==='restore'} onClick={()=>patch('restore',{status:'published'},`${p.name} est de retour sur la carte`)}><RotateCcw size={16}/> Remettre sur la carte</Button>:<><label className="checkbox-row"><Switch checked={p.available} disabled={!!busy} onCheckedChange={v=>void patch('available',{available:v},v?`${p.name} est de nouveau disponible`:`${p.name} est en rupture pour le moment`)}/>Disponible</label>{isPizza(p)&&<label className="checkbox-row"><Switch checked={!!p.offer} disabled={!!busy} onCheckedChange={v=>void patch('offer',{offer:v},v?`2e pizza offerte activée sur ${p.name}`:`2e pizza offerte arrêtée sur ${p.name}`)}/>2e offerte</label>}<Button tone="outline" onClick={onEdit}><Pencil size={16}/> Modifier</Button></>}</div>
+  <div className="menu-item-actions"><Button tone="outline" onClick={onHistory} aria-label={`Voir l’historique de ${p.name}`}><History size={16}/> Historique</Button>{p.status==='archived'?<Button tone="outline" busy={busy==='restore'} onClick={()=>patch('restore',{status:'published'},`${p.name} est de retour sur la carte`)}><RotateCcw size={16}/> Remettre sur la carte</Button>:<><label className="checkbox-row"><Switch checked={p.available} disabled={!!busy} onCheckedChange={v=>void patch('available',{available:v},v?`${p.name} est de nouveau disponible`:`${p.name} est en rupture pour le moment`)}/>Disponible</label>{isPizza(p)&&<label className="checkbox-row"><Switch checked={!!p.offer} disabled={!!busy} onCheckedChange={v=>void patch('offer',{offer:v},v?`2e pizza offerte activée sur ${p.name}`:`2e pizza offerte arrêtée sur ${p.name}`)}/>2e offerte</label>}<Button tone="outline" onClick={onEdit}><Pencil size={16}/> Modifier</Button></>}</div>
  </article>;
+}
+
+type ProductRevision={id:string;product_id:string;product_version:number;action:'created'|'updated'|'archived'|'deleted'|'photo_updated';snapshot:string;actor_id:string;changed_at:string};
+const historyAction:Record<ProductRevision['action'],string>={created:'Création',updated:'Modification',archived:'Archivage',deleted:'Suppression',photo_updated:'Photo'};
+function ProductHistory({product,onClose}:{product:Product;onClose:()=>void}){
+ const[rows,setRows]=useState<ProductRevision[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState('');
+ useEffect(()=>{let active=true;void api<{revisions:ProductRevision[]}>(`admin/products/revisions?productId=${encodeURIComponent(product.id)}`).then(result=>{if(active)setRows(Array.isArray(result.revisions)?result.revisions:[]);}).catch(cause=>{if(active)setError((cause as Error).message||'Impossible de charger l’historique.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[product.id]);
+ return <Dialog open onOpenChange={open=>{if(!open)onClose();}}><DialogContent className="dolce-dialog" showCloseButton={false}><DialogClose className="icon-button modal-close" aria-label="Fermer"><X size={20}/></DialogClose><DialogTitle className="modal-title">Historique · {product.name}</DialogTitle><DialogDescription className="muted">Chaque ligne est un snapshot serveur immuable. Les commandes déjà passées ne sont jamais recalculées.</DialogDescription>{error?<ErrorBox message={error}/>:loading?<p className="staff-list-loading" role="status"><LoaderCircle size={18} className="spin"/>Chargement de l’historique…</p>:!rows.length?<p className="staff-list-empty">Aucune modification enregistrée pour cet article.</p>:<ul className="staff-members">{rows.map(row=>{let snapshot:Partial<Product>={};try{snapshot=JSON.parse(row.snapshot);}catch{}return <li key={row.id}><div><strong>Version {row.product_version} · {historyAction[row.action]}</strong><code>{snapshot.name||product.name} · {typeof snapshot.price==='number'?`${(snapshot.price/100).toFixed(2).replace('.',',')} €`:''}</code><span>{new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(row.changed_at))} · acteur {row.actor_id.slice(0,12)}</span></div></li>;})}</ul>}<div className="editor-actions"><span/><Button tone="outline" onClick={onClose}>Fermer</Button></div></DialogContent></Dialog>;
 }
 
 /** The 14 regulatory allergens as toggles. `locked`: already brought by the recipe's ingredients. */
