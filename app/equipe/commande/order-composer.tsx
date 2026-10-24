@@ -35,8 +35,16 @@ const localPhoneValid=(value:string)=>/^(?:\+33|0033|0)[67](?:[ .-]?\d){8}$/.tes
 const initialDraft=(product:Product):ProductDraft=>({product,size:product.xxl===null?'unique':'senior',quantity:1,option:product.options?.[0]||'',removed:[],added:[],freeId:product.offer?product.id:'',freeOption:product.options?.[0]||''});
 const lineFromDraft=(draft:ProductDraft):CartLine=>({id:draft.product.id,size:draft.size,quantity:draft.quantity,option:draft.option,...(draft.removed.length?{removed:draft.removed}:{}),...(draft.added.length?{added:draft.added}:{}),...(draft.freeId?{freeId:draft.freeId,freeOption:draft.freeOption}:{})});
 
-export function StaffOrderComposer(){
- const access=useStaffAccess();
+function usePosDeviceAccess(enabled:boolean){
+ const[data,setData]=useState<{scope:StaffScope;device:{label:string;role:string}}|null>(null),[error,setError]=useState(''),[checked,setChecked]=useState(!enabled),[refreshing,setRefreshing]=useState(false);
+ const refresh=useCallback(async()=>{if(!enabled){setChecked(true);return;}setRefreshing(true);try{const token=window.localStorage.getItem('dolce-pos-token')||'';if(!/^[0-9a-f]{64}$/.test(token))throw new Error('Aucun POS mobile n’est configuré.');const response=await fetch('/api/device/bootstrap',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});const payload=await response.json().catch(()=>null) as {scope?:StaffScope;device?:{label:string;role:string};error?:string};if(!response.ok||!payload.scope||!payload.device||payload.device.role!=='pos')throw new Error(payload.error||'Le jeton n’est pas celui d’un POS mobile.');setData({scope:payload.scope,device:payload.device});setError('');}catch(cause){setData(null);setError((cause as Error).message||'Impossible de vérifier le POS mobile.');}finally{setChecked(true);setRefreshing(false);}},[enabled]);
+ useEffect(()=>{if(enabled){const first=window.setTimeout(()=>void refresh(),0);return()=>window.clearTimeout(first);}setChecked(true);},[enabled,refresh]);
+ return {data,error,checked,refreshing,refresh};
+}
+
+export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
+ const staff=useStaffAccess(),device=usePosDeviceAccess(deviceMode);
+ const access=device.data?{data:{account:{id:`device:${device.data.device.label}`,name:device.data.device.label},scopes:[device.data.scope],roles:[{id:'pos',label:'POS mobile'}]},loading:!device.checked,error:device.error,status:device.checked&&!device.data?401:null,refreshing:device.refreshing,refresh:device.refresh}:{data:staff.data,loading:staff.loading,error:staff.error,status:staff.status,refreshing:staff.refreshing,refresh:staff.refresh};
  const [requestedChannel,setRequestedChannel]=useState<Channel>('counter');
  const [selected,setSelected]=useState('');
  const [schedule,setSchedule]=useState<Schedule|null>(null);
@@ -60,6 +68,7 @@ export function StaffOrderComposer(){
  const [note,setNote]=useState('');
  const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
  const [pageError,setPageError]=useState('');
+ const [deviceTokenDraft,setDeviceTokenDraft]=useState('');
  const [attempt,setAttempt]=useState<Attempt|null>(null);
  const [attemptError,setAttemptError]=useState('');
  const [attemptUncertain,setAttemptUncertain]=useState(false);
@@ -226,6 +235,7 @@ export function StaffOrderComposer(){
  },[attemptUncertain]);
 
  if(access.loading&&!access.data)return <main id="contenu" className="page-shell staff-shell"><div className="staff-loading" role="status">Vérification de vos accès…</div></main>;
+ if(deviceMode&&access.status===401&&!access.data)return <main id="contenu" className="page-shell staff-shell"><section className="panel pos-gate"><h1>Configurer le POS mobile.</h1><p>Collez le jeton remis lors de l’enrôlement. Il reste dans ce navigateur et sera limité à son établissement.</p><Field label="Jeton POS" id="pos-device-token"><input id="pos-device-token" type="password" inputMode="text" autoComplete="off" value={deviceTokenDraft} onChange={event=>setDeviceTokenDraft(event.target.value)} placeholder="64 caractères hexadécimaux"/></Field><Button disabled={!/^[0-9a-f]{64}$/.test(deviceTokenDraft.trim())} onClick={()=>{localStorage.setItem('dolce-pos-token',deviceTokenDraft.trim());setDeviceTokenDraft('');void access.refresh();}}>Activer le POS</Button><ErrorBox message={access.error}/></section></main>;
  if(access.status===401)return <main id="contenu" className="page-shell staff-shell"><section className="panel pos-gate"><h1>Reconnectez-vous.</h1><p>Votre session d’équipe a expiré. La saisie en cours n’est pas envoyée.</p><Link className="btn btn-primary" href={loginPath('/equipe/commande')}>Se connecter par SMS</Link></section></main>;
  if(access.error&&!access.data)return <main id="contenu" className="page-shell staff-shell"><ErrorBox message={access.error} retry={()=>void access.refresh()}/></main>;
  if(!scope)return <main id="contenu" className="page-shell staff-shell"><header className="staff-heading"><div><Link href="/equipe" className="staff-back"><ArrowLeft size={18}/> Espace équipe</Link><p className="staff-eyebrow"><ShoppingBasket size={17}/> PRISE DE COMMANDE</p><h1>Accès caisse<span>.</span></h1></div></header><section className="panel staff-empty"><UserRound size={34}/><h2>Aucun accès de prise de commande.</h2><p>Le propriétaire doit attribuer le rôle Comptoir ou Centre d’appels pour un établissement actif.</p><Link href="/equipe" className="btn btn-outline">Voir mon espace équipe</Link></section></main>;
