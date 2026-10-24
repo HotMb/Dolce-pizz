@@ -272,6 +272,24 @@ async function products(request:Request,id:string|undefined,sub:string|undefined
  if(!id)fail(404,'Cette action est introuvable.');
  const row=await productRow(id,organizationId);if(!row)fail(404,'Cet article n’existe plus. Rechargez la carte.');const current=toProduct(row);
  if(sub==='photo')return await productPhoto(request,current,method,organizationId);
+ if(sub==='restore'&&method==='POST'){
+  const input=z.object({revisionId:clean.max(128),version:z.number().int().positive()}).strict().parse(await body());
+  if((current.version||1)!==input.version)fail(409,'Cet article a changé sur un autre appareil. Rechargez son historique avant de restaurer.');
+  const revision=await db().prepare('SELECT snapshot FROM menu_product_revisions WHERE organization_id=? AND product_id=? AND id=?').bind(organizationId,id,input.revisionId).first<{snapshot:string}>();
+  if(!revision)fail(404,'Cette version du menu est introuvable.');
+  let snapshot:unknown;try{snapshot=JSON.parse(revision.snapshot);}catch{fail(409,'Cette version historique est illisible.');}
+  const restored=await checkProduct(productFields.parse(snapshot),organizationId);
+  if(restored.status==='archived')fail(409,'Une version archivée ne peut pas être restaurée. Choisissez une version publiée ou brouillon.');
+  const nextVersion=input.version+1;
+  const restoredSnapshot={...restored,id,version:nextVersion};
+  const result=await db().batch([
+   db().prepare('UPDATE products SET name=?,category=?,description=?,tagline=?,price=?,xxl=?,ingredients=?,allergens=?,allergens_checked=?,options=?,spicy=?,offer=?,available=?,status=?,version=version+1,updated_at=? WHERE organization_id=? AND id=? AND version=?')
+    .bind(restored.name,restored.category,restored.description,restored.tagline,restored.price,restored.xxl,JSON.stringify(restored.ingredients),JSON.stringify(restored.allergens),restored.allergensChecked?1:0,JSON.stringify(restored.options),restored.spicy?1:0,restored.offer?1:0,restored.available?1:0,restored.status,now,organizationId,id,input.version),
+   db().prepare('INSERT INTO menu_product_revisions(id,organization_id,product_id,product_version,action,snapshot,actor_id,changed_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM products WHERE organization_id=? AND id=? AND version=?)').bind(crypto.randomUUID(),organizationId,id,nextVersion,'updated',JSON.stringify(restoredSnapshot),actor,now,organizationId,id,nextVersion),
+  ]);
+  if(!result[0].meta.changes)fail(409,'Cet article a changé sur un autre appareil. Rechargez-le avant de restaurer.');
+  return json({product:toProduct((await productRow(id,organizationId))!)});
+ }
  if(method==='PUT'){
   const input=productFields.partial().extend({version:z.number().int().positive()}).parse(await body());
   const merged={name:current.name,category:current.category,description:current.description,tagline:current.tagline||'',price:current.price,xxl:current.xxl,ingredients:current.ingredients||[],allergens:current.allergens||[],allergensChecked:!!current.allergensChecked,options:current.options||[],spicy:!!current.spicy,offer:!!current.offer,available:current.available,status:current.status||'published',...input};
