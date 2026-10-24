@@ -5,7 +5,7 @@
   "canonicalMap": "UX-CONTRACT.md",
   "requiredCapabilities": ["Select/Listbox", "Date", "Form", "Scrollbar", "Toast", "CRUD"],
   "ownership": {
-    "Select/Listbox": "authored",
+    "Select/Listbox": "native",
     "Date": "native",
     "Form": "shared",
     "Scrollbar": "global",

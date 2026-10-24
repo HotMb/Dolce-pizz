@@ -45,7 +45,7 @@ Ce guide couvre le prototype web, le KDS, la prise de commande simple par le per
 
 7. Pour éprouver les postes KDS, envoyer la commande de test en préparation depuis `/admin`; ouvrir `/production`, parcourir Make Line, Four puis Expeditor et confirmer que l’action « prête » reste bloquée tant que chaque unité n’a pas fini son parcours. Les allergènes et le routage doivent aussi être vérifiés dans les fiches menu; l’API applique ce contrôle côté serveur.
 
-8. Ouvrir `/equipe`. Sur une installation neuve, le premier compte activé avec le code administrateur reçoit l’adhésion propriétaire de Dolce Pizz’. La migration `0005` attribue cette adhésion aux administrateurs déjà présents du pilote. La migration `0006` rattache le menu, les ingrédients, les photos et les réglages existants à l’organisation `dolce-pizza`; elle ne crée pas de nouvelle enseigne et ne configure pas Tourcoing. Un nouveau collègue se connecte avec son propre mobile, copie l’identifiant affiché dans `/equipe` et le transmet au propriétaire. Celui-ci choisit l’établissement, l’identifiant et le rôle, puis confirme l’attribution. Retirer un accès bloque les requêtes suivantes et les mutations en attente vérifient aussi sa révocation. La gestion actuelle ne permet ni de transférer ni de retirer le propriétaire organisationnel.
+8. Ouvrir `/equipe`. Sur une installation neuve, le premier compte activé avec le code administrateur reçoit l’adhésion propriétaire de Dolce Pizz’. La migration `0005` attribue cette adhésion aux administrateurs déjà présents du pilote. La migration `0006` rattache le menu, les ingrédients, les photos et les réglages existants à l’organisation `dolce-pizza`. La migration `0007` migre les profils/consentements clients, les points et les campagnes historiques vers cette même organisation, sépare le client de l’employé créateur d’une commande et supprime les anciens champs de consentement globaux. Elle ne crée pas de nouvelle enseigne et ne configure pas Tourcoing. Un nouveau collègue se connecte avec son propre mobile, copie l’identifiant affiché dans `/equipe` et le transmet au propriétaire. Celui-ci choisit l’établissement, l’identifiant et le rôle, puis confirme l’attribution. Retirer un accès bloque les requêtes suivantes et les mutations en attente vérifient aussi sa révocation. La gestion actuelle ne permet ni de transférer ni de retirer le propriétaire organisationnel.
 
 9. Pour éprouver la saisie du personnel, attribuer le rôle Comptoir ou Centre d’appels, ouvrir `/equipe/commande`, choisir le canal, saisir les articles et confirmer l’établissement et le créneau. La commande apparaît en préparation dans les postes KDS. Un SMS de retrait ne sera mis en file que si le client donne son mobile et confirme explicitement ce SMS. Le code postal téléphone est actuellement une aide de saisie : tant que les zones et l’établissement de Tourcoing ne sont pas configurés, l’employé choisit le point de retrait dans la liste, qui ne propose que les établissements autorisés et actifs.
 
@@ -96,13 +96,15 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 
 1. Sauvegarder/exporter la base concernée.
 2. Tester la nouvelle version et les migrations sur une copie.
-3. Vérifier accès tenant/site, commande idempotente, prix, paiement à encaisser et impression.
-4. Publier hors des heures de service et surveiller les commandes entrantes.
-5. Garder le build précédent et la procédure de retour arrière disponibles.
+3. Avant `0007`, vérifier qu’aucune écriture de fidélité n’est orpheline et qu’aucune campagne ne référence un compte supprimé. La migration s’arrête sans supprimer de données si elle détecte ce cas.
+4. Mettre le pilote en maintenance pendant l’application de `0007` et la publication du nouveau Worker : l’ancien Worker écrit encore l’ancien schéma, qui est volontairement retiré par cette migration.
+5. Vérifier accès tenant/site, commande idempotente, profil/consentement, solde fidélité, campagne de test, prix, paiement à encaisser et impression.
+6. Publier hors des heures de service et surveiller les commandes entrantes.
+7. Garder l’export de base et la procédure de retour arrière disponibles; une restauration de schéma nécessite aussi la restauration des données correspondantes.
 
 ## 7. Ce qui reste à livrer avant une installation de production
 
-- Provisionnement de tenants et d’établissements, isolation des données et permissions par rôle/site.
+- Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
 - Encaissement au retrait, TPE, caisse/clôture de shift et reçus.
 - POS mobile de salle, bornes client et routage du centre d’appels par zones postales vérifiées.
 - Renforcement des sessions d’équipe, enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.

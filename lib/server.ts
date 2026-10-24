@@ -35,8 +35,9 @@ export async function productList(all=false,organizationId=PILOT_ORGANIZATION_ID
 export const toIngredient=(i:IngredientRow):Ingredient=>({id:i.id,name:i.name,allergens:list(i.allergens),meat:i.meat,origin:i.origin,extra:!!i.extra,available:!!i.available,locked:!!i.locked,sort:i.sort});
 export async function ingredientList(organizationId=PILOT_ORGANIZATION_ID){const r=await db().prepare('SELECT * FROM ingredients WHERE organization_id=? ORDER BY sort,name').bind(organizationId).all<IngredientRow>();return r.results.map(toIngredient);}
 export async function menu(organizationId=PILOT_ORGANIZATION_ID){const[products,ingredients,s]=await Promise.all([productList(false,organizationId),ingredientList(organizationId),settings(organizationId)]);return {products,ingredients,settings:s};}
-export async function balance(userId:string){const r=await db().prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM ledger WHERE user_id=?').bind(userId).first<{balance:number}>();return r?.balance||0;}
+export async function balance(organizationId:string,userId:string){const r=await db().prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM ledger WHERE organization_id=? AND user_id=?').bind(organizationId,userId).first<{balance:number}>();return r?.balance||0;}
 export async function isAdmin(userId:string){return !!await db().prepare("SELECT user_id FROM roles WHERE user_id=? AND role='admin'").bind(userId).first();}
 export function orderView(r:Record<string,unknown>|null){if(!r||typeof r.items!=='string')throw new Error('Order unavailable');return {...r,items:JSON.parse(r.items) as unknown[]};}
 export function secret(){return (env as unknown as Record<string,string>).ADMIN_SETUP_CODE||process.env.ADMIN_SETUP_CODE||'';}
-export function marketingStopSecret(){const vars=env as unknown as Record<string,string|undefined>;return vars.MARKETING_STOP_SECRET||process.env.MARKETING_STOP_SECRET||secret();}
+// Consent links use a dedicated key: compromising the install code must not forge STOP proofs.
+export function marketingStopSecret(){const vars=env as unknown as Record<string,string|undefined>;return vars.MARKETING_STOP_SECRET||process.env.MARKETING_STOP_SECRET||'';}

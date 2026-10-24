@@ -4,7 +4,7 @@ User: pickup only, payment on collection, restaurant explicitly confirms orders.
 ## Canonical UI Map
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 |---|---|---|---|---|
-| Select/Listbox | components/ui/select | this contract | authored | keyboard popup |
+| Select/Listbox | native select controls | this contract | native popup accepted | browser keyboard popup |
 | Date | slot buttons and labeled native date input | this contract | local date for closures, browser popup accepted | Paris midnight tests |
 | Form | app/components.tsx Field, API zod schemas | this contract | checkout/settings | inline errors and persistence |
 | Staff order composer | app/equipe/commande/order-composer.tsx and `/api/staff/orders` | this contract | comptoir/call center | role-scoped, server-priced, pickup-only |

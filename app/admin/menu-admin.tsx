@@ -13,7 +13,7 @@ import {allergens,allergenLabel,allergensOf,describe,meats,normalizeText,type In
 import {isPizza} from '@/lib/pricing';
 import {loadImage,detect,render,exportPhoto,uploadPhoto,type Crop} from './photo-tools';
 
-type Props={products:Product[];ingredients:Ingredient[];refresh:()=>Promise<void>;onAnnounce:(id:string)=>void};
+type Props={products:Product[];ingredients:Ingredient[];refresh:()=>Promise<void>;onAnnounce?: (id:string)=>void};
 const euros=(c:number|null|undefined)=>c==null?'':String(c/100).replace('.',',');
 const cents=(v:string)=>{const n=Math.round(Number(v.replace(/\s|€/g,'').replace(',','.'))*100);return Number.isFinite(n)&&n>0?n:NaN;};
 
@@ -51,7 +51,7 @@ export function AllergenToggles({value,onChange,locked=[],label='Allergènes'}:{
 
 type Pending={img:HTMLImageElement;base:Crop;warnings:string[];z:number;dx:number;dy:number};
 const cropOf=(p:Pending):Crop=>({cx:p.base.cx+p.dx*p.base.r,cy:p.base.cy+p.dy*p.base.r,r:p.base.r/p.z});
-function ProductEditor({initial,pizza,ingredients,refresh,onClose,onAnnounce}:{initial:Product|null;pizza:boolean;ingredients:Ingredient[];refresh:()=>Promise<void>;onClose:()=>void;onAnnounce:(id:string)=>void}){
+function ProductEditor({initial,pizza,ingredients,refresh,onClose,onAnnounce}:{initial:Product|null;pizza:boolean;ingredients:Ingredient[];refresh:()=>Promise<void>;onClose:()=>void;onAnnounce?: (id:string)=>void}){
  const isNew=!initial;
  const[f,setF]=useState(()=>({name:initial?.name||'',category:initial?.category||(pizza?'tomate':'desserts'),price:euros(initial?initial.price:pizza?1700:null),xxl:euros(initial?initial.xxl:pizza?2200:null),ingredients:initial?.ingredients||(pizza?['pate']:[]),description:initial?.description||'',tagline:initial?.tagline||'',options:(initial?.options||[]).join(', '),allergens:initial?.allergens||[],allergensChecked:!!initial?.allergensChecked,spicy:!!initial?.spicy,offer:!!initial?.offer,available:initial?.available??true,publish:initial?.status!=='draft'}));
  // The menu text follows the recipe until the team writes its own.
@@ -73,7 +73,7 @@ function ProductEditor({initial,pizza,ingredients,refresh,onClose,onAnnounce}:{i
   catch(e){setError((e as Error).message);setBusy('');return;}
   try{if(photo){setBusy('photo');product=await uploadPhoto(product.id,await exportPhoto(photo.img,cropOf(photo))) as Product;}else if(removePhoto&&initial&&hasPhoto(initial))await api(`admin/products/${initial.id}/photo`,'DELETE');}
   catch(e){toast.error(`${body.name} est enregistrée, mais la photo n’a pas été envoyée : ${(e as Error).message}`);}
-  const announce=isNew&&f.publish&&pizza;
+ const announce=isNew&&f.publish&&pizza&&!!onAnnounce;
   toast.success(isNew?(f.publish?`${body.name} est en ligne sur la carte`:`${body.name} est enregistrée en brouillon`):`${body.name} est enregistrée`,announce?{action:{label:'Annoncer par SMS',onClick:()=>onAnnounce(product.id)},duration:9000}:undefined);
   await refresh();setBusy('');onClose();};
  const remove=async()=>{setBusy('delete');setError('');try{const r=await api<{archived:boolean}>(`admin/products/${initial!.id}`,'DELETE');toast.success(r.archived?`${initial!.name} est retirée de la carte. Elle reste dans l’historique des commandes.`:`${initial!.name} est supprimée.`);await refresh();onClose();}catch(e){setError((e as Error).message);setBusy('');setConfirmDelete(false);}};
