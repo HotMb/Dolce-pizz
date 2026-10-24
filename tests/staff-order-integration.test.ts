@@ -101,6 +101,12 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const bootstrap=await deviceBootstrap.GET(new Request('http://localhost/api/device/bootstrap',{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));
  assert.equal(bootstrap.status,200);
  assert.equal((await bootstrap.json() as {scope:{locationId:string};device:{role:string}}).scope.locationId,'ronchin');
+  for(let attempt=0;attempt<20;attempt++){
+   const allowed=await deviceBootstrap.GET(new Request('http://localhost/api/device/bootstrap',{headers:{authorization:`Bearer ${ovenDevice.credential}`,'cf-connecting-ip':'10.0.0.10'}}));
+   assert.equal(allowed.status,200);
+  }
+  const throttled=await deviceBootstrap.GET(new Request('http://localhost/api/device/bootstrap',{headers:{authorization:`Bearer ${ovenDevice.credential}`,'cf-connecting-ip':'10.0.0.10'}}));
+  assert.equal(throttled.status,429);assert.equal(throttled.headers.get('retry-after'),'3600');
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,403);
  const deviceStream=await productionStream.GET(new Request(`http://localhost/api/production/stream?${query}&station=oven`,{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));
