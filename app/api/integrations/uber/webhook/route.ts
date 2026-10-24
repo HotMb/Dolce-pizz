@@ -6,7 +6,13 @@ import {db} from '@/lib/server';
 export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 class WebhookError extends Error{constructor(public status:number,message:string){super(message);}}
-const event=z.object({eventId:z.string().trim().min(8).max(160),eventType:z.enum(['order.created','order.cancelled']),storeId:z.string().trim().min(1).max(160),orderId:z.string().trim().min(1).max(160),customerName:z.string().trim().max(120).default('Commande Uber Eats'),totalCents:z.number().int().nonnegative().max(1000000),note:z.string().trim().max(500).default(''),items:z.array(z.object({sku:z.string().trim().min(1).max(120),name:z.string().trim().min(1).max(120),quantity:z.number().int().min(1).max(50),priceCents:z.number().int().nonnegative().max(100000),modifiers:z.array(z.string().trim().max(100)).max(30).default([])}).strict()).max(100).default([])}).strict();
+const eventBase=z.object({eventId:z.string().trim().min(8).max(160),storeId:z.string().trim().min(1).max(160),orderId:z.string().trim().min(1).max(160)});
+const items=z.array(z.object({sku:z.string().trim().min(1).max(120),name:z.string().trim().min(1).max(120),quantity:z.number().int().min(1).max(50),priceCents:z.number().int().nonnegative().max(100000),modifiers:z.array(z.string().trim().max(100)).max(30).default([])}).strict()).max(100);
+const event=z.discriminatedUnion('eventType',[
+ eventBase.extend({eventType:z.literal('order.created'),customerName:z.string().trim().max(120).default('Commande Uber Eats'),totalCents:z.number().int().nonnegative().max(1000000),note:z.string().trim().max(500).default(''),items}),
+ eventBase.extend({eventType:z.literal('order.cancelled'),customerName:z.string().trim().max(120).default(''),totalCents:z.number().int().nonnegative().max(1000000).default(0),note:z.string().trim().max(500).default(''),items:items.default([])}),
+ eventBase.extend({eventType:z.literal('order.status_updated'),status:z.enum(['received','accepted','in_preparation','ready_for_pickup','picked_up','cancelled','rejected','completed']),note:z.string().trim().max(500).default('')}).strict(),
+]);
 type UberEvent=z.infer<typeof event>;
 const vars=()=>env as unknown as Record<string,string|undefined>;
 const hex=(value:Uint8Array)=>Array.from(value,v=>v.toString(16).padStart(2,'0')).join('');
@@ -32,6 +38,18 @@ export async function POST(request:Request){
    // A pending/failed event is retried below. This closes the gap after a transient D1 failure.
   }
   const markFailed=async(error='processing_failed')=>{await db().prepare("UPDATE delivery_inbox SET status='failed',error=? WHERE provider='uber_eats' AND event_id=? AND status IN ('pending','failed')").bind(error,input.eventId).run();};
+  if(input.eventType==='order.status_updated'){
+   try{
+    const updated=await db().prepare("UPDATE orders SET external_status=?,updated_at=?,version=version+1 WHERE organization_id=? AND location_id=? AND external_provider='uber_eats' AND external_order_id=? AND status NOT IN ('cancelled','rejected')").bind(input.status,now,integration.organization_id,integration.location_id,input.orderId).run();
+    if(!updated.meta.changes){await markFailed('external_order_not_found');throw new WebhookError(503,'La commande Uber Eats est introuvable; le statut sera rejoué.');}
+    const order=await db().prepare("SELECT id FROM orders WHERE organization_id=? AND location_id=? AND external_provider='uber_eats' AND external_order_id=?").bind(integration.organization_id,integration.location_id,input.orderId).first<{id:string}>();
+    await db().batch([
+     db().prepare("INSERT INTO events(id,order_id,status,actor,note,created_at) VALUES(?,?,?,'uber_eats',?,?)").bind(`${order!.id}:uber:${input.eventId}`,order!.id,input.status,input.note||`Statut Uber Eats : ${input.status}`,now),
+     db().prepare("UPDATE delivery_inbox SET status='processed',processed_at=?,error='' WHERE provider='uber_eats' AND event_id=? AND status IN ('pending','failed')").bind(now,input.eventId),
+    ]);
+   }catch(error){if(error instanceof WebhookError)throw error;await markFailed();throw new WebhookError(503,'Le statut Uber Eats sera rejoué.');}
+   return json({accepted:true});
+  }
   if(input.eventType==='order.cancelled'){
    try{await db().batch([
      db().prepare("UPDATE orders SET status='cancelled',reason='Annulée par Uber Eats',updated_at=?,version=version+1 WHERE organization_id=? AND location_id=? AND external_provider='uber_eats' AND external_order_id=? AND status NOT IN ('completed','cancelled','rejected')").bind(now,integration.organization_id,integration.location_id,input.orderId),

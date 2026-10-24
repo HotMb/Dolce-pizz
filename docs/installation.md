@@ -157,6 +157,6 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 - Enrôlement des appareils et configuration multi-sites sans constantes pilote.
 - Caisse, TPE, paiement au retrait, clôture de shift, rapprochement des transactions et reçus.
 - Configuration et supervision de l’ordonnanceur SMS, essai fournisseur contrôlé et écran de réconciliation des résultats incertains; le consommateur est livré.
-- Connecteur Uber Eats et validation de ses webhooks; le propriétaire relie chaque magasin depuis `/equipe/integrations`, et la supervision `/equipe/sante` signale les événements agrégateur en attente ou en échec; aucune livraison directe maison n’est prévue pour le pilote.
+- Connecteur Uber Eats et validation de ses webhooks; le propriétaire relie chaque magasin depuis `/equipe/integrations`, les statuts externes sont conservés séparément de l’état KDS et la supervision `/equipe/sante` signale les événements agrégateur en attente ou en échec; aucune livraison directe maison n’est prévue pour le pilote.
 - Outbox serveur d’impression tenant-scopée livrée; il reste à fournir l’adaptateur matériel concret (ESC/POS ou pilote constructeur), les procédures de sauvegarde/restauration et la supervision.
 - Revue sécurité, tests d’accès croisé, conformité caisse France et pilote avec les équipes.
