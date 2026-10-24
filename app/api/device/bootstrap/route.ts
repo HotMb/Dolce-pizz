@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,ensureSeed} from '@/lib/server';
+import {db} from '@/lib/server';
 import {underLimit} from '@/lib/auth';
 
 export const dynamic='force-dynamic';
@@ -9,9 +9,8 @@ const tokenHash=async(token:string)=>Array.from(new Uint8Array(await crypto.subt
 export async function GET(request:Request){
   const token=request.headers.get('authorization')?.match(/^Bearer ([0-9a-f]{64})$/)?.[1];
   if(!token)return NextResponse.json({error:'Appareil non autorisé ou jeton expiré.'},{status:401,headers:{'Cache-Control':'no-store'}});
-  // Do not seed or mutate the database before the bearer credential is proven.
-  // This keeps an unauthenticated bootstrap probe strictly fail-closed in production.
-  await ensureSeed();
+  // Device bootstrap assumes migrations have already run. It must not seed or
+  // initialize application data as a side effect of an unauthenticated probe.
   const ip=request.headers.get('cf-connecting-ip')||'local';
   if(!await underLimit(`device-bootstrap:${ip}`,20))return NextResponse.json({error:'Trop de tentatives. Réessayez plus tard.'},{status:429,headers:{'Cache-Control':'no-store','Retry-After':'3600'}});
   const hash=await tokenHash(token),now=Date.now();
