@@ -19,6 +19,7 @@ import './order-composer.css';
 type Channel='counter'|'phone';
 type Slot={iso:string;date:string;label:string;remaining:number};
 type LocationInfo={name:string;addressLine1:string|null;postalCode:string|null;locality:string|null;phone:string|null};
+type RoutingCandidate={locationId:string;code:string;name:string;addressLine1:string|null;pickupPostalCode:string|null;locality:string|null;phone:string|null;priority:number};
 type Schedule={slots:Slot[];location:LocationInfo};
 type StaffCatalog={products:Product[];ingredients:Ingredient[];extraPrice:number};
 type CatalogState={scopeKey:string;data:StaffCatalog|null;error:string};
@@ -47,6 +48,8 @@ export function StaffOrderComposer(){
  const [customerPhone,setCustomerPhone]=useState('');
  const [readySmsConfirmed,setReadySmsConfirmed]=useState(false);
  const [postalCode,setPostalCode]=useState('');
+ const [routingCandidates,setRoutingCandidates]=useState<RoutingCandidate[]>([]);
+ const [routingLoading,setRoutingLoading]=useState(false);
  const [note,setNote]=useState('');
  const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
  const [pageError,setPageError]=useState('');
@@ -68,7 +71,9 @@ export function StaffOrderComposer(){
  const showCounter=scopes.some(item=>roleCan(item,'counter'));
  const channel:Channel=requestedChannel==='counter'?(showCounter?'counter':showCallCenter?'phone':'counter'):(showCallCenter?'phone':showCounter?'counter':'phone');
  const selectable=scopes.filter(scope=>roleCan(scope,channel));
+ const selectableKey=selectable.map(item=>scopeQuery(item)).join('|');
  const scope=selectable.find(item=>scopeQuery(item)===selected)||selectable[0];
+ const routingOrganizationId=scope?.organizationId||'';
  const catalogKey=scope?scopeQuery(scope):'';
  if(previousScope!==catalogKey){setPreviousScope(catalogKey);setCart([]);setDraft(null);setSlot('');setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setFieldErrors({});}
  const catalog=catalogState.scopeKey===catalogKey?catalogState.data:null;
@@ -122,6 +127,16 @@ export function StaffOrderComposer(){
   },0);
   return()=>{window.clearTimeout(start);controller.abort();};
  },[scope,channel]);
+
+ useEffect(()=>{
+  if(channel!=='phone'||!routingOrganizationId||!/^[0-9]{5}$/.test(postalCode)){const timer=window.setTimeout(()=>{setRoutingCandidates([]);setRoutingLoading(false);},0);return()=>window.clearTimeout(timer);}
+  const controller=new AbortController();const loadingTimer=window.setTimeout(()=>setRoutingLoading(true),0);
+  void api<{candidates:RoutingCandidate[]}>(`staff/routing?organizationId=${encodeURIComponent(routingOrganizationId)}&postalCode=${postalCode}`,'GET',undefined,controller.signal)
+   .then(value=>{if(!controller.signal.aborted){const candidates=Array.isArray(value.candidates)?value.candidates:[];setRoutingCandidates(candidates);if(candidates.length===1&&selectableKey.includes(`${routingOrganizationId}::${candidates[0].locationId}`))setSelected(`${routingOrganizationId}::${candidates[0].locationId}`);}})
+   .catch(()=>{if(!controller.signal.aborted)setRoutingCandidates([]);})
+   .finally(()=>{if(!controller.signal.aborted)setRoutingLoading(false);});
+  return()=>{window.clearTimeout(loadingTimer);controller.abort();};
+ },[channel,postalCode,routingOrganizationId,selectableKey]);
 
  const changeChannel=(next:Channel)=>{
   if(!showCounter||!showCallCenter||!canEdit)return;
@@ -209,7 +224,7 @@ export function StaffOrderComposer(){
   <form className="pos-layout" noValidate onSubmit={openConfirmation}>
    <div className="pos-main-column">
     <section className="panel pos-customer"><div className="pos-section-title"><UserRound size={20}/><div><h2>Qui vient retirer ?</h2><p>Le client paiera sur place à la récupération.</p></div></div><div className="pos-customer-fields"><Field label="Nom à annoncer au retrait" id="pos-customerName" error={fieldErrors.customerName}><input id="pos-customerName" maxLength={80} autoComplete="off" value={customerName} onChange={event=>setCustomerName(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.customerName} aria-describedby={fieldErrors.customerName?'pos-customerName-error':undefined}/></Field><Field label="Mobile, facultatif" id="pos-customerPhone" hint="Conservez-le seulement si le client le souhaite." error={fieldErrors.customerPhone}><input id="pos-customerPhone" type="tel" inputMode="tel" autoComplete="off" maxLength={30} value={customerPhone} onChange={event=>{setCustomerPhone(event.target.value);if(!event.target.value)setReadySmsConfirmed(false);}} disabled={!canEdit} aria-invalid={!!fieldErrors.customerPhone} aria-describedby={`${fieldErrors.customerPhone?'pos-customerPhone-error ':''}pos-customerPhone-hint`}/></Field></div>
-    {channel==='phone'&&<Field label="Code postal communiqué par le client" id="pos-postalCode" hint="Aide à vérifier le lieu de retrait. Le choix de l’établissement reste manuel tant que les zones Ronchin/Tourcoing ne sont pas configurées." error={fieldErrors.postalCode}><input id="pos-postalCode" inputMode="numeric" autoComplete="postal-code" maxLength={5} pattern="[0-9]{5}" value={postalCode} onChange={event=>setPostalCode(event.target.value.replace(/\D/g,'').slice(0,5))} disabled={!canEdit} aria-invalid={!!fieldErrors.postalCode} aria-describedby={`${fieldErrors.postalCode?'pos-postalCode-error ':''}pos-postalCode-hint`}/></Field>}
+    {channel==='phone'&&<><Field label="Code postal communiqué par le client" id="pos-postalCode" hint={routingLoading?'Recherche de l’établissement…':routingCandidates.length===1?`Établissement proposé : ${routingCandidates[0].name}`:'Le code postal sert à proposer le site de retrait; confirmez toujours l’adresse avec le client.'} error={fieldErrors.postalCode}><input id="pos-postalCode" inputMode="numeric" autoComplete="postal-code" maxLength={5} pattern="[0-9]{5}" value={postalCode} onChange={event=>setPostalCode(event.target.value.replace(/\D/g,'').slice(0,5))} disabled={!canEdit} aria-invalid={!!fieldErrors.postalCode} aria-describedby={`${fieldErrors.postalCode?'pos-postalCode-error ':''}pos-postalCode-hint`}/></Field>{routingCandidates.length>1&&<div className="pos-routing-options" role="group" aria-label="Établissements desservant ce code postal">{routingCandidates.map(candidate=><button type="button" key={candidate.locationId} className={`btn btn-outline ${scope?.locationId===candidate.locationId?'is-selected':''}`} onClick={()=>setSelected(`${scope?.organizationId}::${candidate.locationId}`)} disabled={!canEdit}>{candidate.name}{candidate.locality?` · ${candidate.locality}`:''}</button>)}</div>}</>}
     <label className={`pos-sms-choice ${!customerPhone.trim()?'is-disabled':''}`}><Checkbox checked={readySmsConfirmed} disabled={!canEdit||!customerPhone.trim()} onCheckedChange={value=>setReadySmsConfirmed(value===true)}/><span><b>Envoyer un SMS quand la commande sera prête</b><small>À cocher uniquement avec l’accord du client. Cette préférence ne l’inscrit pas aux promotions.</small></span></label>
     </section>
     <section className="panel pos-products" aria-labelledby="pos-products-title"><div className="pos-section-title"><ShoppingBasket size={21}/><div><h2 id="pos-products-title">Ajouter au ticket</h2><p>Les prix et les disponibilités seront revérifiés par le serveur.</p></div></div>
