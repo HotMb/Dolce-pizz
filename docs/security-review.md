@@ -66,6 +66,7 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 - Le relais doit présenter un jeton d’appareil `printer_gateway` actif, non révoqué et non expiré; une session employé ou un identifiant envoyé dans le JSON ne suffit pas.
 - La réservation est atomique (`pending` vers `printing`) avec un bail court. La confirmation et l’échec exigent le même bail; une reprise après crash passe un bail expiré à `unknown`.
 - Le relais local `scripts/printer-gateway.mjs` ne journalise jamais le jeton, fonctionne en simulation par défaut et ne confirme un job qu’après le rendu réussi. Le mode ESC/POS réseau est explicitement activé par `DRY_RUN=0`; l’hôte et le port sont fournis par l’installation, hors des données client.
+- Le relais exige désormais un jeton d’appareil hexadécimal de 32 octets, refuse une URL distante en HTTP et interdit les identifiants dans l’URL. En simulation, il journalise uniquement l’identifiant du job et le nombre de lignes, jamais le téléphone ou le texte du ticket.
 - Les jobs sont idempotents par `operation_id`; les tentatives sont limitées à cinq avant l’état `failed`.
 - Le payload ne contient pas de donnée bancaire. L’adaptateur matériel doit filtrer ses logs et ne jamais exposer le jeton.
 

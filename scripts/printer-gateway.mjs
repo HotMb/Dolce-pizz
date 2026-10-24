@@ -13,11 +13,15 @@ const port = Number(process.env.PRINTER_PORT || 9100);
 const dryRun = process.env.DRY_RUN !== '0';
 const intervalMs = Math.max(1000, Number(process.env.PRINT_GATEWAY_INTERVAL_MS || 5000));
 
+let endpointUrl;
+try { endpointUrl = new URL(endpoint); } catch { endpointUrl = null; }
+const localEndpoint = !!endpointUrl && ['localhost', '127.0.0.1', '::1'].includes(endpointUrl.hostname);
+
 if (!endpoint || !token) {
   console.error('PRINT_GATEWAY_URL et PRINT_GATEWAY_TOKEN sont requis.');
   process.exit(2);
 }
-if (!/^https?:\/\//i.test(endpoint) || !Number.isInteger(port) || port < 1 || port > 65535) {
+if (!endpointUrl || !['http:', 'https:'].includes(endpointUrl.protocol) || endpointUrl.username || endpointUrl.password || endpointUrl.hash || (!localEndpoint && endpointUrl.protocol !== 'https:') || !/^[a-f0-9]{64}$/.test(token) || !Number.isInteger(port) || port < 1 || port > 65535) {
   console.error('URL du relais ou port imprimante invalide.');
   process.exit(2);
 }
@@ -69,7 +73,8 @@ async function drain() {
   for (const job of Array.isArray(result.jobs) ? result.jobs : []) {
     try {
       const lines = render(job.ticket || {});
-      if (dryRun) console.log(JSON.stringify({jobId: job.id, mode: 'dry_run', lines}));
+      // Never log ticket content: it can contain a customer phone or free text.
+      if (dryRun) console.log(JSON.stringify({jobId: job.id, mode: 'dry_run', lineCount: lines.length}));
       else await printTcp(escpos(lines));
       await request('complete', {id: job.id, leaseToken: job.lease_token, providerJobId: dryRun ? `dry-run:${job.id}` : `${host}:${port}`});
     } catch (error) {
