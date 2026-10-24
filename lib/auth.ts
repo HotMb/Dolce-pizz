@@ -12,26 +12,33 @@ const sha256=async(s:string)=>hex(new Uint8Array(await crypto.subtle.digest('SHA
 export function normalizePhone(raw:string){const m=/^(?:\+33|0033|0)([67]\d{8})$/.exec(raw.replace(/[\s.\-()]/g,''));return m?`+33${m[1]}`:null;}
 export const localPhone=(phone:string)=>`0${phone.slice(3)}`.replace(/(\d{2})(?=\d)/g,'$1 ');
 const readCookie=(header:string|null,name=COOKIE)=>header?.split(/;\s*/).find(v=>v.startsWith(`${name}=`))?.slice(name.length+1)||'';
+const cookieTokens=(header:string|null,names:string[])=>names.map(name=>readCookie(header,name)).filter((token,index,all)=>/^[0-9a-f]{64}$/.test(token)&&all.indexOf(token)===index);
+const findSession=async(tokens:string[],where:string,bindings:unknown[])=>{
+ for(const token of tokens){
+  const row=await db().prepare(`SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? ${where}`).bind(await sha256(token),Date.now(),...bindings).first<Member>();
+  if(row)return row;
+ }
+ return null;
+};
 export async function sessionUser(cookieHeader:string|null):Promise<Member|null>{
  // Staff devices may also create counter/POS orders. Prefer the customer
  // session when both exist, while keeping staff sessions usable for internal
  // order entry without merging the two cookies.
- const token=readCookie(cookieHeader,COOKIE)||readCookie(cookieHeader,STAFF_COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
- return await db().prepare("SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?").bind(await sha256(token),Date.now()).first<Member>();
+ return await findSession(cookieTokens(cookieHeader,[COOKIE,STAFF_COOKIE]),'',[]);
 }
 /** Staff and administration routes require a recent OTP session on shared devices. */
 export async function staffSessionUser(cookieHeader:string|null):Promise<Member|null>{
  // Keep accepting the legacy cookie so existing local sessions do not all fail
  // at once; new staff logins use their own cookie and cannot overwrite a client session.
- const token=readCookie(cookieHeader,STAFF_COOKIE)||readCookie(cookieHeader,COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ const tokens=cookieTokens(cookieHeader,[STAFF_COOKIE,COOKIE]);if(!tokens.length)return null;
  const cutoff=new Date(Date.now()-STAFF_SESSION_HOURS*HOUR).toISOString();
- return await db().prepare("SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
+ return await findSession(tokens,"AND s.audience='staff' AND s.created_at>=?",[cutoff]);
 }
 /** Sensitive organisation changes require a fresh OTP session, not merely a still-valid staff session. */
 export async function recentStaffSessionUser(cookieHeader:string|null,maxAgeMinutes=15):Promise<Member|null>{
- const token=readCookie(cookieHeader,STAFF_COOKIE)||readCookie(cookieHeader,COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ const tokens=cookieTokens(cookieHeader,[STAFF_COOKIE,COOKIE]);if(!tokens.length)return null;
  const cutoff=new Date(Date.now()-maxAgeMinutes*60000).toISOString();
- return await db().prepare("SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
+ return await findSession(tokens,"AND s.audience='staff' AND s.created_at>=?",[cutoff]);
 }
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
 export const sessionCookie=(token:string,secure:boolean,audience:SessionAudience='customer')=>`${audience==='staff'?STAFF_COOKIE:COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?(audience==='staff'?STAFF_SESSION_HOURS*3600:SESSION_DAYS*86400):0}${secure?'; Secure':''}`;

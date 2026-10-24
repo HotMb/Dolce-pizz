@@ -31,7 +31,7 @@ export async function api<T=unknown>(path:string,method='GET',body?:unknown,sign
  if(body!==undefined)headers['Content-Type']='application/json';
  // Device credentials are scoped to production endpoints and never sent to other APIs.
  if(typeof window!=='undefined'&&(/^(?:production)(?:\?|\/|$)/.test(path)||/^(?:staff\/(?:orders|catalog|routing|customers))(?:\?|\/|$)/.test(path))){try{const key=/^staff\//.test(path)?'dolce-pos-token':'dolce-production-device-token';const token=window.localStorage.getItem(key)||'';if(/^[0-9a-f]{64}$/.test(token))headers.Authorization=`Bearer ${token}`;}catch{}}
- try{r=await fetch(`/api/${path}`,{method,headers:Object.keys(headers).length?headers:undefined,body:body!==undefined?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,timeout]):timeout});}
+ try{r=await fetch(`/api/${path}`,{method,credentials:'same-origin',headers:Object.keys(headers).length?headers:undefined,body:body!==undefined?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,timeout]):timeout});}
  catch(e){if(signal?.aborted)throw e;throw new Error(timeout.aborted?'Le service met trop de temps à répondre. Réessayez : votre panier est conservé.':'Connexion interrompue. Vérifiez votre connexion puis réessayez.');}
  const data:unknown=await r.json().catch(()=>null);
  const details=data&&typeof data==='object'?data as {error?:string;fields?:unknown}:{};
