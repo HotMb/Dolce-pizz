@@ -24,6 +24,7 @@ Customers and staff sign in with a French mobile number and a 6-digit SMS code (
 | `MARKETING_STOP_SECRET` | Separate random signing secret for recipient-bound marketing unsubscribe links. Keep it stable so links already sent remain usable. |
 | `SMS_CAMPAIGNS_DEMO` | Optional `1` to simulate promotional SMS campaigns without sending messages. It never exposes login codes. |
 | `NOTIFICATION_DISPATCH_SECRET` | Separate 32–256 character random secret for the server scheduler calling the ready-SMS consumer. Never put it in a browser or URL. |
+| `NOTIFICATION_SCHEDULER_CONFIGURED` | Set to `1` only after the cron or HTTPS job has been installed and tested; production preflight and health checks use it as an explicit readiness declaration. |
 
 For a local preview, put these in an ignored `.env.local`, apply pending migrations with `npm run db:migrate:local`, verify a fresh schema restore with `npm run db:verify`, and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`.
 
