@@ -60,7 +60,7 @@ function useProductionDeviceAccess(enabled:boolean){
  return {data,error,checked,refreshing,refresh};
 }
 
-function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailure:()=>Promise<void>){
+function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailure:()=>Promise<void>,deviceMode=false){
  const query=scopeQuery(scope),cacheKey=`dolce-production:${query}:${station}`;
  const cached=useMemo<ProductionResponse|null>(()=>{if(typeof window==='undefined')return null;try{const raw=sessionStorage.getItem(cacheKey);if(!raw)return null;return validResponse(JSON.parse(raw));}catch{return null;}},[cacheKey]);
  const[data,setData]=useState<ProductionResponse|null>(cached),[error,setError]=useState(''),[loading,setLoading]=useState(!cached),[fetching,setFetching]=useState(false),[lastSync,setLastSync]=useState<number|null>(null),[online,setOnline]=useState(()=>typeof navigator==='undefined'?true:navigator.onLine),[queued,setQueued]=useState<QueuedCommand[]>(()=>readQueuedCommands(`${cacheKey}:commands`)),[flushing,setFlushing]=useState(false);
@@ -75,7 +75,7 @@ function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailu
   finally{if(id===serial.current&&!request.signal.aborted){setLoading(false);setFetching(false);controller.current=null;}}
  },[station,query,cacheKey,onAuthorizationFailure]);
  useEffect(()=>{const tick=window.setTimeout(()=>{setOnline(navigator.onLine);void refresh();},0);const poll=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},4000);const onOnline=()=>{setOnline(true);void refresh();};const onOffline=()=>setOnline(false);const onVisibility=()=>{if(!document.hidden&&navigator.onLine)void refresh();};window.addEventListener('online',onOnline);window.addEventListener('offline',onOffline);document.addEventListener('visibilitychange',onVisibility);return()=>{window.clearTimeout(tick);window.clearInterval(poll);controller.current?.abort();window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);document.removeEventListener('visibilitychange',onVisibility);};},[refresh]);
- useEffect(()=>{if(typeof window==='undefined'||typeof window.EventSource==='undefined'||!online)return;const source=new EventSource(`/api/production/stream?${query}&station=${station}`);const wake=()=>{if(!document.hidden&&!busy.current)void refresh();};source.addEventListener('tickets',wake);return()=>source.close();},[online,query,station,refresh]);
+ useEffect(()=>{if(deviceMode||typeof window==='undefined'||typeof window.EventSource==='undefined'||!online)return;const source=new EventSource(`/api/production/stream?${query}&station=${station}`);const wake=()=>{if(!document.hidden&&!busy.current)void refresh();};source.addEventListener('tickets',wake);return()=>source.close();},[deviceMode,online,query,station,refresh]);
  const pauseForCommand=()=>{busy.current=true;serial.current++;controller.current?.abort();controller.current=null;setFetching(false);};
  const resumeAfterCommand=()=>{busy.current=false;};
  const persistQueue=useCallback((next:QueuedCommand[])=>{setQueued(next);try{if(next.length)window.localStorage.setItem(`${cacheKey}:commands`,JSON.stringify(next));else window.localStorage.removeItem(`${cacheKey}:commands`);}catch{}},[cacheKey]);
@@ -102,12 +102,12 @@ export function ProductionKds({station:requestedStation,organizationId,locationI
  const scope=explicit?scopes.find(item=>item.organizationId===organizationId&&item.locationId===locationId):scopes[0];
  const station=requestedStation||scope?.stations[0];
  if(!scope||!station||!scope.stations.includes(station))return <main id="contenu" className="production-shell"><div className="production-first-error"><AlertTriangle size={32}/><h1>{accessError?'Accès indisponible.':'Ce poste ne vous est pas attribué.'}</h1><p>{accessError||(deviceMode?'Configurez un appareil enrôlé pour ouvrir ce poste.':'Choisissez un poste autorisé depuis l’espace équipe ou demandez au responsable de vérifier vos droits.')}</p><Link href={accessStatus===401?loginPath('/production'):'/equipe'} className="production-button production-button-primary">{accessStatus===401?(deviceMode?'Ouvrir l’espace équipe':'Se reconnecter'):'Retrouver mes postes'}</Link><button type="button" className="production-button production-button-secondary" disabled={accessRefreshing} onClick={()=>void refreshAccess()}><RefreshCw size={18}/> Vérifier l’accès</button></div></main>;
- return <ProductionBoard key={`${scopeQuery(scope)}:${station}`} station={station} scope={scope} scopes={scopes} accessError={accessError} onAuthorizationFailure={refreshAccess} onSelectScope={next=>{const nextStation=next.stations.includes(station)?station:next.stations[0];router.push(productionHref(next,nextStation));}}/>;
+ return <ProductionBoard key={`${scopeQuery(scope)}:${station}`} station={station} scope={scope} scopes={scopes} accessError={accessError} deviceMode={deviceMode} onAuthorizationFailure={refreshAccess} onSelectScope={next=>{const nextStation=next.stations.includes(station)?station:next.stations[0];router.push(productionHref(next,nextStation));}}/>;
 }
 
-function ProductionBoard({station,scope,scopes,accessError,onAuthorizationFailure,onSelectScope}:{station:Station;scope:StaffScope;scopes:StaffScope[];accessError:string;onAuthorizationFailure:()=>Promise<void>;onSelectScope:(scope:StaffScope)=>void}){
+function ProductionBoard({station,scope,scopes,accessError,deviceMode,onAuthorizationFailure,onSelectScope}:{station:Station;scope:StaffScope;scopes:StaffScope[];accessError:string;deviceMode:boolean;onAuthorizationFailure:()=>Promise<void>;onSelectScope:(scope:StaffScope)=>void}){
  const info=stationInfo[station],Icon=info.icon;
- const resource=useProductionData(station,scope,onAuthorizationFailure);
+ const resource=useProductionData(station,scope,onAuthorizationFailure,deviceMode);
  const[busyKey,setBusyKey]=useState(''),[actionError,setActionError]=useState(''),[conflict,setConflict]=useState(false),[feedback,setFeedback]=useState(''),[now,setNow]=useState(0);
  const busyRef=useRef(false);
  useEffect(()=>{const tick=()=>setNow(Date.now());const first=window.setTimeout(tick,0);const timer=window.setInterval(tick,1000);return()=>{window.clearTimeout(first);window.clearInterval(timer);};},[]);
