@@ -18,8 +18,12 @@ if (process.env.TENANT_HOSTS_JSON) {
   try {
     const bindings = JSON.parse(process.env.TENANT_HOSTS_JSON);
     if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings) || !Object.keys(bindings).length) failures.push('TENANT_HOSTS_JSON doit contenir au moins un domaine');
+    const normalizedHosts = new Set();
     for (const [host, value] of Object.entries(bindings || {})) {
-      if (!publicHost.test(host) || !value || typeof value !== 'object' || !('organizationId' in value) || !('locationId' in value)) failures.push(`liaison tenant invalide pour ${host}`);
+      const normalizedHost = host.toLowerCase();
+      const validId = (candidate) => typeof candidate === 'string' && /^[a-z0-9][a-z0-9_-]{0,127}$/.test(candidate);
+      if (!publicHost.test(normalizedHost) || normalizedHosts.has(normalizedHost) || !value || typeof value !== 'object' || !validId(value.organizationId) || !validId(value.locationId)) failures.push(`liaison tenant invalide pour ${host}`);
+      normalizedHosts.add(normalizedHost);
     }
   } catch { failures.push('TENANT_HOSTS_JSON n’est pas un JSON valide'); }
 } else failures.push('TENANT_HOSTS_JSON absent');

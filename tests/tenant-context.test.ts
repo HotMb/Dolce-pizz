@@ -26,3 +26,11 @@ test('tenant resolver ignores malformed or shared demo host bindings',()=>{
  assert.equal(resolveTenant(new Request('https://bad..example.fr/menu'),valid),null);
  assert.equal(resolveTenant(new Request('https://dolce-pizz-demo.dolcepizza.workers.dev/menu'),valid)?.organizationId,'dolce-pizza');
 });
+
+test('tenant resolver fails closed on case-insensitive duplicate bindings',()=>{
+ const bindings=JSON.stringify({
+  'ronchin.example.fr':{organizationId:'brand',locationId:'ronchin'},
+  'RONCHIN.EXAMPLE.FR':{organizationId:'other',locationId:'other'},
+ });
+ assert.equal(resolveTenant(new Request('https://ronchin.example.fr/menu'),bindings),null);
+});

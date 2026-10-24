@@ -14,9 +14,11 @@ function configuredBindings(raw:string):Record<string,TenantBinding>{
   if(!value||typeof value!=='object'||Array.isArray(value))return {};
   const result:Record<string,TenantBinding>={};
   for(const [host,binding] of Object.entries(value as Record<string,unknown>)){
-   if(!publicHost.test(host.toLowerCase())||!binding||typeof binding!=='object')continue;
+   const normalizedHost=host.toLowerCase();
+   if(!publicHost.test(normalizedHost)||!binding||typeof binding!=='object')continue;
+   if(normalizedHost in result)return {};
    const item=binding as Record<string,unknown>;
-   if(typeof item.organizationId==='string'&&id.test(item.organizationId)&&typeof item.locationId==='string'&&id.test(item.locationId))result[host.toLowerCase()]= {organizationId:item.organizationId,locationId:item.locationId};
+   if(typeof item.organizationId==='string'&&id.test(item.organizationId)&&typeof item.locationId==='string'&&id.test(item.locationId))result[normalizedHost]= {organizationId:item.organizationId,locationId:item.locationId};
   }
   return result;
  }catch{return {};}
