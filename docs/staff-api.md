@@ -88,3 +88,7 @@ La session SMS actuelle reste une session de compte. `POST /api/staff/sessions` 
 ## Historique centre d’appels
 
 `POST /api/staff/calls` enregistre un échange pour un établissement (`phone`, `outcome`, note facultative, client ou commande facultatifs). `GET /api/staff/calls` relit les 50 derniers échanges du même mobile. Seuls le propriétaire et le centre d’appels peuvent utiliser ces routes. Le numéro n’est jamais conservé en clair : la base stocke un condensat lié à l’organisation; la réponse ne renvoie pas le téléphone.
+
+## Supervision de lancement
+
+`GET /api/admin/health?organizationId=…&locationId=…` est une lecture réservée au propriétaire organisationnel. Elle renvoie un état `ok`, `attention` ou `blocked` pour les sites, la configuration locale, les appareils inactifs depuis cinq minutes, l’outbox SMS et l’outbox d’impression. Aucun client, téléphone, contenu de commande ou secret n’est renvoyé. Sans `locationId`, le contrôle couvre tous les établissements de l’enseigne.

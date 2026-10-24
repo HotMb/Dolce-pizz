@@ -70,6 +70,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const refunds = await import('../app/api/staff/refunds/route');
   const sessionRevoke = await import('../app/api/staff/sessions/route');
   const calls = await import('../app/api/staff/calls/route');
+  const health = await import('../app/api/admin/health/route');
   const shifts = await import('../app/api/staff/shifts/route');
   const routing = await import('../app/api/staff/routing/route');
   const locations = await import('../app/api/admin/locations/route');
@@ -238,6 +239,12 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const callHistory = await calls.GET(new Request('http://localhost/api/staff/calls?organizationId=dolce-pizza&locationId=ronchin&phone=0612345678', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
   assert.equal(callHistory.status,200);
   assert.equal((await callHistory.json() as {interactions:Array<{outcome:string}>}).interactions[0].outcome,'callback_requested');
+  const healthResponse = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
+  const healthText = await healthResponse.text();
+  assert.equal(healthResponse.status,200,healthText);
+  const healthBody = JSON.parse(healthText) as {overall:string;checks:Array<{id:string}>};
+  assert.ok(['ok','attention'].includes(healthBody.overall));
+  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','printing']);
   const revokeResponse = await sessionRevoke.POST(new Request('http://localhost/api/staff/sessions', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId: 'dolce-pizza', locationId: 'ronchin', principalId: 'worker'})}));
   assert.equal(revokeResponse.status, 200);
   assert.equal((await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers: new Headers({origin: 'http://localhost', cookie: workerCookie})}))).status, 401);
