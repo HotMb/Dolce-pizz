@@ -32,6 +32,7 @@ type PaymentRow = {
   method: 'cash' | 'card';
   status: string;
 };
+type ShiftRow = {id: string; business_date: string; opening_float: number; opened_at: string};
 
 function paymentResponse(payment: PaymentRow, orderStatus: string, paymentStatus: string) {
   return {
@@ -67,6 +68,10 @@ export async function GET(request: Request) {
       .safeParse({organizationId: url.searchParams.get('organizationId'), locationId: url.searchParams.get('locationId')});
     if (!scope.success) throw new ApiError(400, 'Choisissez un établissement valide.');
     await requireCashier(request, scope.data, false);
+    const shift = await db().prepare(
+      `SELECT id,business_date,opening_float,opened_at FROM cash_shifts
+       WHERE organization_id=? AND location_id=? AND status='open'`,
+    ).bind(scope.data.organizationId, scope.data.locationId).first<ShiftRow>();
     const rows = await db().prepare(
       `SELECT id,name,total,slot,channel,updated_at,created_at
        FROM orders
@@ -76,7 +81,13 @@ export async function GET(request: Request) {
     ).bind(scope.data.organizationId, scope.data.locationId).all<{
       id: string; name: string; total: number; slot: string; channel: string; updated_at: string; created_at: string;
     }>();
-    return json({orders: rows.results.map(row => ({
+    const totals = shift ? await db().prepare(
+      `SELECT COALESCE(SUM(CASE WHEN e.method='cash' THEN e.amount ELSE 0 END),0) AS cash_sales,
+        COALESCE(SUM(CASE WHEN e.method='card' THEN e.amount ELSE 0 END),0) AS card_sales,
+        COUNT(*) AS payment_count
+       FROM cash_shift_entries e WHERE e.organization_id=? AND e.location_id=? AND e.shift_id=?`,
+    ).bind(scope.data.organizationId, scope.data.locationId, shift.id).first<{cash_sales: number; card_sales: number; payment_count: number}>() : null;
+    return json({shift: shift ? {id: shift.id, businessDate: shift.business_date, openingFloat: shift.opening_float, openedAt: shift.opened_at, cashSales: totals?.cash_sales||0, cardSales: totals?.card_sales||0, paymentCount: totals?.payment_count||0, expectedCash: shift.opening_float + (totals?.cash_sales||0)} : null, orders: rows.results.map(row => ({
       id: row.id,
       label: row.id.slice(0, 6).toUpperCase(),
       name: row.name,
@@ -126,6 +137,10 @@ export async function POST(request: Request) {
       throw new ApiError(409, 'Cette commande n’est pas prête à être encaissée.');
     }
     if (order.total !== input.amount) throw new ApiError(409, 'Le montant du ticket a changé. Réimprimez le ticket.');
+    const shift = await db().prepare(
+      `SELECT id FROM cash_shifts WHERE organization_id=? AND location_id=? AND status='open'`,
+    ).bind(input.organizationId, input.locationId).first<{id: string}>();
+    if (!shift) throw new ApiError(409, 'Ouvrez un shift de caisse avant d’encaisser.');
 
     const now = new Date().toISOString();
     const paymentId = crypto.randomUUID();
@@ -143,15 +158,22 @@ export async function POST(request: Request) {
          SELECT ?,?,?,?,?,?,?,'captured','cashier',NULL,?,?
          WHERE ${cashierGuard}
            AND EXISTS(SELECT 1 FROM orders o WHERE o.id=? AND o.organization_id=? AND o.location_id=? AND o.status='ready' AND o.payment_status='due_at_pickup' AND o.total=?)
+           AND EXISTS(SELECT 1 FROM cash_shifts s WHERE s.id=? AND s.organization_id=? AND s.location_id=? AND s.status='open')
          ON CONFLICT(organization_id,location_id,idempotency_key) DO NOTHING`,
       ).bind(paymentId, input.organizationId, input.locationId, input.orderId, input.idempotencyKey, input.amount, input.method, user.id, now,
-        input.locationId, input.organizationId, user.id, input.orderId, input.organizationId, input.locationId, input.amount),
+        input.locationId, input.organizationId, user.id, input.orderId, input.organizationId, input.locationId, input.amount, shift.id, input.organizationId, input.locationId),
+      db().prepare(
+        `INSERT INTO cash_shift_entries(id,organization_id,location_id,shift_id,payment_id,amount,method,created_at)
+         SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM payments p WHERE p.id=? AND p.organization_id=? AND p.location_id=? AND p.order_id=?)
+         ON CONFLICT(organization_id,location_id,payment_id) DO NOTHING`,
+      ).bind(`${paymentId}:shift`, input.organizationId, input.locationId, shift.id, paymentId, input.amount, input.method, now, paymentId, input.organizationId, input.locationId, input.orderId),
       db().prepare(
         `UPDATE orders SET status='completed',payment_status='paid',payment_method=?,version=version+1,updated_at=?
          WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND payment_status='due_at_pickup' AND total=?
            AND EXISTS(SELECT 1 FROM payments p WHERE p.id=? AND p.organization_id=? AND p.location_id=? AND p.order_id=?)
+           AND EXISTS(SELECT 1 FROM cash_shift_entries e WHERE e.organization_id=? AND e.location_id=? AND e.shift_id=? AND e.payment_id=?)
            AND ${cashierGuard}`,
-      ).bind(input.method, now, input.orderId, input.organizationId, input.locationId, input.amount, paymentId, input.organizationId, input.locationId, input.orderId,
+      ).bind(input.method, now, input.orderId, input.organizationId, input.locationId, input.amount, paymentId, input.organizationId, input.locationId, input.orderId, input.organizationId, input.locationId, shift.id, paymentId,
         input.locationId, input.organizationId, user.id),
       db().prepare(
         `INSERT INTO events(id,order_id,status,actor,note,created_at)
