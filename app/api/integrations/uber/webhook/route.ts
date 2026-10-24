@@ -25,12 +25,18 @@ export async function POST(request:Request){
   const integration=await db().prepare("SELECT organization_id,location_id FROM delivery_integrations WHERE provider='uber_eats' AND external_store_id=? AND status='active'").bind(input.storeId).first<{organization_id:string;location_id:string}>();if(!integration)throw new WebhookError(404,'Le magasin Uber Eats n’est pas relié à un établissement.');
   const now=new Date().toISOString(),payloadHash=hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw))));
   const inbox=await db().prepare('INSERT OR IGNORE INTO delivery_inbox(provider,event_id,external_order_id,organization_id,location_id,event_type,payload_hash,payload,status,received_at) VALUES(\'uber_eats\',?,?,?,?,?,?,?,\'pending\',?)').bind(input.eventId,input.orderId,integration.organization_id,integration.location_id,input.eventType,payloadHash,raw,now).run();
-  if(!inbox.meta.changes)return json({accepted:true,duplicate:true});
+  if(!inbox.meta.changes){
+   const previous=await db().prepare('SELECT payload_hash,status FROM delivery_inbox WHERE provider=\'uber_eats\' AND event_id=?').bind(input.eventId).first<{payload_hash:string;status:string}>();
+   if(!previous||previous.payload_hash!==payloadHash)throw new WebhookError(409,'Cet identifiant d’événement Uber Eats a déjà été utilisé avec un autre contenu.');
+   if(previous.status==='processed')return json({accepted:true,duplicate:true});
+   // A pending/failed event is retried below. This closes the gap after a transient D1 failure.
+  }
+  const markFailed=async(error='processing_failed')=>{await db().prepare("UPDATE delivery_inbox SET status='failed',error=? WHERE provider='uber_eats' AND event_id=? AND status IN ('pending','failed')").bind(error,input.eventId).run();};
   if(input.eventType==='order.cancelled'){
-   await db().batch([
-    db().prepare("UPDATE orders SET status='cancelled',reason='Annulée par Uber Eats',updated_at=?,version=version+1 WHERE organization_id=? AND location_id=? AND external_provider='uber_eats' AND external_order_id=? AND status NOT IN ('completed','cancelled','rejected')").bind(now,integration.organization_id,integration.location_id,input.orderId),
-    db().prepare("UPDATE delivery_inbox SET status='processed',processed_at=? WHERE provider='uber_eats' AND event_id=? AND status='pending'").bind(now,input.eventId),
-   ]);
+   try{await db().batch([
+     db().prepare("UPDATE orders SET status='cancelled',reason='Annulée par Uber Eats',updated_at=?,version=version+1 WHERE organization_id=? AND location_id=? AND external_provider='uber_eats' AND external_order_id=? AND status NOT IN ('completed','cancelled','rejected')").bind(now,integration.organization_id,integration.location_id,input.orderId),
+     db().prepare("UPDATE delivery_inbox SET status='processed',processed_at=?,error='' WHERE provider='uber_eats' AND event_id=? AND status IN ('pending','failed')").bind(now,input.eventId),
+    ]);}catch(error){await markFailed();throw new WebhookError(503,'L’annulation Uber Eats sera rejouée.');}
    return json({accepted:true});
   }
   const lines=[] as Record<string,unknown>[];
@@ -41,11 +47,16 @@ export async function POST(request:Request){
    lines.push({id:product?.id||`uber:${input.orderId}:${line.sku}`,name:product?.name||line.name,size:'unique',option:line.modifiers.join(', '),quantity:line.quantity,unitPrice:line.priceCents,total:line.priceCents*line.quantity,without:[],extra:line.modifiers,kind:product?kind(product.category):'other',routeKnown,allergens,allergensKnown:routeKnown});
   }
   const orderId=crypto.randomUUID();
-  await db().batch([
-   db().prepare("INSERT INTO orders(id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,external_provider,external_order_id,created_at,updated_at,version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'delivery','paid','uber_eats','', 'none',NULL,?,?,?, ?,1)").bind(orderId,`external:uber_eats:${input.orderId}`,`uber_eats:${input.orderId}`,input.customerName,'','',JSON.stringify(lines),input.note,now,input.totalCents,0,0,input.totalCents,0,0,'pending',integration.organization_id,integration.location_id,'uber_eats','uber_eats',input.orderId,now,now),
-   db().prepare("INSERT INTO events(id,order_id,status,actor,note,created_at) VALUES(?,?, 'pending','uber_eats','Commande reçue par Uber Eats',?)").bind(`${orderId}:1`,orderId,now),
-   db().prepare("UPDATE delivery_inbox SET status='processed',processed_at=? WHERE provider='uber_eats' AND event_id=? AND status='pending'").bind(now,input.eventId),
-  ]);
+  const existingOrder=await db().prepare("SELECT id FROM orders WHERE organization_id=? AND external_provider='uber_eats' AND external_order_id=?").bind(integration.organization_id,input.orderId).first<{id:string}>();
+  if(existingOrder){
+   await db().prepare("UPDATE delivery_inbox SET status='processed',processed_at=?,error='' WHERE provider='uber_eats' AND event_id=? AND status IN ('pending','failed')").bind(now,input.eventId).run();
+   return json({accepted:true,duplicate:true,orderId:existingOrder.id});
+  }
+  try{await db().batch([
+    db().prepare("INSERT INTO orders(id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,external_provider,external_order_id,created_at,updated_at,version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'delivery','paid','uber_eats','', 'none',NULL,?,?,?, ?,1)").bind(orderId,`external:uber_eats:${input.orderId}`,`uber_eats:${input.orderId}`,input.customerName,'','',JSON.stringify(lines),input.note,now,input.totalCents,0,0,input.totalCents,0,0,'pending',integration.organization_id,integration.location_id,'uber_eats','uber_eats',input.orderId,now,now),
+    db().prepare("INSERT INTO events(id,order_id,status,actor,note,created_at) VALUES(?,?, 'pending','uber_eats','Commande reçue par Uber Eats',?)").bind(`${orderId}:1`,orderId,now),
+    db().prepare("UPDATE delivery_inbox SET status='processed',processed_at=?,error='' WHERE provider='uber_eats' AND event_id=? AND status IN ('pending','failed')").bind(now,input.eventId),
+   ]);}catch(error){await markFailed();throw new WebhookError(503,'La commande Uber Eats sera rejouée.');}
   return json({accepted:true,orderId},202);
  }catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Événement invalide.'},400);if(error instanceof WebhookError)return json({error:error.message},error.status);console.error('Uber Eats webhook error',error instanceof Error?error.message:'unknown');return json({error:'Le webhook Uber Eats sera rejoué.'},503);}
 }

@@ -23,5 +23,8 @@ test('Uber webhook verifies, deduplicates and imports an order without SMS conta
  const call=async(payload:string)=>api.POST(new Request('http://localhost/api/integrations/uber/webhook',{method:'POST',headers:{'content-type':'application/json','x-uber-signature':await signature(secret,payload)},body:payload}));
  const first=await call(body);assert.equal(first.status,202);assert.equal(database.prepare("SELECT channel,fulfillment,payment_status,notification_phone,external_order_id FROM orders").get()?.channel,'uber_eats');assert.equal(database.prepare("SELECT notification_phone FROM orders").get()?.notification_phone,'');
  const duplicate=await call(body);assert.equal(duplicate.status,200);assert.equal(database.prepare('SELECT COUNT(*) AS n FROM orders').get()?.n,1);
+ database.prepare("UPDATE delivery_inbox SET status='failed',error='temporary' WHERE provider='uber_eats' AND event_id='event-123456'").run();
+ const replay=await call(body);assert.equal(replay.status,200);assert.equal(database.prepare("SELECT status,error FROM delivery_inbox WHERE event_id='event-123456'").get()?.status,'processed');
+ const tampered=JSON.stringify({...JSON.parse(body),totalCents:1300});assert.equal((await call(tampered)).status,409);
  const cancel=JSON.stringify({eventId:'event-223456',eventType:'order.cancelled',storeId:'store-1',orderId:'order-1',customerName:'',totalCents:0,note:'',items:[]});assert.equal((await call(cancel)).status,200);assert.equal(database.prepare('SELECT status FROM orders').get()?.status,'cancelled');
 });

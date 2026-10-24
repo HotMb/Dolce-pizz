@@ -98,7 +98,7 @@ La carte maître reste dans `products`. La migration `0017` ajoute `location_pro
 1. Depuis l’API propriétaire `GET/POST /api/admin/delivery-integrations`, créer une liaison pour chaque magasin avec le `provider` `uber_eats`, l’identifiant de magasin Uber et le couple organisation/établissement correspondant. Une désactivation conserve l’historique et empêche les nouveaux webhooks.
 2. Configurer `UBER_EATS_WEBHOOK_SECRET` dans le Worker et déclarer `/api/integrations/uber/webhook` auprès du partenaire.
 3. Le webhook doit envoyer `X-Uber-Signature` et un événement normalisé contenant `eventId`, `eventType`, `storeId`, `orderId`, `totalCents` et les articles avec leur SKU local.
-4. Une commande importée apparaît dans le POS avec `channel=uber_eats`, paiement déjà réglé par l’agrégateur et retrait de toute notification SMS. Un SKU inconnu ou une fiche sans routage/allergènes validés reste bloqué dans le KDS jusqu’à correction du menu.
+4. Une commande importée apparaît dans le POS avec `channel=uber_eats`, paiement déjà réglé par l’agrégateur et retrait de toute notification SMS. Un SKU inconnu ou une fiche sans routage/allergènes validés reste bloqué dans le KDS jusqu’à correction du menu. Si une erreur D1 survient après réception, l’inbox est marquée en échec et le même événement peut être rejoué; ne supprimez pas cet événement avant vérification.
 
 ### Reporting franchiseur
 
