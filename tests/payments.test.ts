@@ -277,6 +277,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   database.prepare("UPDATE print_outbox SET status='unknown' WHERE id=?").run('print-test');
   const unknownRetry = await printing.POST(new Request('http://localhost/api/admin/printing', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',jobId:'print-test'})}));
   assert.equal(unknownRetry.status,409);
+  const reconcilePrint = await printing.POST(new Request('http://localhost/api/admin/printing', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',jobId:'print-test',action:'reconcile_printed'})}));
+  assert.equal(reconcilePrint.status,200,await reconcilePrint.text());
+  assert.equal(database.prepare('SELECT status,provider_job_id FROM print_outbox WHERE id=?').get('print-test')?.status,'printed');
   const callLog = await calls.POST(new Request('http://localhost/api/staff/calls', {method:'POST', headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}), body:JSON.stringify({organizationId:'dolce-pizza',locationId:'ronchin',phone:'06 12 34 56 78',outcome:'callback_requested',note:'Rappeler pour confirmer le créneau'})}));
   assert.equal(callLog.status,201,await callLog.text());
   const callHistory = await calls.GET(new Request('http://localhost/api/staff/calls?organizationId=dolce-pizza&locationId=ronchin&phone=0612345678', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));

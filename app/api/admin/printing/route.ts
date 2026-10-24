@@ -7,7 +7,7 @@ export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const id=z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9][a-zA-Z0-9:_-]*$/);
 const query=z.object({organizationId:id,locationId:id.optional()}).strict();
-const mutation=z.object({organizationId:id,jobId:id,action:z.enum(['retry','reprint']).default('retry')}).strict();
+const mutation=z.object({organizationId:id,jobId:id,action:z.enum(['retry','reprint','reconcile_printed','reconcile_failed']).default('retry')}).strict();
 class PrintingError extends Error{constructor(public status:number,message:string){super(message);}}
 async function owner(userId:string,organizationId:string){return !!await db().prepare("SELECT 1 FROM organization_memberships WHERE organization_id=? AND principal_id=? AND role='owner' AND location_id IS NULL AND status='active'").bind(organizationId,userId).first();}
 
@@ -41,6 +41,19 @@ export async function POST(request:Request){
    ]);
    if(!result[0]?.meta.changes)throw new PrintingError(409,'La commande n’est plus disponible pour une réimpression.');
    return json({ok:true,jobId:id,sourceJobId:source.id},201);
+  }
+  if(input.action==='reconcile_printed'||input.action==='reconcile_failed'){
+   const source=await db().prepare('SELECT id,order_id,status FROM print_outbox WHERE id=? AND organization_id=?').bind(input.jobId,input.organizationId).first<{id:string;order_id:string;status:string}>();
+   if(!source)throw new PrintingError(404,'Job d’impression introuvable.');
+   if(source.status!=='unknown')throw new PrintingError(409,'Seul un résultat inconnu peut être rapproché.');
+   const printed=input.action==='reconcile_printed';
+   const eventId=`${source.id}:reconcile:${crypto.randomUUID()}`;
+   const result=await db().batch([
+    db().prepare(`UPDATE print_outbox SET status=?,printed_at=?,provider_job_id=?,last_error=?,lease_token=NULL,lease_expires_at=NULL,updated_at=? WHERE id=? AND organization_id=? AND status='unknown'`).bind(printed?'printed':'failed',printed?now:null,printed?`manual:${user.id}`:null,printed?null:'manual_reconciliation',now,source.id,input.organizationId),
+    db().prepare('INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,status,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=(SELECT location_id FROM print_outbox WHERE id=? AND organization_id=?)').bind(eventId, user.id, printed?'Résultat impression rapproché comme imprimé':'Résultat impression rapproché comme échec',now,source.order_id, input.organizationId, source.id, input.organizationId),
+   ]);
+   if(!result[0]?.meta.changes)throw new PrintingError(409,'Le job a déjà été rapproché.');
+   return json({ok:true,jobId:source.id,status:printed?'printed':'failed'});
   }
   const result=await db().prepare("UPDATE print_outbox SET status='pending',available_at=?,lease_token=NULL,lease_expires_at=NULL,last_error=NULL,updated_at=? WHERE id=? AND organization_id=? AND status='failed'").bind(now,now,input.jobId,input.organizationId).run();
   if(!result.meta.changes){const current=await db().prepare('SELECT status FROM print_outbox WHERE id=? AND organization_id=?').bind(input.jobId,input.organizationId).first<{status:string}>();if(!current)throw new PrintingError(404,'Job d’impression introuvable.');if(current.status==='unknown')throw new PrintingError(409,'Le résultat du relais est inconnu. Rapprochez ce ticket avant de le relancer.');throw new PrintingError(409,'Ce job n’est pas en échec ou a déjà été relancé.');}
