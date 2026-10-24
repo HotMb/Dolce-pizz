@@ -1,5 +1,7 @@
 # Installation et exploitation — Dolce Pizz’
 
+Pour chaque nouveau site, copiez le [dossier de recette d’établissement](./site-acceptance-record.md) dans l’espace privé d’exploitation et faites-le signer avant l’ouverture.
+
 En cas de panne ou d’incident, suivre le [runbook d’incident](./incident-response.md) avant de relancer une action manuelle.
 
 Avant d’ouvrir un établissement, compléter la [checklist de mise en production](./go-live-checklist.md) et conserver ses preuves dans le dossier de recette.

@@ -1,6 +1,6 @@
 # Feuille de route de livraison POS/KDS SaaS
 
-Cette feuille de route définit les phases de mise en service pour Dolce Pizz’ puis pour chaque nouvelle enseigne. Une phase n’est considérée comme terminée que si la preuve indiquée est conservée dans le dossier de recette de l’établissement.
+Cette feuille de route définit les phases de mise en service pour Dolce Pizz’ puis pour chaque nouvelle enseigne. Une phase n’est considérée comme terminée que si la preuve indiquée est conservée dans le [dossier de recette de l’établissement](./site-acceptance-record.md).
 
 ## État vérifié du dépôt
 
