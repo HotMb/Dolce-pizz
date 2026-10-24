@@ -88,7 +88,7 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
   async function session(userId: string) {
     const token = (userId === 'owner' ? 'a' : userId === 'pos-worker' ? 'b' : userId === 'phone-worker' ? 'c' : 'd').repeat(64);
     database.prepare('INSERT INTO users(id,phone,name,created_at) VALUES(?,?,?,?)').run(userId, `+3360000000${userId === 'owner' ? '1' : userId === 'pos-worker' ? '2' : userId === 'phone-worker' ? '3' : '4'}`, `Account ${userId}`, '2026-10-01T00:00:00.000Z');
-    database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at) VALUES(?,?,?,?)').run(await sha256(token), userId, Date.now() + 3_600_000, new Date().toISOString());
+    database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at,audience) VALUES(?,?,?,?,?)').run(await sha256(token), userId, Date.now() + 3_600_000, new Date().toISOString(), 'staff');
     return `dolce_session=${token}`;
   }
   const ownerCookie = await session('owner');

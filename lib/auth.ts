@@ -2,6 +2,7 @@ import {env} from 'cloudflare:workers';
 import {headers} from 'next/headers';
 import {db} from './server';
 export type Member={id:string;phone:string;name:string};
+export type SessionAudience='customer'|'staff';
 export class AuthError extends Error{constructor(public status:number,message:string){super(message);}}
 const COOKIE='dolce_session',SESSION_DAYS=90,STAFF_SESSION_HOURS=12,CODE_MINUTES=10,MAX_ATTEMPTS=5,RESEND_MS=60000,HOUR=3600000;
 const vars=env as unknown as Record<string,string|undefined>;
@@ -19,13 +20,13 @@ export async function sessionUser(cookieHeader:string|null):Promise<Member|null>
 export async function staffSessionUser(cookieHeader:string|null):Promise<Member|null>{
  const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
  const cutoff=new Date(Date.now()-STAFF_SESSION_HOURS*HOUR).toISOString();
- return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? AND s.created_at>=?').bind(await sha256(token),Date.now(),cutoff).first<Member>();
+ return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 /** Sensitive organisation changes require a fresh OTP session, not merely a still-valid staff session. */
 export async function recentStaffSessionUser(cookieHeader:string|null,maxAgeMinutes=15):Promise<Member|null>{
  const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
  const cutoff=new Date(Date.now()-maxAgeMinutes*60000).toISOString();
- return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? AND s.created_at>=?').bind(await sha256(token),Date.now(),cutoff).first<Member>();
+ return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
 export const sessionCookie=(token:string,secure:boolean)=>`${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?SESSION_DAYS*86400:0}${secure?'; Secure':''}`;
@@ -60,7 +61,7 @@ export async function sendCode(phone:string,ip:string,local:boolean):Promise<{de
  if(!await sendSms(phone,`Dolce Pizz' : votre code de connexion est ${code}. Il expire dans ${CODE_MINUTES} minutes.`,'transactional','connexion')){await db().prepare('DELETE FROM otp_codes WHERE phone=? AND code_hash=?').bind(phone,await sha256(`${phone}:${code}`)).run();throw new AuthError(503,'Le SMS n’a pas pu être envoyé. Réessayez dans un instant.');}
  return {};
 }
-export async function verifyCode(phone:string,code:string){
+export async function verifyCode(phone:string,code:string,audience:SessionAudience='customer'){
  const row=await db().prepare('SELECT code_hash,expires_at,attempts FROM otp_codes WHERE phone=?').bind(phone).first<{code_hash:string;expires_at:number;attempts:number}>();
  if(!row||row.expires_at<Date.now())throw new AuthError(400,'Ce code a expiré. Demandez-en un nouveau.');
  const counted=await db().prepare('UPDATE otp_codes SET attempts=attempts+1 WHERE phone=? AND code_hash=? AND expires_at>? AND attempts<? RETURNING attempts').bind(phone,row.code_hash,Date.now(),MAX_ATTEMPTS).first<{attempts:number}>();
@@ -72,7 +73,7 @@ export async function verifyCode(phone:string,code:string){
  await db().prepare("INSERT INTO users(id,phone,name,created_at) VALUES(?,?,'',?) ON CONFLICT(phone) DO NOTHING").bind(crypto.randomUUID(),phone,new Date().toISOString()).run();
  const user=await db().prepare('SELECT id,phone,name FROM users WHERE phone=?').bind(phone).first<Member>();if(!user)throw new Error('User unavailable');
  const token=hex(crypto.getRandomValues(new Uint8Array(32)));
- await db().prepare('INSERT INTO sessions(id,user_id,expires_at,created_at) VALUES(?,?,?,?)').bind(await sha256(token),user.id,Date.now()+SESSION_DAYS*86400000,new Date().toISOString()).run();
+ await db().prepare('INSERT INTO sessions(id,user_id,expires_at,created_at,audience) VALUES(?,?,?,?,?)').bind(await sha256(token),user.id,Date.now()+SESSION_DAYS*86400000,new Date().toISOString(),audience).run();
  return {user,token};
 }
 /** 'live' sends through Brevo; 'demo' (local preview or SMS_CAMPAIGNS_DEMO=1) only simulates; 'off' cannot send. */

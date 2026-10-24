@@ -127,12 +127,12 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   async function session(userId: string, token: string) {
     const now = new Date().toISOString();
     database.prepare('INSERT INTO users(id,phone,name,created_at) VALUES(?,?,?,?)').run(userId, `+336000000${userId === 'owner' ? '1' : '2'}`, userId, now);
-    database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at) VALUES(?,?,?,?)').run(await sha256(token), userId, Date.now() + 3_600_000, now);
+    database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at,audience) VALUES(?,?,?,?,?)').run(await sha256(token), userId, Date.now() + 3_600_000, now, 'staff');
     return `dolce_session=${token}`;
   }
   const ownerCookie = await session('owner', 'a'.repeat(64));
   const staleStaffToken = 'c'.repeat(64);
-  database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at) VALUES(?,?,?,?)').run(await sha256(staleStaffToken), 'owner', Date.now() + 3_600_000, new Date(Date.now() - 13 * 3_600_000).toISOString());
+  database.prepare('INSERT INTO sessions(id,user_id,expires_at,created_at,audience) VALUES(?,?,?,?,?)').run(await sha256(staleStaffToken), 'owner', Date.now() + 3_600_000, new Date(Date.now() - 13 * 3_600_000).toISOString(), 'staff');
   const staleHealth = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:`dolce_session=${staleStaffToken}`})}));
   assert.equal(staleHealth.status, 401);
   const workerCookie = await session('worker', 'b'.repeat(64));
