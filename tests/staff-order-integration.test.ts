@@ -234,6 +234,16 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const live=await call(notifications.POST,'internal/notifications','POST',{},'',{authorization:`Bearer ${dispatchSecret}`});
  assert.equal(live.response.status,503); // No provider key in the integration environment; no network send.
  assert.equal(database.prepare('SELECT status FROM notification_outbox WHERE order_id=?').get(activeOrderId)?.status,'pending');
+ database.prepare('UPDATE customer_profiles SET marketing=1,marketing_source=? WHERE organization_id=? AND user_id=?').run('compte','dolce-pizza',before.body.account.id);
+ const otherProfileBeforeErasure=database.prepare('SELECT name,marketing FROM customer_profiles WHERE organization_id=? AND user_id=?').get('other-brand',before.body.account.id);
+ const otherOrderBeforeErasure=database.prepare('SELECT name,phone,notification_phone FROM orders WHERE id=?').get(otherOrder);
+ const erasure=await call(web.DELETE,'me','DELETE',undefined,ownerCookie);
+ assert.equal(erasure.response.status,200,JSON.stringify(erasure.body));
+ assert.deepEqual({...database.prepare('SELECT name,marketing FROM customer_profiles WHERE organization_id=? AND user_id=?').get(scope.organizationId,before.body.account.id)},{name:'',marketing:0});
+ assert.deepEqual({...database.prepare('SELECT name,notification_phone FROM orders WHERE id=?').get(orderId)},{name:'Client anonymisé',notification_phone:''});
+ assert.deepEqual({...database.prepare('SELECT name,marketing FROM customer_profiles WHERE organization_id=? AND user_id=?').get('other-brand',before.body.account.id)},{...otherProfileBeforeErasure});
+ assert.deepEqual({...database.prepare('SELECT name,phone,notification_phone FROM orders WHERE id=?').get(otherOrder)},{...otherOrderBeforeErasure});
+ assert.equal(database.prepare("SELECT COUNT(*) AS n FROM marketing_consent_events WHERE organization_id=? AND user_id=? AND actor='self_delete'").get(scope.organizationId,before.body.account.id)?.n,1);
  const kioskHeaders=new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie});
  const kioskEnrollment=await devices.POST(new Request('http://localhost/api/staff/devices',{method:'POST',headers:kioskHeaders,body:JSON.stringify({...scope,action:'enroll',label:'Borne client',role:'kiosk'})}));
  assert.equal(kioskEnrollment.status,201);
