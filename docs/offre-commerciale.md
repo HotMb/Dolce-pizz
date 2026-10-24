@@ -11,14 +11,14 @@ Le nom commercial du produit reste à choisir. Dolce Pizz’ sert de premier sit
 | Module | Bénéfice pour le restaurant | État du dépôt aujourd’hui |
 |---|---|---|
 | Commande web à emporter | Menu, personnalisation, créneau, suivi et fidélité | Prototype présent pour Ronchin |
-| POS comptoir et mobile | Saisie de commandes, encaissement, remise et clôture | À construire; la démo permet à l’équipe de valider les commandes web |
+| POS comptoir et mobile | Saisie de commandes, encaissement, remise et clôture | Parcours livré côté logiciel : commandes comptoir/téléphone/POS, paiement au retrait, shifts, remboursements locaux et permissions; TPE certifié et recette terrain à finaliser |
 | Centre d’appels | Commande assistée, code postal de suggestion, choix explicite du site de retrait, créneau, historique d’appel tenant-scopé et envoi en production | Les zones postales doivent être provisionnées par enseigne |
-| Bornes | Commande autonome avec le menu publié du site | À construire |
+| Bornes | Commande autonome avec le menu publié du site | Interface et appareil enrôlé livrés côté logiciel; paiement au retrait et matériel réel à valider |
 | KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | KDS persisté avec comptes nominatifs et permissions par organisation/site/poste; Ronchin configuré, exploitation commerciale et appareils à finaliser |
-| Menu et recettes | Publication contrôlée des prix, disponibilité, suppléments et allergènes | Administration de carte, ingrédients et origines déjà dans la démo; versions par site à faire |
+| Menu et recettes | Publication contrôlée des prix, disponibilité, suppléments et allergènes | Carte maître, ingrédients, historique append-only et surcharges locales par établissement livrés; recette métier et restauration à valider |
 | SMS de service et fidélité | Informer le client, attribuer des points, gérer les préférences marketing | Fidélité et campagnes présentes; outbox et consommateur transactionnel livrés, fournisseur/ordonnanceur et essais de délivrance à configurer |
-| Uber Eats | Recevoir les commandes Uber dans le même flux de préparation; Uber gère son propre transport | À construire; l’accès partenaire et le rattachement de chaque restaurant sont à configurer. Pas de livraison maison au pilote |
-| Tableau de bord réseau | Comparer les sites, gérer menus maîtres, permissions et performance | Fondation organisation/site ajoutée; back-office réseau à construire |
+| Uber Eats | Recevoir les commandes Uber dans le même flux de préparation; Uber gère son propre transport | Webhook signé, inbox idempotente, mapping magasin et import KDS livrés; accès partenaire, sandbox et rapprochement à configurer. Pas de livraison maison au pilote |
+| Tableau de bord réseau | Comparer les sites, gérer menus maîtres, permissions et performance | Rapports consolidés par site, canal et paiement avec export CSV livrés; planification de rapports et pilotage avancé restent à construire |
 | Caisse et rapports | Encaissements, moyens de paiement, shifts, clôture et écarts | Prototype livré; vendre comme module pilote avec terminal et conformité à finaliser |
 
 ## Comment les équipes l’utilisent
