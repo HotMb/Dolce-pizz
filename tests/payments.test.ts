@@ -256,6 +256,13 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const completed = await printJobs.POST(new Request('http://localhost/api/internal/print-jobs', {method: 'POST', headers: {'content-type': 'application/json', authorization: `Bearer ${rotated.body.credential}`}, body: JSON.stringify({action: 'complete', id: claimedBody.jobs[0].id, leaseToken: claimedBody.jobs[0].lease_token, providerJobId: 'local-1'})}));
   assert.equal(completed.status, 200);
   assert.equal(database.prepare('SELECT status,provider_job_id FROM print_outbox WHERE id=?').get('print-test')?.status, 'printed');
+  const reprint = await printing.POST(new Request('http://localhost/api/admin/printing', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',jobId:'print-test',action:'reprint'})}));
+  const reprintText = await reprint.text();
+  assert.equal(reprint.status,201,reprintText);
+  const reprintBody = JSON.parse(reprintText) as {jobId:string;sourceJobId:string};
+  assert.equal(reprintBody.sourceJobId,'print-test');
+  assert.equal(database.prepare("SELECT status,job_type,order_id FROM print_outbox WHERE id=?").get(reprintBody.jobId)?.status,'pending');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM events WHERE order_id='ready-order' AND note LIKE 'Réimpression du ticket%'").get()?.count,1);
   database.prepare("UPDATE print_outbox SET status='failed',last_error='connection_refused',updated_at=? WHERE id=?").run(new Date().toISOString(),'print-test');
   const printingList = await printing.GET(new Request('http://localhost/api/admin/printing?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:ownerCookie})}));
   assert.equal(printingList.status,200);
