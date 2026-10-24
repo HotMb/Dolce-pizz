@@ -60,6 +60,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const production=await import('../app/api/production/route');
  const productionStream=await import('../app/api/production/stream/route');
  const notifications=await import('../app/api/internal/notifications/route');
+ const onboarding=await import('../app/api/admin/onboarding/route');
  type Handler=(request:Request)=>Promise<Response>;
  async function call<T=Record<string,unknown>>(handler:Handler,path:string,method='GET',body?:unknown,cookie='',extraHeaders:Record<string,string>={}){
   const response=await handler(new Request(`http://localhost/api/${path}`,{method,
@@ -74,6 +75,9 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
   assert.equal(verified.response.status,200);
   assert.match(verified.response.headers.get('set-cookie')||'',/Max-Age=43200/);
   return verified.response.headers.get('set-cookie')!.split(';')[0];
+ }
+ async function onboardingCall(cookie:string){
+  return onboarding.POST(new Request('http://localhost/api/admin/onboarding',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json',cookie},body:JSON.stringify({installationCode:setup,organizationId:'second-pizza',name:'Seconde enseigne',slug:'second-pizza',locationId:'second-site',locationCode:'second',locationName:'Second site',addressLine1:'1 rue du Test',postalCode:'59000',locality:'Lille',phone:'0600000099'})}));
  }
  const ownerCookie=await login('0600000001');
  const publicCatalog=await call<{location:{id:string;locality:string;postalCode:string;phone:string}}>(web.GET,'catalog');
@@ -96,6 +100,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.equal(database.prepare("SELECT COUNT(*) AS n FROM organization_memberships WHERE principal_id=? AND role='oven'").get(worker.body.account.id)?.n,1);
  const managerGrant=await call<{membershipId:string}>(staff.POST,'staff','POST',{action:'grant',...scope,principalId:worker.body.account.id,role:'manager'},ownerCookie);
  assert.equal(managerGrant.response.status,200);
+ assert.equal((await onboardingCall(workerCookie)).status,403);
  assert.equal((await call(web.GET,'admin/campaigns','GET',undefined,workerCookie)).response.status,403);
  assert.equal((await call(web.POST,'admin/campaigns','POST',{message:'Un responsable de site ne peut pas envoyer cette promotion.'},workerCookie)).response.status,403);
  assert.equal((await call(staff.POST,'staff','POST',{action:'revoke',...scope,membershipId:managerGrant.body.membershipId},ownerCookie)).response.status,200);
