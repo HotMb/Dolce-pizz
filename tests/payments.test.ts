@@ -72,6 +72,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const calls = await import('../app/api/staff/calls/route');
   const health = await import('../app/api/admin/health/route');
   const printing = await import('../app/api/admin/printing/route');
+  const audit = await import('../app/api/admin/audit/route');
   const shifts = await import('../app/api/staff/shifts/route');
   const routing = await import('../app/api/staff/routing/route');
   const locations = await import('../app/api/admin/locations/route');
@@ -281,6 +282,11 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const deviceHealth = healthBody.checks.find(check => check.id === 'devices');
   assert.equal(deviceHealth?.status, 'attention');
   assert.ok(Number(deviceHealth?.details.expired) >= 1);
+  const auditResponse = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza', {headers:new Headers({cookie:ownerCookie})}));
+  assert.equal(auditResponse.status,200);
+  assert.ok(Array.isArray((await auditResponse.json() as {entries:Array<{action:string}>}).entries));
+  const auditForbidden = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza', {headers:new Headers({cookie:workerCookie})}));
+  assert.equal(auditForbidden.status,403);
   const revokeResponse = await sessionRevoke.POST(new Request('http://localhost/api/staff/sessions', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId: 'dolce-pizza', locationId: 'ronchin', principalId: 'worker'})}));
   assert.equal(revokeResponse.status, 200);
   assert.equal((await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers: new Headers({origin: 'http://localhost', cookie: workerCookie})}))).status, 401);
