@@ -136,7 +136,7 @@ Un appareil doit être enrôlé auprès d’un tenant et d’un établissement. 
 
 Préparer les informations suivantes avant d’activer la commande : nom public, adresse exacte, téléphone, horaires, mode de retrait, zone de routage par codes postaux, capacités par créneau, menu/prix, TVA, imprimantes, postes de production et utilisateurs autorisés. Le pilote Dolce Pizz’ est en retrait uniquement; aucune livraison maison n’est disponible.
 
-Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 avenue Jean-Jaurès, 59790 Ronchin, téléphone 03 20 40 09 01. L’adresse et la zone de Tourcoing doivent être fournies et vérifiées avant d’activer le routage automatique.
+Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 avenue Jean-Jaurès, 59790 Ronchin, téléphone 03 20 40 09 01. La migration `0028` active uniquement le code postal `59790` pour ce site. L’adresse et la zone de Tourcoing doivent être fournies et vérifiées avant d’activer son routage automatique.
 
 ## 6. Procédure de mise à jour
 
