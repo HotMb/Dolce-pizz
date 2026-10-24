@@ -68,7 +68,7 @@ async function handler(request:Request){
   const body=async()=>{const text=await request.text();if(text.length>35000)fail(413,'La demande est trop volumineuse.');try{return JSON.parse(text);}catch{fail(400,'Vérifiez les informations envoyées.');}};
   if(path[0]==='auth'&&method==='POST'){
    if(path[1]==='code'){const phone=mobile(z.object({phone:clean.max(30)}).parse(await body()).phone);return json({phone:localPhone(phone),...await sendCode(phone,ip,local)});}
-   if(path[1]==='verify'){const input=z.object({phone:clean.max(30),code:clean.regex(/^\d{6}$/,'Saisissez les 6 chiffres reçus par SMS.'),audience:z.enum(['customer','staff']).default('customer')}).strict().parse(await body());const{user:member,token}=await verifyCode(mobile(input.phone),input.code,input.audience);const profile=await customerProfile(PILOT_ORGANIZATION_ID,member.id);return json({user:{name:profile?.name||'',phone:localPhone(member.phone)}},200,sessionCookie(token,secure));}
+   if(path[1]==='verify'){const input=z.object({phone:clean.max(30),code:clean.regex(/^\d{6}$/,'Saisissez les 6 chiffres reçus par SMS.'),audience:z.enum(['customer','staff']).default('customer')}).strict().parse(await body());const{user:member,token}=await verifyCode(mobile(input.phone),input.code,input.audience);const profile=await customerProfile(PILOT_ORGANIZATION_ID,member.id);return json({user:{name:profile?.name||'',phone:localPhone(member.phone)}},200,sessionCookie(token,secure,input.audience));}
    if(path[1]==='logout'){await endSession(cookie);return json({ok:true},200,sessionCookie('',secure));}
   }
   if(path[0]==='catalog'&&method==='GET'){const m=await menu(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);return json(m);}

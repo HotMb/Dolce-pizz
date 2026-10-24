@@ -29,7 +29,7 @@ export async function recentStaffSessionUser(cookieHeader:string|null,maxAgeMinu
  return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
-export const sessionCookie=(token:string,secure:boolean)=>`${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?SESSION_DAYS*86400:0}${secure?'; Secure':''}`;
+export const sessionCookie=(token:string,secure:boolean,audience:SessionAudience='customer')=>`${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?(audience==='staff'?STAFF_SESSION_HOURS*3600:SESSION_DAYS*86400):0}${secure?'; Secure':''}`;
 export async function endSession(cookieHeader:string|null){const token=readCookie(cookieHeader);if(token)await db().prepare('DELETE FROM sessions WHERE id=?').bind(await sha256(token)).run();}
 export async function underLimit(key:string,limit:number){
  const now=Date.now();

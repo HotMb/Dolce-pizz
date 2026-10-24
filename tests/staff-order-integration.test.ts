@@ -72,6 +72,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
   assert.equal(code.response.status,200);assert.match(code.body.devCode||'',/^\d{6}$/);
   const verified=await call(web.POST,'auth/verify','POST',{phone,code:code.body.devCode,audience:'staff'});
   assert.equal(verified.response.status,200);
+  assert.match(verified.response.headers.get('set-cookie')||'',/Max-Age=43200/);
   return verified.response.headers.get('set-cookie')!.split(';')[0];
  }
  const ownerCookie=await login('0600000001');
