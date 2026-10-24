@@ -29,6 +29,8 @@ Ce guide couvre le prototype web, le KDS, la prise de commande simple par le per
    NOTIFICATION_DISPATCH_SECRET=<secret aléatoire distinct, 32 caractères ou plus, facultatif sans ordonnanceur>
    ```
 
+   Pour un déploiement multi-enseignes, ajouter aussi `TENANT_HOSTS_JSON` dans le coffre de secrets, par exemple `{"dolce.example.fr":{"organizationId":"dolce-pizza","locationId":"ronchin"}}`. Le domaine est la seule source de portée publique; les paramètres `organizationId` et `locationId` ne servent pas à changer de tenant. Chaque entrée doit pointer vers une organisation et un établissement actifs déjà provisionnés dans D1.
+
 4. Appliquer les migrations locales :
 
    ```powershell

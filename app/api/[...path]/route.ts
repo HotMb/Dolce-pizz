@@ -1,4 +1,5 @@
 import {NextResponse} from 'next/server';
+import {env} from 'cloudflare:workers';
 import {z} from 'zod';
 import {db,ensureSeed,settings,productList,ingredientList,menu,balance,isAdmin,orderView,secret,marketingStopSecret,insertProduct,toProduct,toIngredient} from '@/lib/server';
 import {sessionUser,sendCode,verifyCode,sessionCookie,endSession,normalizePhone,localPhone,AuthError,underLimit,smsMode,sendSms} from '@/lib/auth';
@@ -9,6 +10,7 @@ import {allergenIds,describe,slugify} from '@/lib/menu';
 import {snapshotPricedLines} from '@/lib/production-repository';
 import {createMarketingStopProof,matchesMarketingStopProof} from '@/lib/marketing-stop';
 import {loadStaffScope} from '@/lib/staff-access';
+import {resolveTenant} from '@/lib/tenant';
 export const dynamic='force-dynamic';
 const json=(data:unknown,status=200,cookie?:string)=>{const r=NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});if(cookie)r.headers.append('Set-Cookie',cookie);return r;};
 class HttpError extends Error{constructor(public status:number,message:string){super(message);}}
@@ -25,7 +27,7 @@ async function marketingStopProof(organizationId:string,phone:string){
 }
 type CustomerProfile={name:string;marketing:number;marketing_at:string;marketing_source:string};
 const customerProfile=(organizationId:string,userId:string)=>db().prepare('SELECT name,marketing,marketing_at,marketing_source FROM customer_profiles WHERE organization_id=? AND user_id=?').bind(organizationId,userId).first<CustomerProfile>();
-async function canManagePilot(userId:string){const scope=await loadStaffScope(db(),userId,{organizationId:PILOT_ORGANIZATION_ID,locationId:PILOT_LOCATION_ID});return !!scope&&scope.roles.some(role=>role==='owner'||role==='manager');}
+async function canManagePilot(userId:string,organizationId=PILOT_ORGANIZATION_ID,locationId=PILOT_LOCATION_ID){const scope=await loadStaffScope(db(),userId,{organizationId,locationId});return !!scope&&scope.roles.some(role=>role==='owner'||role==='manager');}
 const campaignOwnerGuardSql=`EXISTS(
  SELECT 1 FROM organization_memberships m JOIN organizations o ON o.id=m.organization_id AND o.status='active'
  WHERE m.organization_id=? AND m.principal_id=? AND m.role='owner' AND m.status='active' AND m.location_id IS NULL
@@ -48,6 +50,8 @@ const MAX_PHOTO=1900000;
 async function handler(request:Request){
  try{
   const url=new URL(request.url);const path=url.pathname.slice(5).split('/'); const method=request.method;
+  const tenant=resolveTenant(request,(env as unknown as Record<string,string|undefined>).TENANT_HOSTS_JSON||'');if(!tenant)fail(404,'Cette enseigne n’est pas configurée pour ce domaine.');
+  const PILOT_ORGANIZATION_ID=tenant.organizationId,PILOT_LOCATION_ID=tenant.locationId;
   if(path[0]==='photos'&&method==='GET')return await photo(request,path[1],path[2],Number(path[3]),PILOT_ORGANIZATION_ID);
   // Photos arrive already cut out and compressed by the tablet: 3 WebP files, under 2 MB each.
   const upload=method==='POST'&&path[0]==='admin'&&path[1]==='products'&&path[3]==='photo';
@@ -64,7 +68,7 @@ async function handler(request:Request){
    if(path[1]==='verify'){const input=z.object({phone:clean.max(30),code:clean.regex(/^\d{6}$/,'Saisissez les 6 chiffres reçus par SMS.')}).parse(await body());const{user:member,token}=await verifyCode(mobile(input.phone),input.code);const profile=await customerProfile(PILOT_ORGANIZATION_ID,member.id);return json({user:{name:profile?.name||'',phone:localPhone(member.phone)}},200,sessionCookie(token,secure));}
    if(path[1]==='logout'){await endSession(cookie);return json({ok:true},200,sessionCookie('',secure));}
   }
-  if(path[0]==='catalog'&&method==='GET'){const m=await menu();return json(m);}
+  if(path[0]==='catalog'&&method==='GET'){const m=await menu(PILOT_ORGANIZATION_ID);return json(m);}
   // The SMS link carries a signed, opaque proof; this short-lived cookie lets the existing form confirm the recipient's phone.
   if(path[0]==='marketing'&&path[1]==='stop'&&method==='GET'){
    const token=url.searchParams.get('token')||'';const response=NextResponse.redirect(new URL('/stop',url),303);
@@ -98,7 +102,7 @@ async function handler(request:Request){
    // Staff-entered orders share the employee's account id for attribution, but are not customer orders.
    const rows=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND customer_user_id=? AND channel='web' ORDER BY created_at DESC LIMIT 100").bind(PILOT_ORGANIZATION_ID,user.id).all();
    const profile=await customerProfile(PILOT_ORGANIZATION_ID,user.id);
-   return json({user:{name:profile?.name||'',phone:localPhone(user.phone),marketing:!!profile?.marketing},admin:await canManagePilot(user.id),campaignAdmin:await isCampaignOwner(user.id,PILOT_ORGANIZATION_ID),balance:await balance(PILOT_ORGANIZATION_ID,user.id),orders:rows.results.map(orderView),loyalty});
+   return json({user:{name:profile?.name||'',phone:localPhone(user.phone),marketing:!!profile?.marketing},admin:await canManagePilot(user.id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID),campaignAdmin:await isCampaignOwner(user.id,PILOT_ORGANIZATION_ID),balance:await balance(PILOT_ORGANIZATION_ID,user.id),orders:rows.results.map(orderView),loyalty});
   }
   if(!user)fail(401,'Connectez-vous pour continuer.');
   const actor=user.id;
@@ -166,9 +170,9 @@ async function handler(request:Request){
    ]);
    if(!result[0].meta.changes&&!(await isAdmin(actor)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
   }
-  if(path[0]==='orders'&&path[1]&&method==='PATCH')return await updateOrder(path[1],actor,await body(),false);
+  if(path[0]==='orders'&&path[1]&&method==='PATCH')return await updateOrder(path[1],actor,await body(),false,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);
   if(path[0]!=='admin')fail(404,'Page introuvable.');
-  if(!(await canManagePilot(actor)))fail(403,'Cet espace est réservé aux responsables de cet établissement.');
+  if(!(await canManagePilot(actor,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID)))fail(403,'Cet espace est réservé aux responsables de cet établissement.');
   if(method==='GET'&&!path[1]){
    const orders=await db().prepare('SELECT * FROM orders WHERE organization_id=? AND location_id=? ORDER BY created_at DESC LIMIT 300').bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).all();
    const stats=await db().prepare("SELECT COUNT(*) AS count,COALESCE(SUM(total),0) AS revenue FROM orders WHERE organization_id=? AND location_id=? AND status='completed'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first();
@@ -179,7 +183,7 @@ async function handler(request:Request){
    const orders=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND location_id=? AND (status='preparing' OR (status='ready' AND updated_at>?)) ORDER BY slot LIMIT 100").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date(Date.now()-2*3600000).toISOString()).all();
    return json({orders:orders.results.map(orderView)});
   }
-  if(path[1]==='orders'&&path[2]&&method==='PATCH')return await updateOrder(path[2],actor,await body(),true);
+  if(path[1]==='orders'&&path[2]&&method==='PATCH')return await updateOrder(path[2],actor,await body(),true,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);
   if(path[1]==='settings'&&method==='PUT'){
    const s=settingsInput.parse(await body());
    for(const h of s.hours){if(!h.closed&&h.close!=='00:00'&&h.open>=h.close)fail(400,'L’heure de fermeture doit suivre l’ouverture, ou être minuit.');}
@@ -192,32 +196,32 @@ async function handler(request:Request){
   fail(404,'Cette action est introuvable.');
  }catch(e){if(e instanceof z.ZodError)return json({error:e.issues[0]?.message||'Vérifiez les champs du formulaire.',fields:e.flatten().fieldErrors},400);if(e instanceof HttpError||e instanceof AuthError)return json({error:e.message},e.status);console.error('Dolce API error',e instanceof Error?e.message:'unknown');return json({error:'Le service est momentanément indisponible. Vos informations sont conservées ; réessayez.'},503);}
 }
-async function updateOrder(id:string,actor:string,data:unknown,admin:boolean){
+async function updateOrder(id:string,actor:string,data:unknown,admin:boolean,organizationId=PILOT_ORGANIZATION_ID,locationId=PILOT_LOCATION_ID){
  const input=z.object({status:z.enum(['confirmed','preparing','ready','completed','rejected','cancelled']),version:z.number().int().positive(),reason:z.string().trim().max(250).default('')}).parse(data);
  // Ready is an Expeditor-only transition. Completion also requires the future pickup-payment flow.
  if(admin&&['ready','completed'].includes(input.status))fail(409,'Utilisez les postes de production pour finaliser la commande; le retrait et l’encaissement seront validés dans le parcours de caisse.');
  const order=admin
-  ?await db().prepare('SELECT customer_user_id,organization_id,status,version FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first<{customer_user_id:string|null;organization_id:string;status:string;version:number}>()
-  :await db().prepare("SELECT customer_user_id,organization_id,status,version FROM orders WHERE id=? AND organization_id=? AND location_id=? AND customer_user_id=? AND channel='web'").bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,actor).first<{customer_user_id:string|null;organization_id:string;status:string;version:number}>();if(!order||(!admin&&order.customer_user_id!==actor))fail(404,'Commande introuvable.');
+  ?await db().prepare('SELECT customer_user_id,organization_id,status,version FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,organizationId,locationId).first<{customer_user_id:string|null;organization_id:string;status:string;version:number}>()
+  :await db().prepare("SELECT customer_user_id,organization_id,status,version FROM orders WHERE id=? AND organization_id=? AND location_id=? AND customer_user_id=? AND channel='web'").bind(id,organizationId,locationId,actor).first<{customer_user_id:string|null;organization_id:string;status:string;version:number}>();if(!order||(!admin&&order.customer_user_id!==actor))fail(404,'Commande introuvable.');
  if(!admin&&(order.status!=='pending'||input.status!=='cancelled'))fail(409,'Cette commande a déjà été prise en charge. Appelez la pizzeria.');
  if(!nextStatus(order.status,input.status))fail(409,'Cette commande a changé d’état. Actualisez la liste.');
  if(admin&&['cancelled','rejected'].includes(input.status)&&input.reason.length<3)fail(400,'Indiquez le motif communiqué au client.');
  const now=new Date().toISOString();const next=input.version+1;
  const reason=input.reason||(!admin?'Annulée par le client':'');const note=reason||(input.status==='preparing'?(order.status==='pending'?'Validée et envoyée en cuisine':'Envoyée en cuisine'):'');
  const result=await db().batch([
-  db().prepare("UPDATE orders SET status=?,reason=?,version=version+1,updated_at=? WHERE id=? AND version=? AND status=? AND organization_id=? AND location_id=? AND (?=1 OR (customer_user_id=? AND channel='web'))").bind(input.status,reason,now,id,input.version,order.status,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,admin?1:0,actor),
+  db().prepare("UPDATE orders SET status=?,reason=?,version=version+1,updated_at=? WHERE id=? AND version=? AND status=? AND organization_id=? AND location_id=? AND (?=1 OR (customer_user_id=? AND channel='web'))").bind(input.status,reason,now,id,input.version,order.status,organizationId,locationId,admin?1:0,actor),
   // Points are credited once, as soon as the team validates the order.
-  db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,organization_id,customer_user_id,id,earned,'earned',? FROM orders WHERE id=? AND organization_id=? AND version=? AND status IN ('confirmed','preparing') AND customer_user_id IS NOT NULL AND earned>0").bind(`${id}:earned`,now,id,PILOT_ORGANIZATION_ID,next),
-  db().prepare("INSERT OR IGNORE INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at) SELECT ?,?,?,?,?,?,?,'pending',0,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='preparing' AND version=?").bind(`${id}:print:kitchen`,`${id}:print:kitchen`,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,id,'kitchen_ticket',JSON.stringify({orderId:id,format:'ticket-v1'}),now,now,now,id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,next),
-  db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,organization_id,customer_user_id,id,redeemed,'refund',? FROM orders WHERE id=? AND organization_id=? AND status IN ('rejected','cancelled') AND version=? AND customer_user_id IS NOT NULL AND redeemed>0").bind(`${id}:refund`,now,id,PILOT_ORGANIZATION_ID,next),
+  db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,organization_id,customer_user_id,id,earned,'earned',? FROM orders WHERE id=? AND organization_id=? AND version=? AND status IN ('confirmed','preparing') AND customer_user_id IS NOT NULL AND earned>0").bind(`${id}:earned`,now,id,organizationId,next),
+  db().prepare("INSERT OR IGNORE INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at) SELECT ?,?,?,?,?,?,?,'pending',0,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='preparing' AND version=?").bind(`${id}:print:kitchen`,`${id}:print:kitchen`,organizationId,locationId,id,'kitchen_ticket',JSON.stringify({orderId:id,format:'ticket-v1'}),now,now,now,id,organizationId,locationId,next),
+  db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,organization_id,customer_user_id,id,redeemed,'refund',? FROM orders WHERE id=? AND organization_id=? AND status IN ('rejected','cancelled') AND version=? AND customer_user_id IS NOT NULL AND redeemed>0").bind(`${id}:refund`,now,id,organizationId,next),
   // A validated order cancelled later loses its points, without pushing the balance below zero.
-  db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,o.organization_id,o.customer_user_id,o.id,-MIN(o.earned,MAX((SELECT COALESCE(SUM(delta),0) FROM ledger WHERE organization_id=o.organization_id AND user_id=o.customer_user_id),0)),'reversal',? FROM orders o WHERE o.id=? AND o.organization_id=? AND o.customer_user_id IS NOT NULL AND o.version=? AND o.status='cancelled' AND EXISTS(SELECT 1 FROM ledger WHERE id=? AND organization_id=o.organization_id)").bind(`${id}:reversal`,now,id,PILOT_ORGANIZATION_ID,next,`${id}:earned`),
+  db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,o.organization_id,o.customer_user_id,o.id,-MIN(o.earned,MAX((SELECT COALESCE(SUM(delta),0) FROM ledger WHERE organization_id=o.organization_id AND user_id=o.customer_user_id),0)),'reversal',? FROM orders o WHERE o.id=? AND o.organization_id=? AND o.customer_user_id IS NOT NULL AND o.version=? AND o.status='cancelled' AND EXISTS(SELECT 1 FROM ledger WHERE id=? AND organization_id=o.organization_id)").bind(`${id}:reversal`,now,id,organizationId,next,`${id}:earned`),
   db().prepare('INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,status,?,?,? FROM orders WHERE id=? AND version=? AND status=?').bind(`${id}:${next}`,actor,note,now,id,next,input.status)
  ]);
  if(!result[0].meta.changes)fail(409,'Une autre action a modifié cette commande. Actualisez la liste.');
  const updated=admin
-  ?await db().prepare('SELECT * FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first()
-  :await db().prepare("SELECT * FROM orders WHERE id=? AND organization_id=? AND location_id=? AND customer_user_id=? AND channel='web'").bind(id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,actor).first();
+  ?await db().prepare('SELECT * FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(id,organizationId,locationId).first()
+  :await db().prepare("SELECT * FROM orders WHERE id=? AND organization_id=? AND location_id=? AND customer_user_id=? AND channel='web'").bind(id,organizationId,locationId,actor).first();
  return json({order:orderView(updated)});
 }
 
