@@ -278,7 +278,12 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.equal((await kioskBootstrap.json() as {scope:{locationId:string};device:{role:string}}).device.role,'kiosk');
  const kioskOrder=await staffOrders.POST(new Request('http://localhost/api/staff/orders',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json',authorization:`Bearer ${kioskCredential}`},body:JSON.stringify({key:crypto.randomUUID(),...scope,channel:'kiosk',customerName:'Client borne',customerPhone:'',readySmsConfirmed:false,slot:new Date(Date.parse(input.slot)+3600000).toISOString(),note:'',items:[{id:product.id,size:'senior',quantity:1,option:''}]})}));
  assert.equal(kioskOrder.status,201,await kioskOrder.text());
- assert.equal(database.prepare("SELECT channel,status FROM orders WHERE channel='kiosk' ORDER BY created_at DESC LIMIT 1").get()?.channel,'kiosk');
+ const kioskOrderRow={...(database.prepare("SELECT id,channel,status FROM orders WHERE channel='kiosk' ORDER BY created_at DESC LIMIT 1").get() as {id:string;channel:string;status:string})};
+ assert.deepEqual(kioskOrderRow,{id:kioskOrderRow.id,channel:'kiosk',status:'preparing'});
+ assert.deepEqual(database.prepare("SELECT job_type,status FROM print_outbox WHERE order_id=? ORDER BY job_type").all(kioskOrderRow.id).map(row=>({...row as {job_type:string;status:string}})),[
+  {job_type:'customer_receipt',status:'pending'},
+  {job_type:'kitchen_ticket',status:'pending'},
+ ]);
  const revisionProduct=database.prepare('SELECT id,version,available FROM products WHERE organization_id=? AND id=?').get('dolce-pizza',product.id) as {id:string;version:number;available:number};
  const menuUpdate=await call<{product:{version:number;available:boolean}}>(web.PUT,`admin/products/${revisionProduct.id}`,'PUT',{available:!Boolean(revisionProduct.available),version:revisionProduct.version},ownerCookie);
  assert.equal(menuUpdate.response.status,200,JSON.stringify(menuUpdate.body));
