@@ -78,7 +78,7 @@ Avant de partager cette démo :
 
 Ce script n’est pas une procédure de mise en production. La procédure de production doit utiliser une base distincte, des secrets réels configurés dans Cloudflare, un environnement sans mode démo, une authentification d’équipe, des sauvegardes et une migration revue avant publication.
 
-Avant une publication de production, charger les variables du coffre dans l’environnement du déploiement puis exécuter `npm run preflight:production`. Le contrôle exige `ADMIN_SETUP_CODE`, `MARKETING_STOP_SECRET`, `NOTIFICATION_DISPATCH_SECRET`, `BREVO_API_KEY`, `CF_D1_DATABASE_ID`, `CF_WORKER_NAME` et un `TENANT_HOSTS_JSON` valide; il refuse `SMS_DEMO` et `SMS_CAMPAIGNS_DEMO`. Il n’affiche aucune valeur secrète.
+Avant une publication de production, charger les variables du coffre dans l’environnement du déploiement puis exécuter `npm run preflight:production`. Le préflight lance d’abord `npm run security:scan`, puis exige `ADMIN_SETUP_CODE`, `MARKETING_STOP_SECRET`, `NOTIFICATION_DISPATCH_SECRET`, `BREVO_API_KEY`, `CF_D1_DATABASE_ID`, `CF_WORKER_NAME` et un `TENANT_HOSTS_JSON` valide; il refuse `SMS_DEMO` et `SMS_CAMPAIGNS_DEMO`. Il n’affiche aucune valeur secrète.
 
 ## 4. Installation cible dans un restaurant
 
