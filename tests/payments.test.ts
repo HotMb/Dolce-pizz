@@ -120,7 +120,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const now = new Date().toISOString();
   database.prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) VALUES('owner-membership','dolce-pizza',NULL,'owner','owner','active',?,?),('worker-membership','dolce-pizza','ronchin','worker','pos','active',?,?)").run(now, now, now, now);
   database.prepare(`INSERT INTO orders(id,user_id,customer_user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,reason,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version)
-    VALUES('ready-order','worker',NULL,'order-key','Client','','','[]','', '2026-10-24T18:00:00.000Z',1200,0,0,1200,0,0,'ready','', 'dolce-pizza','ronchin','counter','pickup','due_at_pickup',NULL,'','none',NULL,?,?,1)`).run(now, now);
+    VALUES('ready-order','worker',NULL,'order-key','Client','','','[{"name":"Pizza","quantity":1,"unitPrice":1200,"total":1200}]','', '2026-10-24T18:00:00.000Z',1200,0,0,1200,0,0,'ready','', 'dolce-pizza','ronchin','counter','pickup','due_at_pickup',NULL,'','none',NULL,?,?,1)`).run(now, now);
   database.prepare("UPDATE orders SET service_mode='dine_in',table_label='T4' WHERE id='ready-order'").run();
   database.prepare(`INSERT INTO cash_shifts(id,organization_id,location_id,business_date,status,opening_float,opened_by,opened_at,version)
     VALUES('shift-1','dolce-pizza','ronchin','2026-10-24','open',1000,'owner',?,1)`).run(now);
@@ -138,24 +138,25 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(addition.addition.total, 1200);
   assert.equal(addition.addition.serviceMode, 'dine_in');
   assert.equal(addition.addition.tableLabel, 'T4');
-  assert.deepEqual(addition.addition.items, []);
+  assert.equal(addition.addition.items.length, 1);
   assert.equal(readyList.body.shift.id, 'shift-1');
   assert.equal(readyList.body.shift.cashSales, 0);
   assert.equal(readyList.body.shift.expectedCash, 1000);
-  const partial = await call<{payment: {id: string; amount: number; method: string}; order: {status: string; paymentStatus: string; paidTotal:number; remaining:number}}>(api.POST, {...base, amount: 1100, idempotencyKey: crypto.randomUUID()}, ownerCookie);
+  assert.equal((await call(api.POST, {...base, amount: 1100, allocations:[{lineIndex:0,amount:1000}], idempotencyKey: crypto.randomUUID()}, ownerCookie)).response.status, 409);
+  const partial = await call<{payment: {id: string; amount: number; method: string}; order: {status: string; paymentStatus: string; paidTotal:number; remaining:number}}>(api.POST, {...base, amount: 1100, allocations:[{lineIndex:0,amount:1100}], idempotencyKey: crypto.randomUUID()}, ownerCookie);
   assert.equal(partial.response.status, 201, JSON.stringify(partial.body));
   assert.equal(partial.body.order.status, 'ready');
   assert.equal(partial.body.order.paymentStatus, 'partially_paid');
   assert.equal(partial.body.order.paidTotal, 1100);
   assert.equal(partial.body.order.remaining, 100);
-  const captured = await call<{payment: {id: string; amount: number; method: string}; order: {status: string; paymentStatus: string; paidTotal:number; remaining:number}}>(api.POST, {...base, amount: 100}, workerCookie);
+  const captured = await call<{payment: {id: string; amount: number; method: string}; order: {status: string; paymentStatus: string; paidTotal:number; remaining:number}}>(api.POST, {...base, amount: 100, allocations:[{lineIndex:0,amount:100}]}, workerCookie);
   assert.equal(captured.response.status, 201, JSON.stringify(captured.body));
   assert.deepEqual(captured.body.payment, {id: captured.body.payment.id, orderId: 'ready-order', amount: 100, method: 'cash', status: 'captured'});
   assert.deepEqual(captured.body.order, {id: 'ready-order', status: 'completed', paymentStatus: 'paid', paidTotal: 1200, remaining: 0});
   assert.equal(database.prepare('SELECT status,payment_status,payment_method,version FROM orders WHERE id=?').get('ready-order')?.status, 'completed');
   assert.equal(database.prepare('SELECT COUNT(*) AS n FROM payments WHERE order_id=?').get('ready-order')?.n, 2);
   assert.equal(database.prepare('SELECT COUNT(*) AS n FROM cash_shift_entries WHERE shift_id=?').get('shift-1')?.n, 2);
-  const replay = await call(api.POST, {...base, amount: 100}, workerCookie);
+  const replay = await call(api.POST, {...base, amount: 100, allocations:[{lineIndex:0,amount:100}]}, workerCookie);
   assert.equal(replay.response.status, 200);
   assert.equal((replay.body as {payment: {id: string}}).payment.id, captured.body.payment.id);
   assert.throws(() => database.prepare('UPDATE payments SET amount=1 WHERE id=?').run(captured.body.payment.id));

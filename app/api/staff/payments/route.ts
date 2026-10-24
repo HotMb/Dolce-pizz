@@ -19,6 +19,7 @@ const paymentInput = z.object({
   orderId: z.string().min(1).max(128),
   idempotencyKey: z.string().uuid(),
   amount: z.number().int().min(1).max(100000),
+  allocations: z.array(z.object({lineIndex: z.number().int().min(0).max(59), amount: z.number().int().min(1).max(100000)}).strict()).max(60).default([]),
   method: z.enum(['cash', 'card']),
 }).strict();
 
@@ -29,6 +30,7 @@ type PaymentRow = {
   order_id: string;
   idempotency_key: string;
   amount: number;
+  allocation: string;
   method: 'cash' | 'card';
   status: string;
 };
@@ -144,13 +146,13 @@ export async function POST(request: Request) {
     const user = await requireCashier(request, {organizationId: input.organizationId, locationId: input.locationId}, true);
 
     const duplicate = await db().prepare(
-      `SELECT p.id,p.organization_id,p.location_id,p.order_id,p.idempotency_key,p.amount,p.method,p.status,
+      `SELECT p.id,p.organization_id,p.location_id,p.order_id,p.idempotency_key,p.amount,p.allocation,p.method,p.status,
         o.status AS order_status,o.payment_status,o.paid_total,o.total
        FROM payments p JOIN orders o ON o.id=p.order_id AND o.organization_id=p.organization_id AND o.location_id=p.location_id
        WHERE p.organization_id=? AND p.location_id=? AND p.idempotency_key=?`,
     ).bind(input.organizationId, input.locationId, input.idempotencyKey).first<PaymentRow & {order_status: string; payment_status: string; paid_total:number; total:number}>();
     if (duplicate) {
-      if (duplicate.order_id !== input.orderId || duplicate.amount !== input.amount || duplicate.method !== input.method) {
+      if (duplicate.order_id !== input.orderId || duplicate.amount !== input.amount || duplicate.method !== input.method || duplicate.allocation !== JSON.stringify(input.allocations)) {
         throw new ApiError(409, 'Cette tentative de paiement est déjà associée à une autre commande.');
       }
       return json(paymentResponse(duplicate, duplicate.order_status, duplicate.payment_status, duplicate.paid_total, duplicate.total));
@@ -166,6 +168,19 @@ export async function POST(request: Request) {
     }
     const remaining = order.total - order.paid_total;
     if (remaining <= 0 || input.amount > remaining) throw new ApiError(409, 'Le montant dépasse le reste à encaisser. Actualisez l’addition.');
+    const allocation = input.allocations.map(item => ({lineIndex: item.lineIndex, amount: item.amount}));
+    if (allocation.length) {
+      const unique = new Set(allocation.map(item => item.lineIndex));
+      if (unique.size !== allocation.length) throw new ApiError(400, 'Une ligne ne peut apparaître qu’une seule fois.');
+      let rawItems: unknown = [];
+      try {rawItems = JSON.parse((await db().prepare('SELECT items FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(input.orderId, input.organizationId, input.locationId).first<{items:string}>())?.items || '[]');} catch {rawItems = [];}
+      if (!Array.isArray(rawItems) || allocation.some(item => !rawItems[item.lineIndex] || !Number.isInteger((rawItems[item.lineIndex] as {total?:unknown})?.total))) throw new ApiError(400, 'La répartition ne correspond plus à l’addition.');
+      const prior = await db().prepare('SELECT allocation FROM payments WHERE order_id=? AND organization_id=? AND location_id=? AND status=\'captured\'').bind(input.orderId, input.organizationId, input.locationId).all<{allocation:string}>();
+      const allocated = new Map<number, number>();
+      for (const row of prior.results) {try {const saved = JSON.parse(row.allocation); if (Array.isArray(saved)) for (const item of saved) if (Number.isInteger(item?.lineIndex)&&Number.isInteger(item?.amount)) allocated.set(item.lineIndex,(allocated.get(item.lineIndex)||0)+item.amount);} catch {}}
+      if (allocation.reduce((sum, item) => sum + item.amount, 0) !== input.amount || allocation.some(item => item.amount + (allocated.get(item.lineIndex)||0) > Number((rawItems[item.lineIndex] as {total:number}).total))) throw new ApiError(409, 'La répartition dépasse le solde d’une ligne.');
+    }
+    const allocationJson = JSON.stringify(allocation);
     const shift = await db().prepare(
       `SELECT id FROM cash_shifts WHERE organization_id=? AND location_id=? AND status='open'`,
     ).bind(input.organizationId, input.locationId).first<{id: string}>();
@@ -183,13 +198,13 @@ export async function POST(request: Request) {
     )`;
     const results = await db().batch([
       db().prepare(
-        `INSERT INTO payments(id,organization_id,location_id,order_id,idempotency_key,amount,method,status,provider,provider_reference,actor_user_id,created_at)
-         SELECT ?,?,?,?,?,?,?,'captured','cashier',NULL,?,?
+        `INSERT INTO payments(id,organization_id,location_id,order_id,idempotency_key,amount,allocation,method,status,provider,provider_reference,actor_user_id,created_at)
+         SELECT ?,?,?,?,?,?,?,?,'captured','cashier',NULL,?,?
          WHERE ${cashierGuard}
            AND EXISTS(SELECT 1 FROM orders o WHERE o.id=? AND o.organization_id=? AND o.location_id=? AND o.status='ready' AND o.payment_status IN ('due_at_pickup','partially_paid') AND o.paid_total+?<=o.total)
            AND EXISTS(SELECT 1 FROM cash_shifts s WHERE s.id=? AND s.organization_id=? AND s.location_id=? AND s.status='open')
          ON CONFLICT(organization_id,location_id,idempotency_key) DO NOTHING`,
-      ).bind(paymentId, input.organizationId, input.locationId, input.orderId, input.idempotencyKey, input.amount, input.method, user.id, now,
+      ).bind(paymentId, input.organizationId, input.locationId, input.orderId, input.idempotencyKey, input.amount, allocationJson, input.method, user.id, now,
         input.locationId, input.organizationId, user.id, input.orderId, input.organizationId, input.locationId, input.amount, shift.id, input.organizationId, input.locationId),
       db().prepare(
         `INSERT INTO cash_shift_entries(id,organization_id,location_id,shift_id,payment_id,amount,method,created_at)
@@ -212,20 +227,20 @@ export async function POST(request: Request) {
     ]);
     if (!results[0]?.meta.changes || !results[1]?.meta.changes) {
       const current = await db().prepare(
-        `SELECT p.id,p.organization_id,p.location_id,p.order_id,p.idempotency_key,p.amount,p.method,p.status,
+        `SELECT p.id,p.organization_id,p.location_id,p.order_id,p.idempotency_key,p.amount,p.allocation,p.method,p.status,
           o.status AS order_status,o.payment_status,o.paid_total,o.total
          FROM payments p JOIN orders o ON o.id=p.order_id AND o.organization_id=p.organization_id AND o.location_id=p.location_id
          WHERE p.organization_id=? AND p.location_id=? AND p.idempotency_key=?`,
       ).bind(input.organizationId, input.locationId, input.idempotencyKey).first<PaymentRow & {order_status: string; payment_status: string; paid_total:number; total:number}>();
       if (current) {
-        if (current.order_id !== input.orderId || current.amount !== input.amount || current.method !== input.method) {
+        if (current.order_id !== input.orderId || current.amount !== input.amount || current.method !== input.method || current.allocation !== allocationJson) {
           throw new ApiError(409, 'Cette tentative de paiement est déjà associée à une autre commande.');
         }
         return json(paymentResponse(current, current.order_status, current.payment_status, current.paid_total, current.total));
       }
       throw new ApiError(409, 'La commande a été modifiée pendant l’encaissement. Actualisez le ticket.');
     }
-    const payment = await db().prepare('SELECT id,organization_id,location_id,order_id,idempotency_key,amount,method,status FROM payments WHERE id=? AND organization_id=? AND location_id=?').bind(paymentId, input.organizationId, input.locationId).first<PaymentRow>();
+    const payment = await db().prepare('SELECT id,organization_id,location_id,order_id,idempotency_key,amount,allocation,method,status FROM payments WHERE id=? AND organization_id=? AND location_id=?').bind(paymentId, input.organizationId, input.locationId).first<PaymentRow>();
     if (!payment) throw new ApiError(503, 'Le reçu de paiement est introuvable après l’encaissement.');
     const finalOrder = await db().prepare('SELECT status,payment_status,paid_total,total FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(input.orderId, input.organizationId, input.locationId).first<{status:string;payment_status:string;paid_total:number;total:number}>();
     if (!finalOrder) throw new ApiError(503, 'La commande est introuvable après le paiement.');
