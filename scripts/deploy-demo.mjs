@@ -63,6 +63,14 @@ writeFileSync(SECRETS_FILE,Object.entries(secrets).map(([k,v])=>`${k}=${v}`).joi
 const temp=path.join(projectRoot,'.env.demo.upload.json');
 try{writeFileSync(temp,JSON.stringify(secrets));wrangler(['secret','bulk',temp,'--name',NAME],{capture:true});}finally{rmSync(temp,{force:true});}
 
+step('Contrôle HTTP post-déploiement');
+const publicBase=(process.env.PUBLIC_BASE_URL||'').trim();
+if(publicBase){
+  run(['scripts/check-http-security.mjs',`--url=${publicBase}`]);
+}else{
+  console.warn('PUBLIC_BASE_URL absent : la publication est terminée, mais les en-têtes du domaine public restent à vérifier avec npm run security:http.');
+}
+
 console.log(`
 === Prototype en ligne
 Adresse : affichée plus haut par « Deployed ... https://${NAME}.<votre-sous-domaine>.workers.dev »

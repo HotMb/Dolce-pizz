@@ -69,7 +69,7 @@ Les scripts locaux utilisent une base locale. Ne branche pas cette configuration
 
 ## 3. Démo Cloudflare
 
-Le script `mettre-en-ligne-demo.cmd` prépare une base D1 et publie la démo sur le compte Cloudflare configuré. Le déploiement hébergé ne révèle pas les codes de connexion : un fournisseur SMS réel est requis pour qu’un code soit envoyé. Sans fournisseur, seul un lancement local sur une adresse loopback peut afficher un code de test. `SMS_CAMPAIGNS_DEMO=1` simule uniquement les campagnes promotionnelles; il ne permet pas de se connecter. Le script crée aussi un secret distinct pour signer les liens de désinscription.
+Le script `mettre-en-ligne-demo.cmd` prépare une base D1 et publie la démo sur le compte Cloudflare configuré. Le déploiement hébergé ne révèle pas les codes de connexion : un fournisseur SMS réel est requis pour qu’un code soit envoyé. Sans fournisseur, seul un lancement local sur une adresse loopback peut afficher un code de test. `SMS_CAMPAIGNS_DEMO=1` simule uniquement les campagnes promotionnelles; il ne permet pas de se connecter. Le script crée aussi un secret distinct pour signer les liens de désinscription. Fournir `PUBLIC_BASE_URL=https://...` au lancement déclenche automatiquement le contrôle des en-têtes HTTP après publication; sans cette variable, exécuter `npm run security:http -- --url=https://...` depuis un réseau qui atteint le domaine.
 
 Avant de partager cette démo :
 
