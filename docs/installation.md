@@ -87,6 +87,8 @@ Exemple de liaison de domaine après création :
 
 En production, cette valeur reste disponible pour les installations historiques, mais les nouveaux domaines peuvent être enregistrés dans D1 depuis `GET/POST /api/admin/domains`. Le propriétaire crée un domaine en état `pending`, publie le TXT `_dolce-verify.<domaine>` renvoyé une seule fois, puis demande la vérification. Le Worker interroge DNS-over-HTTPS et n’active le domaine qu’après correspondance exacte. Un domaine absent de `TENANT_HOSTS_JSON` et non vérifié en base est refusé par l’API; aucun paramètre d’URL ne peut choisir une autre enseigne.
 
+Le propriétaire peut effectuer la même opération depuis `/equipe/domaines`. L’écran ne propose que les établissements de ses enseignes, affiche le jeton TXT une seule fois après création et conserve la vérification côté serveur. Un responsable de site ou un membre du centre d’appels ne voit pas cet écran et ne peut pas enregistrer de domaine.
+
 Les réglages d’horaires, de capacité et de fidélité sont stockés par établissement dans `location_config` (migration `0014`). Une installation historique qui n’a pas encore activé ses réglages locaux utilise temporairement son modèle organisationnel; l’onboarding d’une nouvelle enseigne crée directement le réglage de son premier site.
 
 La carte maître reste dans `products`. La migration `0017` ajoute `location_product_overrides` : le POS, les bornes et la commande web lisent une disponibilité, un prix ou un format XXL local lorsqu’il existe, sinon la valeur maître. Le propriétaire ou le responsable utilise `/equipe/catalogue-local`; l’écran appelle `GET/POST /api/staff/catalog-overrides`, avec portée établissement et version optimiste.
