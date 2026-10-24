@@ -13,3 +13,16 @@ test('tenant resolver never uses a query string to change the tenant',()=>{
  assert.equal(local?.organizationId,'dolce-pizza');
  assert.equal(local?.locationId,'ronchin');
 });
+
+test('tenant resolver ignores malformed or shared demo host bindings',()=>{
+ const valid=JSON.stringify({
+  'ronchin.example.fr':{organizationId:'brand',locationId:'ronchin'},
+  'bad..example.fr':{organizationId:'attacker',locationId:'site'},
+  'dolce-pizz-demo.dolcepizza.workers.dev':{organizationId:'attacker',locationId:'site'},
+ });
+ assert.deepEqual(resolveTenant(new Request('https://ronchin.example.fr/menu'),valid),{
+  organizationId:'brand',locationId:'ronchin',host:'ronchin.example.fr',
+ });
+ assert.equal(resolveTenant(new Request('https://bad..example.fr/menu'),valid),null);
+ assert.equal(resolveTenant(new Request('https://dolce-pizz-demo.dolcepizza.workers.dev/menu'),valid)?.organizationId,'dolce-pizza');
+});

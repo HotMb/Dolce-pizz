@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* Validate production configuration without printing secret values. */
 const failures = [];
+const publicHost = /^(?=.{1,253}$)(?!localhost$)(?!.*\.dolcepizza\.workers\.dev$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 const required = (name, minimum) => {
   const value = process.env[name]?.trim() || '';
   if (value.length < minimum) failures.push(`${name} absent ou trop court (minimum ${minimum})`);
@@ -18,7 +19,7 @@ if (process.env.TENANT_HOSTS_JSON) {
     const bindings = JSON.parse(process.env.TENANT_HOSTS_JSON);
     if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings) || !Object.keys(bindings).length) failures.push('TENANT_HOSTS_JSON doit contenir au moins un domaine');
     for (const [host, value] of Object.entries(bindings || {})) {
-      if (!/^[a-z0-9.-]+$/i.test(host) || !value || typeof value !== 'object' || !('organizationId' in value) || !('locationId' in value)) failures.push(`liaison tenant invalide pour ${host}`);
+      if (!publicHost.test(host) || !value || typeof value !== 'object' || !('organizationId' in value) || !('locationId' in value)) failures.push(`liaison tenant invalide pour ${host}`);
     }
   } catch { failures.push('TENANT_HOSTS_JSON n’est pas un JSON valide'); }
 } else failures.push('TENANT_HOSTS_JSON absent');
