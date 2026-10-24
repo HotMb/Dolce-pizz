@@ -81,7 +81,7 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 - **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; `/equipe/caisse` impose un shift ouvert, capture le paiement au retrait et permet la clôture avec comptage espèces. Le TPE automatique et la certification restent à intégrer.
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
 - **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; `/api/staff/routing` permet de configurer les codes postaux par site et de proposer les établissements actifs, avec validation serveur avant création de la commande.
-- **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
+- **Borne** : l’API de commande accepte un jeton d’appareil enrôlé avec le rôle `kiosk`, vérifie son établissement et ne permet que `channel=kiosk`; le prix est recalculé côté serveur et la commande entre dans le même KDS. L’interface borne, le panier isolé par visite, le reset automatique et le reçu client restent à installer.
 - **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les appareils se préparent dans `/api/staff/devices` avec un rôle et un jeton expirant; le heartbeat `/api/device/heartbeat` permet de vérifier leur identité sans stocker le jeton en clair. La dernière vue KDS est conservée dans la session du navigateur pour consultation hors connexion; aucune validation n’est acceptée sans retour serveur.
 
 Un appareil doit être enrôlé auprès d’un tenant et d’un établissement. Les identifiants d’équipe sont nominatifs; les changements d’établissement et les remboursements sont audités.

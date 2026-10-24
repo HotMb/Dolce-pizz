@@ -18,16 +18,41 @@ class HttpError extends Error {
 }
 function fail(status: number, message: string): never {throw new HttpError(status, message);}
 
+type OrderActor = {id:string; phone:string; name:string; deviceRole?:string; deviceOrganizationId?:string; deviceLocationId?:string};
+async function deviceTokenActor(request: Request): Promise<OrderActor | null> {
+  const token = request.headers.get('authorization')?.match(/^Bearer ([0-9a-f]{64})$/)?.[1];
+  if (!token) return null;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  const row = await db().prepare(`SELECT c.created_by,c.organization_id,c.location_id,d.role,u.phone,u.name
+    FROM device_credentials c
+    JOIN devices d ON d.organization_id=c.organization_id AND d.location_id=c.location_id AND d.id=c.device_id
+    JOIN organizations o ON o.id=c.organization_id AND o.status='active'
+    JOIN locations l ON l.organization_id=c.organization_id AND l.id=c.location_id AND l.status='active'
+    JOIN users u ON u.id=c.created_by
+    WHERE c.token_hash=? AND c.revoked_at IS NULL AND c.expires_at>? AND d.status='active'`)
+    .bind(hash, Date.now()).first<{created_by:string;organization_id:string;location_id:string;role:string;phone:string;name:string}>();
+  if (!row || row.role !== 'kiosk') return null;
+  await db().prepare('UPDATE device_credentials SET last_seen_at=? WHERE token_hash=? AND revoked_at IS NULL').bind(new Date().toISOString(), hash).run();
+  return {id:row.created_by, phone:row.phone, name:row.name, deviceRole:row.role, deviceOrganizationId:row.organization_id, deviceLocationId:row.location_id};
+}
+
 async function authenticatedRequest(request: Request, url: URL, requireOrigin: boolean) {
   const origin = request.headers.get('origin');
   if ((requireOrigin && !origin) || (origin && origin !== url.origin)) fail(403, 'Cette demande doit être envoyée depuis le site.');
   const user = await sessionUser(request.headers.get('cookie'));
-  if (!user) fail(401, 'Connectez-vous avec un compte de l’équipe.');
+  const actor = user ? {id:user.id, phone:user.phone, name:user.name} : await deviceTokenActor(request);
+  if (!actor) fail(401, 'Connectez-vous avec un compte de l’équipe ou un appareil borne autorisé.');
   await ensureSeed();
-  return user;
+  return actor;
 }
 
-async function loadAuthorizedScope(organizationId: string, locationId: string, principalId: string) {
+async function loadAuthorizedScope(organizationId: string, locationId: string, actor: OrderActor) {
+  if (actor.deviceRole) {
+    if (actor.deviceOrganizationId !== organizationId || actor.deviceLocationId !== locationId) fail(403, 'Cette borne n’est pas rattachée à cet établissement.');
+    return null;
+  }
+  const principalId = actor.id;
   const scope = await loadStaffScope(db(), principalId, {organizationId, locationId});
   if (!scope || !hasStaffOrderAccess(scope.roles)) fail(403, 'Vous n’avez pas accès à la prise de commande de cet établissement.');
   return scope;
@@ -39,11 +64,11 @@ function parseJson(text: string): unknown {
 }
 
 async function getSlots(request: Request, url: URL) {
-  const user = await authenticatedRequest(request, url, false);
+  const actor = await authenticatedRequest(request, url, false);
   const query = z.object({organizationId: z.string().min(1).max(128), locationId: z.string().min(1).max(128)}).strict()
     .safeParse(Object.fromEntries(url.searchParams.entries()));
   if (!query.success) fail(400, 'Sélectionnez un établissement valide.');
-  await loadAuthorizedScope(query.data.organizationId, query.data.locationId, user.id);
+  await loadAuthorizedScope(query.data.organizationId, query.data.locationId, actor);
 
   const location = await db().prepare(
     `SELECT l.name,l.address_line1,l.postal_code,l.locality,l.phone
@@ -75,7 +100,7 @@ async function getSlots(request: Request, url: URL) {
 }
 
 async function postOrder(request: Request, url: URL) {
-  const user = await authenticatedRequest(request, url, true);
+  const actor = await authenticatedRequest(request, url, true);
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) fail(413, 'La demande est trop volumineuse.');
   let text: string;
@@ -84,12 +109,13 @@ async function postOrder(request: Request, url: URL) {
   const parsed = staffOrderInputSchema.safeParse(parseJson(text));
   if (!parsed.success) fail(400, 'Vérifiez les informations de la commande.');
   const input = parsed.data;
-  const scope = await loadAuthorizedScope(input.organizationId, input.locationId, user.id);
-  if (!staffOrderChannelAllowed(scope.roles, input.channel)) fail(403, 'Votre rôle ne permet pas de saisir cette commande.');
+  const scope = await loadAuthorizedScope(input.organizationId, input.locationId, actor);
+  if (actor.deviceRole && input.channel !== 'kiosk') fail(403, 'Une borne ne peut créer que des commandes borne.');
+  if (!actor.deviceRole && (!scope || !staffOrderChannelAllowed(scope.roles, input.channel))) fail(403, 'Votre rôle ne permet pas de saisir cette commande.');
 
   const previous = await db().prepare(
     'SELECT id,total,status,slot,location_id,channel FROM orders WHERE user_id=? AND idempotency=? AND organization_id=? AND location_id=? AND channel=?',
-  ).bind(user.id, input.key, input.organizationId, input.locationId, input.channel).first<{
+  ).bind(actor.id, input.key, input.organizationId, input.locationId, input.channel).first<{
     id: string; total: number; status: string; slot: string; location_id: string; channel: string;
   }>();
   if (previous) return json({order: orderResponse(previous)});
@@ -137,17 +163,17 @@ async function postOrder(request: Request, url: URL) {
       AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled')) < ?
     ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING`,
   ).bind(
-    id, user.id, input.key, input.customerName, storedPhone, JSON.stringify(items), input.note, slot,
+    id, actor.id, input.key, input.customerName, storedPhone, JSON.stringify(items), input.note, slot,
     priced.subtotal, priced.offer, priced.total,
     input.organizationId, input.locationId, input.channel, notificationPhone, contactBasis, contactCapturedAt, now, now,
-    input.organizationId, input.locationId, input.organizationId, user.id, input.locationId,
+    input.organizationId, input.locationId, input.organizationId, actor.id, input.locationId,
     input.organizationId, latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
   );
   const event = db().prepare(
     `INSERT INTO events(id,order_id,status,actor,note,created_at)
      SELECT ?,id,'preparing',?,'Commande équipe enregistrée',? FROM orders
      WHERE id=? AND user_id=? AND idempotency=? AND organization_id=? AND location_id=? AND channel=?`,
-  ).bind(`${id}:1`, user.id, now, id, user.id, input.key, input.organizationId, input.locationId, input.channel);
+  ).bind(`${id}:1`, actor.id, now, id, actor.id, input.key, input.organizationId, input.locationId, input.channel);
   const printJob = db().prepare(
     `INSERT OR IGNORE INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at)
      SELECT ?,?,?,?,id,'kitchen_ticket',?,'pending',0,?,?,? FROM orders
@@ -158,11 +184,12 @@ async function postOrder(request: Request, url: URL) {
   if (!result[0]?.meta.changes) {
     const duplicate = await db().prepare(
       'SELECT id,total,status,slot,location_id,channel FROM orders WHERE user_id=? AND idempotency=? AND organization_id=? AND location_id=? AND channel=?',
-    ).bind(user.id, input.key, input.organizationId, input.locationId, input.channel).first<{
+    ).bind(actor.id, input.key, input.organizationId, input.locationId, input.channel).first<{
       id: string; total: number; status: string; slot: string; location_id: string; channel: string;
     }>();
     if (duplicate) return json({order: orderResponse(duplicate)});
-    const stillAuthorized = await loadStaffScope(db(), user.id, {organizationId: input.organizationId, locationId: input.locationId});
+    if (actor.deviceRole) fail(409, 'La commande borne a déjà été enregistrée ou le créneau est complet.');
+    const stillAuthorized = await loadStaffScope(db(), actor.id, {organizationId: input.organizationId, locationId: input.locationId});
     if (!stillAuthorized || !staffOrderChannelAllowed(stillAuthorized.roles, input.channel)) fail(403, 'Votre accès à cet établissement a changé. Actualisez votre session.');
     fail(409, 'Le créneau est complet ou la configuration a changé. Actualisez les disponibilités et réessayez.');
   }

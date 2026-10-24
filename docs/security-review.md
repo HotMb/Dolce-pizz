@@ -43,6 +43,12 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 - Les jobs sont idempotents par `operation_id`; les tentatives sont limitées à cinq avant l’état `failed`.
 - Le payload ne contient pas de donnée bancaire. L’adaptateur matériel doit filtrer ses logs et ne jamais exposer le jeton.
 
+### Commande borne
+
+- Un jeton `kiosk` est accepté uniquement pour l’organisation et l’établissement qui l’ont enrôlé, avec appareil actif et credential non expiré ou révoqué.
+- Une borne ne peut créer que des commandes `channel='kiosk'`; elle ne peut pas appeler les canaux comptoir ou téléphone ni choisir un autre site.
+- Le client est invité sans session partagée; les prix, allergènes, créneaux, capacité et snapshots de production restent calculés et validés côté serveur.
+
 ## Limites ouvertes avant une vraie exploitation
 
 1. **Le produit multi-enseignes reste incomplet.** Les objets clients, équipe, catalogue, KDS, fidélité et campagnes sont maintenant scoppés en base. Le domaine public et le back-office utilisent encore les constantes Dolce/Ronchin; il manque un résolveur de tenant de confiance, l’onboarding d’une enseigne et des réglages propres à chaque établissement. Tourcoing n’est pas encore configuré.

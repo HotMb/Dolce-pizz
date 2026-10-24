@@ -54,6 +54,8 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  context.after(()=>{hook.deregister();delete globals.__dolceIntegrationEnvironment;database.close();});
  const web=await import('../app/api/[...path]/route');
  const staff=await import('../app/api/staff/route');
+ const staffOrders=await import('../app/api/staff/orders/route');
+ const devices=await import('../app/api/staff/devices/route');
  const production=await import('../app/api/production/route');
  const notifications=await import('../app/api/internal/notifications/route');
  type Handler=(request:Request)=>Promise<Response>;
@@ -211,24 +213,34 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.equal((await call(production.GET,'production?organizationId=other-brand&locationId=other-site&station=oven','GET',undefined,ownerCookie)).response.status,403);
  const initial=await call<{orders:{orderId:string;revision:number;items:{id:string}[]}[]}>(production.GET,`production?${query}&station=make_line`,'GET',undefined,ownerCookie);
  assert.equal(initial.response.status,200);assert.equal(initial.body.orders.length,1);
- const itemId=initial.body.orders[0].items[0].id;let revision=initial.body.orders[0].revision;
- assert.equal((await call(production.POST,`production?${query}`,'POST',{orderId,action:'ready',station:'expeditor',expectedRevision:revision},ownerCookie)).response.status,409);
- assert.equal((await call(production.POST,`production?${query}`,'POST',{orderId,action:'start',station:'make_line',itemId,expectedRevision:revision},workerCookie)).response.status,403);
+ const productionOrder=initial.body.orders[0];
+ const activeOrderId=orderId;
+ const itemId=productionOrder.items[0].id;let revision=productionOrder.revision;
+ const premature=await call(production.POST,`production?${query}`,'POST',{orderId:activeOrderId,action:'ready',station:'expeditor',expectedRevision:revision},ownerCookie);
+ assert.equal(premature.response.status,409,JSON.stringify({request:{orderId:activeOrderId,revision},response:premature.body,initial:initial.body}));
+ assert.equal((await call(production.POST,`production?${query}`,'POST',{orderId:activeOrderId,action:'start',station:'make_line',itemId,expectedRevision:revision},workerCookie)).response.status,403);
  for(const station of ['make_line','oven','expeditor']){
   for(const action of ['start','complete']){
-   const result=await call<{revision:number}>(production.POST,`production?${query}`,'POST',{orderId,action,station,itemId,expectedRevision:revision},station==='oven'?workerCookie:ownerCookie);
+   const result=await call<{revision:number}>(production.POST,`production?${query}`,'POST',{orderId:activeOrderId,action,station,itemId,expectedRevision:revision},station==='oven'?workerCookie:ownerCookie);
    assert.equal(result.response.status,200,`${station}/${action}: ${JSON.stringify(result.body)}`);revision=result.body.revision;
   }
  }
- const ready=await call(production.POST,`production?${query}`,'POST',{orderId,action:'ready',station:'expeditor',expectedRevision:revision},ownerCookie);
+ const ready=await call(production.POST,`production?${query}`,'POST',{orderId:activeOrderId,action:'ready',station:'expeditor',expectedRevision:revision},ownerCookie);
  assert.equal(ready.response.status,200,JSON.stringify(ready.body));
- assert.equal(database.prepare('SELECT status FROM orders WHERE id=?').get(orderId)?.status,'ready');
- assert.equal(database.prepare('SELECT COUNT(*) AS n FROM notification_outbox WHERE order_id=?').get(orderId)?.n,1);
+ assert.equal(database.prepare('SELECT status FROM orders WHERE id=?').get(activeOrderId)?.status,'ready');
+ assert.equal(database.prepare('SELECT COUNT(*) AS n FROM notification_outbox WHERE order_id=?').get(activeOrderId)?.n,1);
  const dry=await call<{eligible:number;claimed:number}>(notifications.POST,'internal/notifications','POST',{dryRun:true},'',{authorization:`Bearer ${dispatchSecret}`});
  assert.equal(dry.response.status,200);assert.equal(dry.body.eligible,1);assert.equal(dry.body.claimed,0);
  const live=await call(notifications.POST,'internal/notifications','POST',{},'',{authorization:`Bearer ${dispatchSecret}`});
  assert.equal(live.response.status,503); // No provider key in the integration environment; no network send.
- assert.equal(database.prepare('SELECT status FROM notification_outbox WHERE order_id=?').get(orderId)?.status,'pending');
+ assert.equal(database.prepare('SELECT status FROM notification_outbox WHERE order_id=?').get(activeOrderId)?.status,'pending');
+ const kioskHeaders=new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie});
+ const kioskEnrollment=await devices.POST(new Request('http://localhost/api/staff/devices',{method:'POST',headers:kioskHeaders,body:JSON.stringify({...scope,action:'enroll',label:'Borne client',role:'kiosk'})}));
+ assert.equal(kioskEnrollment.status,201);
+ const kioskCredential=(await kioskEnrollment.json() as {credential:string}).credential;
+ const kioskOrder=await staffOrders.POST(new Request('http://localhost/api/staff/orders',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json',authorization:`Bearer ${kioskCredential}`},body:JSON.stringify({key:crypto.randomUUID(),...scope,channel:'kiosk',customerName:'Client borne',customerPhone:'',readySmsConfirmed:false,slot:new Date(Date.parse(input.slot)+3600000).toISOString(),note:'',items:[{id:product.id,size:'senior',quantity:1,option:''}]})}));
+ assert.equal(kioskOrder.status,201,await kioskOrder.text());
+ assert.equal(database.prepare("SELECT channel,status FROM orders WHERE channel='kiosk' ORDER BY created_at DESC LIMIT 1").get()?.channel,'kiosk');
  const revoke=await call(staff.POST,'staff','POST',{action:'revoke',...scope,membershipId:grant.body.membershipId},ownerCookie);
  assert.equal(revoke.response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,workerCookie)).response.status,403);
