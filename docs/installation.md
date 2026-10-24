@@ -89,6 +89,13 @@ En production, cette valeur reste disponible pour les installations historiques,
 
 Les réglages d’horaires, de capacité et de fidélité sont stockés par établissement dans `location_config` (migration `0014`). Une installation historique qui n’a pas encore activé ses réglages locaux utilise temporairement son modèle organisationnel; l’onboarding d’une nouvelle enseigne crée directement le réglage de son premier site.
 
+### Connecter Uber Eats
+
+1. Créer une ligne `delivery_integrations` pour chaque magasin avec le `provider` `uber_eats`, l’identifiant de magasin Uber et le couple organisation/établissement correspondant. Cette opération est réservée au back-office propriétaire.
+2. Configurer `UBER_EATS_WEBHOOK_SECRET` dans le Worker et déclarer `/api/integrations/uber/webhook` auprès du partenaire.
+3. Le webhook doit envoyer `X-Uber-Signature` et un événement normalisé contenant `eventId`, `eventType`, `storeId`, `orderId`, `totalCents` et les articles avec leur SKU local.
+4. Une commande importée apparaît dans le POS avec `channel=uber_eats`, paiement déjà réglé par l’agrégateur et retrait de toute notification SMS. Un SKU inconnu ou une fiche sans routage/allergènes validés reste bloqué dans le KDS jusqu’à correction du menu.
+
 1. Installer un routeur professionnel; réserver un réseau/SSID aux appareils POS/KDS et empêcher les clients Wi-Fi d’accéder aux appareils métier.
 2. Raccorder le relais local et l’imprimante cuisine en Ethernet si possible; donner une alimentation protégée au relais, au routeur et à l’imprimante. Le relais utilise le rôle d’appareil `printer_gateway` et récupère les jobs sur `/api/internal/print-jobs` avec son jeton Bearer; le jeton n’est jamais imprimé dans les journaux.
 3. Installer des écrans tactiles lisibles depuis le poste de travail, avec supports fixes et alimentation sécurisée.
