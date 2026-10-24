@@ -276,13 +276,16 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(healthResponse.status,200,healthText);
   const healthBody = JSON.parse(healthText) as {overall:string;checks:Array<{id:string;status:string;details:Record<string,number>}>};
   assert.ok(['ok','attention'].includes(healthBody.overall));
-  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','printing','delivery_integrations']);
+  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','printing','delivery_integrations','payment_terminal']);
   const deliveryHealth = healthBody.checks.find(check => check.id === 'delivery_integrations');
   assert.equal(deliveryHealth?.status, 'attention');
   assert.equal(deliveryHealth?.details.errors, 1);
   const deviceHealth = healthBody.checks.find(check => check.id === 'devices');
   assert.equal(deviceHealth?.status, 'attention');
   assert.ok(Number(deviceHealth?.details.expired) >= 1);
+  const terminalHealth = healthBody.checks.find(check => check.id === 'payment_terminal');
+  assert.equal(terminalHealth?.status, 'attention');
+  assert.equal(terminalHealth?.details.configured, false);
   const auditResponse = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza', {headers:new Headers({cookie:ownerCookie})}));
   assert.equal(auditResponse.status,200);
   assert.ok(Array.isArray((await auditResponse.json() as {entries:Array<{action:string}>}).entries));

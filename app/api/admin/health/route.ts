@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {staffSessionUser} from '@/lib/auth';
 import {db, ensureSeed} from '@/lib/server';
+import {paymentTerminalStatus} from '@/lib/payment-terminal';
 
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, {status, headers: {'Cache-Control': 'no-store'}});
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
       {id: 'notifications', status: Number(notifications?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(notifications?.open || 0), errors: Number(notifications?.errors || 0)}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
       {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},
+      {id: 'payment_terminal', status: paymentTerminalStatus().configured ? 'ok' : 'attention', details: {configured: paymentTerminalStatus().configured, provider: paymentTerminalStatus().provider}},
     ];
     const overall: CheckStatus = checks.some(check => check.status === 'blocked') ? 'blocked' : checks.some(check => check.status === 'attention') ? 'attention' : 'ok';
     return json({organizationId: parsed.organizationId, locationId: parsed.locationId || null, checkedAt: new Date().toISOString(), overall, checks});

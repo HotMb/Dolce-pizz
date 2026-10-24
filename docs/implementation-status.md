@@ -52,4 +52,4 @@ Les campagnes sont une capacité d’organisation réservée à un propriétaire
 
 ## Suite prioritaire
 
-Brancher un TPE certifié derrière l’adaptateur en échec fermé, finaliser l’intégration d’impression locale et valider les obligations françaises de caisse. Ensuite, configurer les données réelles de Tourcoing/Ronchin, l’accès partenaire Uber Eats, le MDM des bornes/tablettes, la supervision et les procédures de sauvegarde. Les SMS réels exigent aussi un secret Brevo, un ordonnanceur et une validation contrôlée de délivrabilité.
+Brancher un TPE certifié derrière l’adaptateur en échec fermé; la supervision signale maintenant explicitement `payment_terminal=attention` tant qu’aucun fournisseur n’est configuré. Finaliser l’intégration d’impression locale et valider les obligations françaises de caisse. Ensuite, configurer les données réelles de Tourcoing/Ronchin, l’accès partenaire Uber Eats, le MDM des bornes/tablettes, la supervision et les procédures de sauvegarde. Les SMS réels exigent aussi un secret Brevo, un ordonnanceur et une validation contrôlée de délivrabilité.
