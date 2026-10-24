@@ -1,12 +1,12 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {db, ensureSeed, ingredientList, productList, settings} from '@/lib/server';
-import {staffSessionUser, normalizePhone} from '@/lib/auth';
+import {staffSessionUser} from '@/lib/auth';
 import {allowedSlot, slots} from '@/lib/rules';
 import {priceCart} from '@/lib/pricing';
 import {snapshotPricedLines} from '@/lib/production-repository';
 import {loadStaffScope} from '@/lib/staff-access';
-import {hasStaffOrderAccess, staffOrderChannelAllowed, staffOrderInputSchema, staffOrderSqlGuard} from '@/lib/staff-orders';
+import {confirmedOrderContact, hasStaffOrderAccess, staffOrderChannelAllowed, staffOrderInputSchema, staffOrderSqlGuard} from '@/lib/staff-orders';
 import {readBoundedRequestText} from '@/lib/staff-access';
 
 export const dynamic = 'force-dynamic';
@@ -145,12 +145,7 @@ async function postOrder(request: Request, url: URL) {
     fail(409, 'La carte ou ce créneau vient de changer. Actualisez les disponibilités et réessayez.');
   }
   const items = snapshotPricedLines(priced.lines, products, ingredients);
-  const normalizedPhone = input.customerPhone ? normalizePhone(input.customerPhone) : null;
-  const contactConfirmed = !!normalizedPhone && input.readySmsConfirmed;
-  const storedPhone = contactConfirmed ? `0${normalizedPhone!.slice(3)}` : '';
-  const notificationPhone = contactConfirmed ? normalizedPhone! : '';
-  const contactBasis = contactConfirmed ? 'staff_confirmed' : 'none';
-  const contactCapturedAt = contactConfirmed ? new Date().toISOString() : null;
+  const contact = confirmedOrderContact(input);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const sqlGuard = staffOrderSqlGuard(input.channel);
@@ -166,9 +161,9 @@ async function postOrder(request: Request, url: URL) {
       AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled')) < ?
     ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING`,
     ).bind(
-    id, actor.id, input.key, input.customerName, storedPhone, JSON.stringify(items), input.note, slot,
+    id, actor.id, input.key, input.customerName, contact.phone, JSON.stringify(items), input.note, slot,
     priced.subtotal, priced.offer, priced.total,
-    input.organizationId, input.locationId, input.channel, serviceMode, tableLabel, notificationPhone, contactBasis, contactCapturedAt, now, now,
+    input.organizationId, input.locationId, input.channel, serviceMode, tableLabel, contact.notificationPhone, contact.basis, contact.capturedAt, now, now,
     input.organizationId, input.locationId, input.organizationId, actor.id, input.locationId,
     input.organizationId, input.locationId, input.organizationId, latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
   );
