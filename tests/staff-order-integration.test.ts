@@ -267,6 +267,9 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const kioskEnrollment=await devices.POST(new Request('http://localhost/api/staff/devices',{method:'POST',headers:kioskHeaders,body:JSON.stringify({...scope,action:'enroll',label:'Borne client',role:'kiosk'})}));
  assert.equal(kioskEnrollment.status,201);
  const kioskCredential=(await kioskEnrollment.json() as {credential:string}).credential;
+ const kioskBootstrap=await deviceBootstrap.GET(new Request('http://localhost/api/device/bootstrap',{headers:{authorization:`Bearer ${kioskCredential}`}}));
+ assert.equal(kioskBootstrap.status,200);
+ assert.equal((await kioskBootstrap.json() as {scope:{locationId:string};device:{role:string}}).device.role,'kiosk');
  const kioskOrder=await staffOrders.POST(new Request('http://localhost/api/staff/orders',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json',authorization:`Bearer ${kioskCredential}`},body:JSON.stringify({key:crypto.randomUUID(),...scope,channel:'kiosk',customerName:'Client borne',customerPhone:'',readySmsConfirmed:false,slot:new Date(Date.parse(input.slot)+3600000).toISOString(),note:'',items:[{id:product.id,size:'senior',quantity:1,option:''}]})}));
  assert.equal(kioskOrder.status,201,await kioskOrder.text());
  assert.equal(database.prepare("SELECT channel,status FROM orders WHERE channel='kiosk' ORDER BY created_at DESC LIMIT 1").get()?.channel,'kiosk');
