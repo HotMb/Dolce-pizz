@@ -276,6 +276,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const deliveryNow = new Date().toISOString();
   database.prepare("INSERT INTO delivery_inbox(provider,event_id,external_order_id,organization_id,location_id,event_type,payload_hash,payload,status,received_at,error) VALUES('uber_eats',?,?,?,?,?,'hash','{}','failed',?,?)").run('health-event','health-order','dolce-pizza','ronchin','order.created',deliveryNow,'sandbox failure');
   database.prepare("UPDATE device_credentials SET expires_at=1 WHERE device_id=? AND revoked_at IS NULL").run(printer.body.device.id);
+  database.prepare("UPDATE device_credentials SET expires_at=? WHERE device_id=(SELECT id FROM devices WHERE organization_id='dolce-pizza' AND location_id='ronchin' AND role='oven' AND status='active' LIMIT 1) AND revoked_at IS NULL").run(Date.now()+3*24*60*60*1000);
   database.prepare("INSERT INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,updated_at) VALUES(?,?,?,?,?,'order_ready','{}','unknown',1,?,?,?)").run('notification-reconcile-test','notification-op-reconcile','dolce-pizza','ronchin','ready-order',now,now,now);
   const reconcile = await notifications.POST(new Request('http://localhost/api/admin/notifications', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',notificationId:'notification-reconcile-test',resolution:'accepted'})}));
   assert.equal(reconcile.status,200,await reconcile.text());
@@ -295,6 +296,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const deviceHealth = healthBody.checks.find(check => check.id === 'devices');
   assert.equal(deviceHealth?.status, 'attention');
   assert.ok(Number(deviceHealth?.details.expired) >= 1);
+  assert.ok(Number(deviceHealth?.details.expiringSoon) >= 1);
   assert.ok(Number(deviceHealth?.details.kds) >= 1);
   assert.ok(Number(deviceHealth?.details.pos) >= 0);
   assert.ok(Number(deviceHealth?.details.kiosks) >= 0);
