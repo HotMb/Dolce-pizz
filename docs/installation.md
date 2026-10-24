@@ -96,6 +96,10 @@ Les réglages d’horaires, de capacité et de fidélité sont stockés par éta
 3. Le webhook doit envoyer `X-Uber-Signature` et un événement normalisé contenant `eventId`, `eventType`, `storeId`, `orderId`, `totalCents` et les articles avec leur SKU local.
 4. Une commande importée apparaît dans le POS avec `channel=uber_eats`, paiement déjà réglé par l’agrégateur et retrait de toute notification SMS. Un SKU inconnu ou une fiche sans routage/allergènes validés reste bloqué dans le KDS jusqu’à correction du menu.
 
+### Reporting franchiseur
+
+`GET /api/admin/reports?organizationId=<id>&from=AAAA-MM-JJ&to=AAAA-MM-JJ` fournit au propriétaire les totaux de commandes, chiffre d’affaires encaissé, annulations, détail par établissement, canal et moyen de paiement. La période est limitée à 31 jours; les requêtes sont toujours filtrées par l’organisation du propriétaire et aucune donnée client brute n’est renvoyée.
+
 1. Installer un routeur professionnel; réserver un réseau/SSID aux appareils POS/KDS et empêcher les clients Wi-Fi d’accéder aux appareils métier.
 2. Raccorder le relais local et l’imprimante cuisine en Ethernet si possible; donner une alimentation protégée au relais, au routeur et à l’imprimante. Le relais utilise le rôle d’appareil `printer_gateway` et récupère les jobs sur `/api/internal/print-jobs` avec son jeton Bearer; le jeton n’est jamais imprimé dans les journaux.
 3. Installer des écrans tactiles lisibles depuis le poste de travail, avec supports fixes et alimentation sécurisée.
