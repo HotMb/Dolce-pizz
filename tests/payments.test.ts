@@ -285,6 +285,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const auditResponse = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza', {headers:new Headers({cookie:ownerCookie})}));
   assert.equal(auditResponse.status,200);
   assert.ok(Array.isArray((await auditResponse.json() as {entries:Array<{action:string}>}).entries));
+  const auditCsv = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza&format=csv', {headers:new Headers({cookie:ownerCookie})}));
+  assert.equal(auditCsv.status,200);
+  assert.match(await auditCsv.text(),/id;établissement;membership/);
   const auditForbidden = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza', {headers:new Headers({cookie:workerCookie})}));
   assert.equal(auditForbidden.status,403);
   const revokeResponse = await sessionRevoke.POST(new Request('http://localhost/api/staff/sessions', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId: 'dolce-pizza', locationId: 'ronchin', principalId: 'worker'})}));
