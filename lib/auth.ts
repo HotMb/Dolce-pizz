@@ -12,6 +12,16 @@ const sha256=async(s:string)=>hex(new Uint8Array(await crypto.subtle.digest('SHA
 export function normalizePhone(raw:string){const m=/^(?:\+33|0033|0)([67]\d{8})$/.exec(raw.replace(/[\s.\-()]/g,''));return m?`+33${m[1]}`:null;}
 export const localPhone=(phone:string)=>`0${phone.slice(3)}`.replace(/(\d{2})(?=\d)/g,'$1 ');
 const readCookie=(header:string|null,name=COOKIE)=>header?.split(/;\s*/).find(v=>v.startsWith(`${name}=`))?.slice(name.length+1)||'';
+type InternalAccessKey={id?:string;key?:string;keyHash?:string;principalId?:string;phone?:string;target?:string};
+const internalAccessKeys=():InternalAccessKey[]=>{const raw=vars.INTERNAL_ACCESS_KEYS_JSON?.trim();if(!raw)return [];try{const parsed=JSON.parse(raw);return Array.isArray(parsed)?parsed.filter(item=>item&&typeof item==='object').slice(0,50) as InternalAccessKey[]:[];}catch{return [];}};
+const safeTarget=(value:string|undefined)=>value&&value.startsWith('/')&&!value.startsWith('//')&&!value.startsWith('/\\')?value:'/interne';
+export async function verifyInternalAccessKey(input:string){
+ const supplied=input.trim();if(supplied.length<8||supplied.length>200)return null;const suppliedHash=await sha256(supplied);
+ const configured=internalAccessKeys().find(item=>typeof item.keyHash==='string'&&/^[0-9a-f]{64}$/i.test(item.keyHash)?item.keyHash.toLowerCase()===suppliedHash:typeof item.key==='string'&&item.key===supplied);if(!configured)return null;
+ const principalId=configured.principalId?.trim()||'',phone=normalizePhone(configured.phone||'');
+ const user=principalId?await db().prepare('SELECT id,phone,name FROM users WHERE id=?').bind(principalId).first<Member>():phone?await db().prepare('SELECT id,phone,name FROM users WHERE phone=?').bind(phone).first<Member>():null;if(!user)return null;
+ const token=hex(crypto.getRandomValues(new Uint8Array(32))),now=new Date().toISOString();await db().prepare('INSERT INTO sessions(id,user_id,expires_at,created_at,audience) VALUES(?,?,?,?,?)').bind(await sha256(token),user.id,Date.now()+STAFF_SESSION_HOURS*HOUR,now,'staff').run();return {token,target:safeTarget(configured.target),user};
+}
 const cookieTokens=(header:string|null,names:string[])=>names.map(name=>readCookie(header,name)).filter((token,index,all)=>/^[0-9a-f]{64}$/.test(token)&&all.indexOf(token)===index);
 const findSession=async(tokens:string[],where:string,bindings:unknown[])=>{
  for(const token of tokens){

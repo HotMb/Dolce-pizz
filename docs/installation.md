@@ -56,6 +56,16 @@ Le script Windows `lancer-site.cmd` sélectionne automatiquement Node 24.5.0 lor
 
    ```text
    BREVO_API_KEY=<clé de test, facultative en local>
+
+### Accès direct aux postes internes
+
+Pour un poste de pizzeria, ajoutez dans `.env.local` une clé associée à un compte déjà présent dans la base :
+
+```dotenv
+INTERNAL_ACCESS_KEYS_JSON=[{"id":"otto-admin","key":"remplacer-par-une-cle-longue","phone":"06XXXXXXXX","target":"/equipe"},{"id":"pos-ronchin","key":"une-autre-cle-longue","phone":"06XXXXXXXX","target":"/equipe/commande"},{"id":"four-ronchin","key":"une-cle-four-longue","phone":"06XXXXXXXX","target":"/production?station=oven"}]
+```
+
+Le compte indiqué par `phone` doit déjà avoir le rôle correspondant dans l’établissement. La clé ouvre une session équipe de 12 heures, puis le serveur applique les droits habituels. Pour un déploiement hébergé, utilisez `keyHash` (SHA-256) à la place de `key` et ne mettez jamais une clé réelle dans Git.
    SMS_SENDER=DolcePizz
    ADMIN_SETUP_CODE=<secret de test long et unique>
    MARKETING_STOP_SECRET=<secret aléatoire long, différent du code admin>
