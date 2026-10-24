@@ -17,6 +17,7 @@
     "db:migrate:local": "node scripts/migrate-local.mjs",
     "db:backup": "node scripts/backup-d1.mjs",
     "db:verify-backup": "node scripts/verify-backup.mjs",
+    "db:restore-isolated": "node scripts/restore-backup-isolated.mjs",
     "preflight:production": "node scripts/security-scan.mjs --include-env && node scripts/preflight-production.mjs",
     "security:scan": "node scripts/security-scan.mjs",
     "security:scan:env": "node scripts/security-scan.mjs --include-env",

@@ -174,6 +174,14 @@ Après un build, `npm run db:backup` exporte la base D1 locale dans `backups/` (
 
 Pour valider un export avant restauration, utiliser `npm run db:verify-backup -- --file=backups/nom-du-fichier.sql`. Le fichier doit rester sous `backups/`; le contrôle restaure le SQL en mémoire, active les clés étrangères et échoue si une référence est invalide.
 
+Pour produire une copie locale restaurée et vérifiable sans toucher à la base active, utiliser :
+
+```bash
+npm run db:restore-isolated -- --file=backups/nom-du-fichier.sql --output=backups/restore-check.sqlite
+```
+
+La commande refuse les chemins hors de `backups/`, une sortie qui existe déjà (sauf avec `--replace`) et une sortie qui n’est pas un fichier SQLite. Elle exécute `integrity_check` et `foreign_key_check`, puis supprime la copie si la restauration échoue. Ouvrir cette copie uniquement pour une recette de contrôle; elle ne remplace pas la restauration D1 de production.
+
 ## 7. Validation restante avant une installation de production
 
 Les parcours logiciels principaux sont présents. L’ouverture d’un établissement reste conditionnée aux preuves de la checklist et aux validations suivantes :

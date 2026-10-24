@@ -52,7 +52,7 @@ Si un poste affiche « trop de tentatives » lors de son bootstrap, ne pas multi
 1. Stopper les écritures non indispensables et identifier l’heure de la dernière sauvegarde valide.
 2. Exporter avec `npm run db:backup` ou, après authentification Wrangler, `npm run db:backup -- --remote`.
 3. Valider l’export avec `npm run db:verify-backup -- --file=backups/<export>.sql` avant toute restauration.
-4. Restaurer dans une base isolée, vérifier les migrations et les clés étrangères, puis exécuter un scénario de commande/KDS de contrôle.
+4. Restaurer dans une copie locale isolée avec `npm run db:restore-isolated -- --file=backups/<export>.sql --output=backups/restore-check.sqlite`, vérifier les migrations et les clés étrangères, puis exécuter un scénario de commande/KDS de contrôle.
 5. Documenter l’heure de reprise, les commandes potentiellement touchées et la décision de remise en service. Ne jamais restaurer directement sur la base de production sans procédure Cloudflare validée.
 
 ## Compromission ou fuite de données
