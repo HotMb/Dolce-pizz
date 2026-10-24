@@ -75,6 +75,9 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
   return verified.response.headers.get('set-cookie')!.split(';')[0];
  }
  const ownerCookie=await login('0600000001');
+ const publicCatalog=await call<{location:{id:string;locality:string;postalCode:string;phone:string}}>(web.GET,'catalog');
+ assert.equal(publicCatalog.response.status,200);
+ assert.deepEqual(publicCatalog.body.location,{id:'ronchin',name:'Dolce Pizz’ — Ronchin',addressLine1:'191 avenue Jean-Jaurès',postalCode:'59790',locality:'Ronchin',phone:'+33 3 20 40 09 01',countryCode:'FR',timezone:'Europe/Paris'});
  const workerCookie=await login('0600000002');
  const before=await call<{account:{id:string};scopes:unknown[]}>(staff.GET,'staff','GET',undefined,ownerCookie);
  assert.deepEqual(before.body.scopes,[]);

@@ -13,6 +13,7 @@ import {defaultSettings,parisParts,minutes,type Settings} from '@/lib/rules';
 import {priceCart,isPizza,unitPrice,MAX_EXTRAS,type CartLine,type FreePizza,type Menu} from '@/lib/pricing';
 import {PizzaPhoto} from './pizza-photo';
 import {useIsMobile} from '@/hooks/use-mobile';
+import type {PublicLocation} from '@/lib/server';
 export type {CartLine};
 /** A line as stored with the order: names rather than ids, so tickets stay readable if the menu changes. */
 export type OrderItem={id:string;name:string;size:CartLine['size'];option:string;quantity:number;unitPrice:number;total?:number;free?:FreePizza;ticket?:boolean;without?:string[];extra?:string[];extrasPrice?:number};
@@ -51,23 +52,24 @@ export function useResource<T>(path:string,interval=0){
 }
 
 type Mods={removed:string[];added:string[]};type FreeChoice={id:string;option:string}&Mods;
-type Shop={products:Product[];ingredients:Ingredient[];menu:Menu;settings:Settings;loaded:boolean;cartReady:boolean;error:string;cart:CartLine[];setCart:React.Dispatch<React.SetStateAction<CartLine[]>>;add:(p:Product,size:CartLine['size'],option:string,qty:number,mods:Mods,free?:FreeChoice)=>void;cartOpen:boolean;setCartOpen:(v:boolean)=>void;priced:ReturnType<typeof priceCart>;subtotal:number;refresh:()=>void};
+type Shop={products:Product[];ingredients:Ingredient[];menu:Menu;settings:Settings;location:PublicLocation;loaded:boolean;cartReady:boolean;error:string;cart:CartLine[];setCart:React.Dispatch<React.SetStateAction<CartLine[]>>;add:(p:Product,size:CartLine['size'],option:string,qty:number,mods:Mods,free?:FreeChoice)=>void;cartOpen:boolean;setCartOpen:(v:boolean)=>void;priced:ReturnType<typeof priceCart>;subtotal:number;refresh:()=>void};
 const Context=createContext<Shop>(null!);export const useShop=()=>useContext(Context);
+const defaultLocation:PublicLocation={id:'ronchin',name:'Dolce Pizz’ Ronchin',addressLine1:'191 avenue Jean-Jaurès',postalCode:'59790',locality:'Ronchin',phone:'03 20 40 09 01',countryCode:'FR',timezone:'Europe/Paris'};
 const sorted=(v?:string[])=>[...(v||[])].sort().join(',');
 const sameLine=(a:CartLine,b:CartLine)=>a.id===b.id&&a.size===b.size&&a.option===b.option&&(a.freeId||'')===(b.freeId||'')&&(a.freeOption||'')===(b.freeOption||'')&&sorted(a.removed)===sorted(b.removed)&&sorted(a.added)===sorted(b.added)&&sorted(a.freeRemoved)===sorted(b.freeRemoved)&&sorted(a.freeAdded)===sorted(b.freeAdded);
 // Only non-empty changes are stored, so a plain pizza keeps the same cart line as before customisation existed.
 const withMods=(key:'removed'|'added'|'freeRemoved'|'freeAdded',ids:string[])=>ids.length?{[key]:ids}:{};
 export function Providers({children,cartDrawer=true,storageKey=cartKey}:{children:React.ReactNode;cartDrawer?:boolean;storageKey?:string}){
- const source=useResource<{products:Product[];ingredients:Ingredient[];settings:Settings}>('catalog',45000);const[cart,setCart]=useState<CartLine[]>([]);const[ready,setReady]=useState(false);const[cartOpen,setCartOpen]=useState(false);
+ const source=useResource<{products:Product[];ingredients:Ingredient[];settings:Settings;location:PublicLocation|null}>('catalog',45000);const[cart,setCart]=useState<CartLine[]>([]);const[ready,setReady]=useState(false);const[cartOpen,setCartOpen]=useState(false);
  useEffect(()=>{const hydrate=window.setTimeout(()=>{setCart(readCart(storageKey));setReady(true);},0);return()=>window.clearTimeout(hydrate);},[storageKey]);
  useEffect(()=>{if(ready)writeCart(cart,storageKey);},[cart,ready,storageKey]);
  // Until the live menu arrives, the opening menu keeps the page complete (it is what the database starts with).
- const products=source.data?.products||seedCatalog,ingredients=source.data?.ingredients||seedIngredients,settings=source.data?.settings||defaultSettings;
+ const products=source.data?.products||seedCatalog,ingredients=source.data?.ingredients||seedIngredients,settings=source.data?.settings||defaultSettings,location=source.data?.location||defaultLocation;
  const menu:Menu={products,ingredients,extraPrice:settings.extraPrice};const priced=priceCart(cart,menu);
  // On phones, toasts sit at the top so they never cover the cart bar or the drawer's checkout button.
  const mobile=useIsMobile();
  const add=(p:Product,size:CartLine['size'],option:string,quantity:number,mods:Mods,free?:FreeChoice)=>{const line:CartLine={id:p.id,size,option,quantity,...withMods('removed',mods.removed),...withMods('added',mods.added),...(free?{freeId:free.id,freeOption:free.option,...withMods('freeRemoved',free.removed),...withMods('freeAdded',free.added)}:{})};setCart(rows=>{const at=rows.findIndex(l=>sameLine(l,line));return at<0?[...rows,line]:rows.map((l,i)=>i===at?{...l,quantity:Math.min(20,l.quantity+quantity)}:l);});toast.success(free?`${p.name} + pizza offerte ajoutées au panier`:`${p.name} ajoutée au panier`);};
- return <Context.Provider value={{products,ingredients,menu,settings,loaded:!!source.data,cartReady:ready,error:source.error,cart,setCart,add,cartOpen,setCartOpen,priced,subtotal:priced.subtotal,refresh:source.refresh}}>{children}{cartDrawer&&<CartDrawer/>}<Toaster position={mobile?'top-center':'bottom-center'} theme="dark" closeButton toastOptions={{className:'dolce-toast'}}/></Context.Provider>;
+ return <Context.Provider value={{products,ingredients,menu,settings,location,loaded:!!source.data,cartReady:ready,error:source.error,cart,setCart,add,cartOpen,setCartOpen,priced,subtotal:priced.subtotal,refresh:source.refresh}}>{children}{cartDrawer&&<CartDrawer/>}<Toaster position={mobile?'top-center':'bottom-center'} theme="dark" closeButton toastOptions={{className:'dolce-toast'}}/></Context.Provider>;
 }
 // Add-to-cart feedback: the pizza photo flies into the header cart, which then bounces.
 export function bumpCart(){document.querySelectorAll('.cart-button, .cart-bar').forEach(el=>el.animate([{transform:'scale(1)'},{transform:'scale(1.22)'},{transform:'scale(.96)'},{transform:'scale(1)'}],{duration:520,easing:'cubic-bezier(.3,1.5,.5,1)'}));}
@@ -80,7 +82,7 @@ export function flyToCart(img:HTMLImageElement|null|undefined){
  const dx=b.left+b.width/2-(a.left+a.width/2),dy=b.top+b.height/2-(a.top+a.height/2),s=Math.max(.08,28/a.width);
  clone.animate([{transform:'translate(0,0) scale(1) rotate(0deg)'},{transform:`translate(${dx*.45}px,${dy*.45-90}px) scale(${Math.max(s,.5)}) rotate(160deg)`,offset:.55},{transform:`translate(${dx}px,${dy}px) scale(${s}) rotate(300deg)`,opacity:.6}],{duration:820,easing:'cubic-bezier(.55,0,.25,1)'}).finished.then(()=>{clone.remove();bumpCart();},()=>clone.remove());
 }
-export function Brand(){return <a className="brand" href="/" aria-label="Dolce Pizz’, accueil"><span className="brand-script">Dolce Pizz<span className="brand-apostrophe">’</span></span><span className="brand-line">PIZZERIA ARTISANALE · RONCHIN</span></a>;}
+export function Brand(){const{location}=useShop();return <a className="brand" href="/" aria-label="Dolce Pizz’, accueil"><span className="brand-script">Dolce Pizz<span className="brand-apostrophe">’</span></span><span className="brand-line">PIZZERIA ARTISANALE · {location.locality.toUpperCase()||'FRANCE'}</span></a>;}
 // Live "open until" pill from the admin opening hours (Europe/Paris), refreshed every minute.
 function useOpenStatus(s:Settings){const[now,setNow]=useState(0);useEffect(()=>{const tick=()=>setNow(Date.now());const first=window.setTimeout(tick,0),timer=window.setInterval(tick,60000);return()=>{window.clearTimeout(first);window.clearInterval(timer);};},[]);
  if(!now||!s.hoursConfirmed)return {open:false,label:'03 20 40 09 01',href:'tel:0320400901'};
@@ -91,7 +93,7 @@ function useOpenStatus(s:Settings){const[now,setNow]=useState(0);useEffect(()=>{
  if(p.minute<end)return {open:true,label:`Ouvert jusqu’à ${h.close==='00:00'?'minuit':h.close}`,href:'/#infos'};
  return {open:false,label:'Fermé pour ce soir',href:'/#infos'};}
 export function Header(){const{priced,setCartOpen,settings}=useShop();const n=priced.count;const status=useOpenStatus(settings);return <><a className="skip" href="#contenu">Aller au contenu</a><header className="header"><div className="header-inner"><nav aria-label="Navigation principale"><a href="/#carte">La carte</a><a href="/compte">Le club</a><a href="/#infos">Infos</a></nav><Brand/><div className="header-actions"><a className="account-link" href="/compte">Mon compte</a><a className="mobile-menu-link" href="/#carte">La carte</a><button aria-label={`Ouvrir le panier, ${n} article${n>1?'s':''}`} className="cart-button" onClick={()=>setCartOpen(true)}><ShoppingBag size={17}/><span>Panier</span><b>{n}</b></button><a className={`open-pill ${status.open?'is-open':''}`} href={status.href}><span className="open-dot" aria-hidden="true"/>{status.label}</a></div></div></header></>;}
-export function Footer(){return <footer className="footer"><div className="footer-top"><Brand/><p>Plus qu’une pizza,<br/><em>une passion.</em></p><a href="tel:0320400901"><Phone size={18}/>03 20 40 09 01</a></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Dolce Pizz’ · Ronchin</span><div><a href="/allergenes">Allergènes</a><a href="/informations">Mentions légales & confidentialité</a><a href="/admin">Espace équipe</a></div></div></footer>;}
+export function Footer(){const{location}=useShop();const phone=location.phone.replace(/[^\d+]/g,'');return <footer className="footer"><div className="footer-top"><Brand/><p>Plus qu’une pizza,<br/><em>une passion.</em></p><a href={`tel:${phone}`}><Phone size={18}/>{location.phone}</a></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Dolce Pizz’ · {location.locality||'France'}</span><div><a href="/allergenes">Allergènes</a><a href="/informations">Mentions légales & confidentialité</a><a href="/admin">Espace équipe</a></div></div></footer>;}
 export function Button({children,busy=false,tone='primary',className='',...props}:React.ButtonHTMLAttributes<HTMLButtonElement>&{busy?:boolean;tone?:string}){return <button type="button" {...props} disabled={props.disabled||busy} aria-busy={busy||undefined} className={`btn btn-${tone} ${className}`}>{busy?<Loader2 size={18} className="spin"/>:null}{children}</button>;}
 export function ErrorBox({message,retry}:{message:string;retry?:()=>void}){return message?<div className="error-box" role="alert"><span>{message}</span>{retry&&<button onClick={retry}>Réessayer</button>}</div>:null;}
 export function Field({label,error,id,children,hint}:{label:string;error?:string;id:string;children:React.ReactNode;hint?:string}){return <div className="field"><label htmlFor={id}>{label}</label>{children}{hint&&<p className="field-hint" id={`${id}-hint`}>{hint}</p>}{error&&<p className="field-error" id={`${id}-error`}>{error}</p>}</div>;}
