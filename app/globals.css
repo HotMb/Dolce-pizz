@@ -140,3 +140,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Auth pages reached from the restaurant console keep the operational visual language. */
+body:has(.internal-auth){background:#eef2f5;color:#162536;font-family:"Segoe UI",Arial,sans-serif}
+.internal-auth{color:#162536}
+.internal-auth .auth-panel{max-width:560px;margin:72px auto;padding:36px 34px;text-align:left;border:1px solid #d8e0e8;border-radius:14px;background:#fff;box-shadow:0 10px 28px rgb(35 55 75 / 9%)}
+.internal-auth .auth-panel>svg{margin:0;color:#d94d2f}
+.internal-auth .auth-panel h1{margin:18px 0 10px;font-family:"Segoe UI",Arial,sans-serif;font-size:32px;line-height:1.12;font-weight:800;letter-spacing:-.03em;text-transform:none;color:#162536}
+.internal-auth .auth-panel p{color:#637286;line-height:1.55}
+.internal-auth .auth-panel .btn{background:#d94d2f;border-color:#d94d2f;color:#fff;text-transform:none;letter-spacing:0;border-radius:9px}

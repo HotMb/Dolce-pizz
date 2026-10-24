@@ -45,6 +45,8 @@ body:has(.staff-shell){background:#eef2f5;color:#162536;font-family:"Segoe UI",A
 .staff-shell h1{font-weight:800;letter-spacing:-.035em;text-transform:none}
 .staff-shell h1 span{color:#d94d2f}
 .staff-shell .panel{border:1px solid #d8e0e8;background:#fff;box-shadow:0 8px 24px rgb(35 55 75 / 7%);border-radius:14px}
+.staff-shell input,.staff-shell textarea,.staff-shell select{background:#fff;color:#162536;border-color:#c9d3de}
+.staff-shell input::placeholder,.staff-shell textarea::placeholder{color:#7a8998}
 .staff-shell .staff-eyebrow{color:#d94d2f;letter-spacing:.08em}
 .staff-shell .btn-primary{background:#d94d2f;border-color:#d94d2f;color:#fff}
 .staff-shell .btn-outline{border-color:#b9c7d4;color:#1b3349;background:#fff}
