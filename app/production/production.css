@@ -61,6 +61,11 @@ body:has(.production-shell) .skip{display:none}
 .production-ticket-tags{display:flex;flex-wrap:wrap;gap:7px;padding:11px 17px 2px}
 .production-tag{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:4px 9px;border:1px solid #4b4649;border-radius:999px;color:#f0eeee;font-size:12px;font-weight:750}
 .production-tag.tag-channel{border-color:#7d3c4e;background:#351d24;color:#ffd9e1}
+.production-tag.tag-priority{font-weight:700}
+.production-tag.priority-urgent{border-color:#ff6b5f;background:#5b1f24;color:#ffe4e1}
+.production-tag.priority-a_surveille{border-color:#d6a94f;background:#4b3a18;color:#ffeab0}
+.production-tag.priority-normal{border-color:#66829b;background:#1d3040;color:#d8ecff}
+.production-tag.priority-pret{border-color:#59b983;background:#183d2b;color:#d5ffe6}
 .production-tag.tag-fulfillment{background:#222629;color:#e0e4e6}
 .production-tag.tag-ready{border-color:#378154;background:#123021;color:#a5f5c1}
 .production-order-note{display:flex;align-items:flex-start;gap:8px;margin:12px 17px 0;padding:10px 12px;border-left:4px solid var(--kds-amber);background:#342b17;color:#fff0bb;font-size:14px;line-height:1.4}

@@ -9,6 +9,7 @@ import {
   type ProductionStation,
 } from './production-flow';
 import type {Product} from './catalog';
+import type {ProductionPriority} from './production-priority';
 
 export type SnapshotKind = ProductionItemInput['kind'];
 
@@ -121,6 +122,7 @@ export type ProductionTicketView = {
   note: string;
   status: ProductionOrder['status'];
   revision: number;
+  priority?: ProductionPriority;
   items: Array<ProductionUnitSnapshot & {steps: ProductionOrder['items'][number]['steps']}>;
 };
 
@@ -394,6 +396,7 @@ export function projectProductionTicket(input: {
   payload: ProductionTicketPayload;
   flow: ProductionOrder;
   station: ProductionStation;
+  priority?: ProductionPriority;
 }): ProductionTicketView | null {
   const metaById = new Map(input.payload.units.map((unit) => [unit.id, unit]));
   const items = input.flow.items.flatMap((item) => {
@@ -414,6 +417,7 @@ export function projectProductionTicket(input: {
     note: input.payload.note,
     status: input.flow.status,
     revision: input.flow.revision,
+    ...(input.priority ? {priority: input.priority} : {}),
     items,
   };
 }

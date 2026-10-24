@@ -26,6 +26,7 @@ import {
   productionStateIssue,
   projectProductionTicket,
 } from '@/lib/production-repository';
+import {compareProductionPriority, productionPriority} from '@/lib/production-priority';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,7 +119,7 @@ export async function GET(request: Request) {
     const station: Station = parsedStation.data;
     if (!canOperateStation(access, station, 'read')) throw new ApiError(403, 'Votre rôle ne permet pas de consulter ce poste.');
     const orders = await activeOrders(scope);
-    const tickets = [];
+    const tickets: Array<NonNullable<ReturnType<typeof projectProductionTicket>>> = [];
     for (const order of orders) {
       const ticket = await ensureTicket(order);
       if (!ticket) continue;
@@ -134,9 +135,19 @@ export async function GET(request: Request) {
         payload,
         flow,
         station,
+        priority: productionPriority({
+          slot: payload.slot,
+          status: flow.status,
+          itemCount: payload.units.length,
+          pizzaCount: payload.units.filter((unit) => unit.kind === 'pizza').length,
+        }),
       });
       if (projected) tickets.push(projected);
     }
+    tickets.sort((a, b) => {
+      const priority = compareProductionPriority(a.priority!, b.priority!);
+      return priority || Date.parse(a.slot) - Date.parse(b.slot) || Date.parse(a.createdAt) - Date.parse(b.createdAt);
+    });
     return json({orders: tickets, scope: access});
   } catch (error) {
     return handleError(error);
