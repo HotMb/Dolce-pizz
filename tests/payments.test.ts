@@ -71,6 +71,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const sessionRevoke = await import('../app/api/staff/sessions/route');
   const shifts = await import('../app/api/staff/shifts/route');
   const routing = await import('../app/api/staff/routing/route');
+  const locations = await import('../app/api/admin/locations/route');
   const devices = await import('../app/api/staff/devices/route');
   const heartbeat = await import('../app/api/device/heartbeat/route');
   const printJobs = await import('../app/api/internal/print-jobs/route');
@@ -192,6 +193,11 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal((await call(api.POST, {...base, idempotencyKey: crypto.randomUUID()}, workerCookie)).response.status, 409);
   assert.equal((await routingCall({organizationId: 'dolce-pizza', locationId: 'ronchin', postalCodes: ['59790']}, workerCookie)).response.status, 403);
   assert.equal((await routingCall({organizationId: 'dolce-pizza', locationId: 'ronchin', postalCodes: ['59790']}, ownerCookie)).response.status, 200);
+  const addedLocation = await locations.POST(new Request('http://localhost/api/admin/locations', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId:'dolce-pizza',locationId:'tourcoing',locationCode:'tourcoing',locationName:'Dolce Pizz’ Tourcoing',addressLine1:'1 rue de test',postalCode:'59200',locality:'Tourcoing',phone:'03 20 00 00 00'})}));
+  assert.equal(addedLocation.status, 201, await addedLocation.text());
+  const locationList = await locations.GET(new Request('http://localhost/api/admin/locations?organizationId=dolce-pizza', {headers: new Headers({origin:'http://localhost', cookie: ownerCookie})}));
+  assert.equal(locationList.status, 200);
+  assert.deepEqual((await locationList.json() as {locations:Array<{id:string}>}).locations.map(location => location.id).sort(), ['ronchin', 'tourcoing']);
   const routed = await routingList<{candidates: {locationId: string; name: string}[]}>('59790', ownerCookie);
   assert.equal(routed.response.status, 200);
   assert.deepEqual(routed.body.candidates.map(candidate => candidate.locationId), ['ronchin']);

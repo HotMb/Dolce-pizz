@@ -80,3 +80,7 @@ CREATE INDEX staff_audit_scope_created
 ```
 
 La session SMS actuelle reste une session de compte. `POST /api/staff/sessions` permet au propriétaire de révoquer immédiatement toutes les sessions navigateur d’un compte actif dans son établissement (`organizationId`, `locationId`, `principalId`). La cible doit être un accès local ou centre d’appels actif; le propriétaire ne peut pas révoquer sa propre session par cette route. La mutation est enregistrée dans `staff_audit` et ne supprime aucun compte ni aucune attribution. La distinction des durées client/personnel et l’authentification renforcée restent des travaux d’exploitation distincts. L’ancien back-office global ne constitue pas une interface SaaS isolée; ses accès doivent rester réservés au pilote tant que son propre cloisonnement n’est pas livré.
+
+## Établissements
+
+`GET /api/admin/locations?organizationId=…` liste les sites de l’enseigne du propriétaire connecté. `POST /api/admin/locations` ajoute un site actif avec `organizationId`, `locationId`, `locationCode`, nom, adresse, code postal français, localité et téléphone français. La route crée aussi la configuration locale par défaut; elle ne crée pas de nouveau tenant et ne rend pas automatiquement une zone de livraison éligible. Les codes postaux doivent ensuite être configurés par `POST /api/staff/routing`.
