@@ -98,7 +98,7 @@ Les réglages d’horaires, de capacité et de fidélité sont stockés par éta
 
 ### Reporting franchiseur
 
-`GET /api/admin/reports?organizationId=<id>&from=AAAA-MM-JJ&to=AAAA-MM-JJ` fournit au propriétaire les totaux de commandes, chiffre d’affaires encaissé, annulations, détail par établissement, canal et moyen de paiement. La période est limitée à 31 jours; les requêtes sont toujours filtrées par l’organisation du propriétaire et aucune donnée client brute n’est renvoyée.
+La page `/equipe/rapports` appelle `GET /api/admin/reports?organizationId=<id>&from=AAAA-MM-JJ&to=AAAA-MM-JJ` et fournit au propriétaire les totaux de commandes, chiffre d’affaires encaissé, annulations, détail par établissement, canal et moyen de paiement. La période est limitée à 31 jours; les requêtes sont toujours filtrées par l’organisation du propriétaire et aucune donnée client brute n’est renvoyée.
 
 1. Installer un routeur professionnel; réserver un réseau/SSID aux appareils POS/KDS et empêcher les clients Wi-Fi d’accéder aux appareils métier.
 2. Raccorder le relais local et l’imprimante cuisine en Ethernet si possible; donner une alimentation protégée au relais, au routeur et à l’imprimante. Le relais utilise le rôle d’appareil `printer_gateway` et récupère les jobs sur `/api/internal/print-jobs` avec son jeton Bearer; le jeton n’est jamais imprimé dans les journaux.
