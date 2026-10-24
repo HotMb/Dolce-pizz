@@ -11,9 +11,15 @@ required('ADMIN_SETUP_CODE', 20);
 required('MARKETING_STOP_SECRET', 32);
 required('NOTIFICATION_DISPATCH_SECRET', 32);
 required('BREVO_API_KEY', 20);
+required('SMS_SENDER', 3);
 if (process.env.SMS_CAMPAIGNS_DEMO === '1' || process.env.SMS_DEMO === '1') failures.push('les modes SMS de démonstration doivent être désactivés');
 if (!process.env.CF_D1_DATABASE_ID?.trim()) failures.push('CF_D1_DATABASE_ID absent');
 if (!process.env.CF_WORKER_NAME?.trim()) failures.push('CF_WORKER_NAME absent');
+const publicBase = process.env.PUBLIC_BASE_URL?.trim() || '';
+try {
+  const parsed = new URL(publicBase);
+  if (parsed.protocol !== 'https:' || !publicHost.test(parsed.hostname) || parsed.pathname !== '/' || parsed.search || parsed.hash) failures.push('PUBLIC_BASE_URL doit être une URL HTTPS publique sans chemin ni paramètres');
+} catch { failures.push('PUBLIC_BASE_URL absent ou invalide'); }
 if (process.env.TENANT_HOSTS_JSON) {
   try {
     const bindings = JSON.parse(process.env.TENANT_HOSTS_JSON);
