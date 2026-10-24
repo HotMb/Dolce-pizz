@@ -60,7 +60,7 @@ Ce découpage est une hypothèse produit; il faudra le tester avec des restaurat
 ## Premier pilote Dolce Pizz’
 
 - **Ronchin** : adresse et téléphone confirmés dans la démo, 191 avenue Jean-Jaurès, 59790 Ronchin, 03 20 40 09 01.
-- **Tourcoing** : la page de démonstration publique ne montre que Ronchin et le dépôt ne contient pas l’adresse ni les zones de Tourcoing. Le lieu reste désactivé pour toute décision automatique tant que ses coordonnées et zones ne sont pas confirmées.
+- **Tourcoing** : vérification de la démo publique le 24 octobre 2026 : la page affiche uniquement Ronchin et le dépôt ne contient pas l’adresse ni les zones de Tourcoing. Le lieu reste `unconfigured` et désactivé pour toute décision automatique tant que ses coordonnées et zones ne sont pas confirmées.
 - **Commande directe** : web et téléphone à emporter seulement; le client paie au retrait selon la règle communiquée. Pas de livraison maison.
 - **Uber Eats** : le connecteur doit être autorisé par le programme partenaire, associer chaque identifiant de magasin au bon site et gérer les webhooks signés et les délais d’acceptation du fournisseur.
 - **Canaux** : le socle couvre déjà web, comptoir/téléphone, bornes, POS mobile enrôlé, KDS, caisse de retrait, Uber Eats signé et SMS transactionnel en file; le fournisseur SMS réel, le TPE automatique et les adaptateurs matériels restent à livrer.
