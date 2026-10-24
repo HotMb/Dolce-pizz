@@ -295,6 +295,10 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const deviceHealth = healthBody.checks.find(check => check.id === 'devices');
   assert.equal(deviceHealth?.status, 'attention');
   assert.ok(Number(deviceHealth?.details.expired) >= 1);
+  assert.ok(Number(deviceHealth?.details.kds) >= 1);
+  assert.ok(Number(deviceHealth?.details.pos) >= 0);
+  assert.ok(Number(deviceHealth?.details.kiosks) >= 0);
+  assert.ok(Number(deviceHealth?.details.printerGateways) >= 1);
   const terminalHealth = healthBody.checks.find(check => check.id === 'payment_terminal');
   assert.equal(terminalHealth?.status, 'attention');
   assert.equal(terminalHealth?.details.configured, false);
