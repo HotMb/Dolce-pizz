@@ -1,6 +1,6 @@
 # Contrat d’intégration Uber Eats
 
-Le connecteur reçoit les commandes Uber Eats dans le KDS de l’établissement sans exposer de données de livraison maison ni envoyer de SMS client depuis Dolce Pizz’. Uber reste responsable de son transport et de ses notifications.
+Le connecteur reçoit les commandes Uber Eats dans le KDS de l’établissement sans exposer de données de livraison maison ni envoyer de SMS client depuis Dolce Pizz’. Uber reste responsable de son transport et de ses notifications. En cas de fiche visible mais de commandes non acceptées, suivre le [runbook de rétablissement](./uber-recovery-runbook.md) avant d’activer l’intégration.
 
 ## Flux accepté
 
