@@ -25,7 +25,7 @@ Customers and staff sign in with a French mobile number and a 6-digit SMS code (
 | `SMS_CAMPAIGNS_DEMO` | Optional `1` to simulate promotional SMS campaigns without sending messages. It never exposes login codes. |
 | `NOTIFICATION_DISPATCH_SECRET` | Separate 32–256 character random secret for the server scheduler calling the ready-SMS consumer. Never put it in a browser or URL. |
 
-For a local preview, put these in an ignored `.env.local`, apply pending migrations with `npm run db:migrate:local`, and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`.
+For a local preview, put these in an ignored `.env.local`, apply pending migrations with `npm run db:migrate:local`, verify a fresh schema restore with `npm run db:verify`, and start the dev server with Node 22+ using `node --env-file=.env.local scripts/run-framework.mjs dev`.
 
 L’équipe valide les commandes sur `/admin` (les points sont alors crédités) et les envoie en production. `/equipe` affiche les établissements, appareils et postes autorisés; le propriétaire y attribue ou retire les accès nominatifs. Le KDS vérifie une adhésion active et les permissions du poste à chaque action; l’ancien rôle admin seul ne suffit plus. La migration `0005` convertit les administrateurs historiques du pilote en propriétaires de Dolce Pizz’; une installation neuve crée ce propriétaire lors de l’activation initiale par code privé. `/cuisine` redirige vers `/production`. L’API et l’écran de caisse au retrait sont livrés, avec shifts, paiements répartis et remboursements locaux; le TPE certifié et les exports restent à intégrer.
 
@@ -154,6 +154,7 @@ Replace the filename with the pending migration and `DB` with your D1 binding na
 - `npm run build`: build the deployable Sites artifact
 - `npm run start`: preview the built Worker locally with D1/R2 support
 - `npm run db:generate`: generate Drizzle migrations after schema changes
+- `npm run db:verify`: verify all migrations on a fresh SQLite database and run foreign-key checks
 
 When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
 
