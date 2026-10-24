@@ -68,6 +68,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   context.after(() => {hook.deregister(); delete globals.__dolcePaymentsEnvironment; database.close();});
   const api = await import('../app/api/staff/payments/route');
   const shifts = await import('../app/api/staff/shifts/route');
+  const routing = await import('../app/api/staff/routing/route');
   type Handler = (request: Request) => Promise<Response>;
   async function call<T = Record<string, unknown>>(handler: Handler, body: unknown, cookie = '') {
     const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
@@ -79,6 +80,18 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
     const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
     if (cookie) headers.set('cookie', cookie);
     const response = await shifts.POST(new Request('http://localhost/api/staff/shifts', {method: 'POST', headers, body: JSON.stringify(body)}));
+    return {response, body: await response.json() as T};
+  }
+  async function routingCall<T = Record<string, unknown>>(body: unknown, cookie = '') {
+    const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
+    if (cookie) headers.set('cookie', cookie);
+    const response = await routing.POST(new Request('http://localhost/api/staff/routing', {method: 'POST', headers, body: JSON.stringify(body)}));
+    return {response, body: await response.json() as T};
+  }
+  async function routingList<T = Record<string, unknown>>(postalCode: string, cookie = '') {
+    const headers = new Headers({origin: 'http://localhost'});
+    if (cookie) headers.set('cookie', cookie);
+    const response = await routing.GET(new Request(`http://localhost/api/staff/routing?organizationId=dolce-pizza&postalCode=${postalCode}`, {headers}));
     return {response, body: await response.json() as T};
   }
   async function list<T = Record<string, unknown>>(cookie = '') {
@@ -132,4 +145,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(closed.body.shift.expectedCash, 2200);
   assert.equal(closed.body.variance, 0);
   assert.equal((await call(api.POST, {...base, idempotencyKey: crypto.randomUUID()}, workerCookie)).response.status, 409);
+  assert.equal((await routingCall({organizationId: 'dolce-pizza', locationId: 'ronchin', postalCodes: ['59790']}, workerCookie)).response.status, 403);
+  assert.equal((await routingCall({organizationId: 'dolce-pizza', locationId: 'ronchin', postalCodes: ['59790']}, ownerCookie)).response.status, 200);
+  const routed = await routingList<{candidates: {locationId: string; name: string}[]}>('59790', ownerCookie);
+  assert.equal(routed.response.status, 200);
+  assert.deepEqual(routed.body.candidates.map(candidate => candidate.locationId), ['ronchin']);
 });
