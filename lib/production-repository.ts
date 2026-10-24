@@ -68,6 +68,8 @@ export type ProductionTicketPayload = {
   slot: string;
   channel: string;
   fulfillment: string;
+  serviceMode: string;
+  tableLabel: string;
   note: string;
   units: ProductionUnitSnapshot[];
 };
@@ -119,6 +121,8 @@ export type ProductionTicketView = {
   createdAt: string;
   channel: string;
   fulfillment: string;
+  serviceMode: string;
+  tableLabel: string;
   note: string;
   status: ProductionOrder['status'];
   revision: number;
@@ -148,6 +152,8 @@ const productionPayloadSchema = z.object({
   slot: z.string().min(1),
   channel: z.string().min(1).max(40),
   fulfillment: z.string().min(1).max(40),
+  serviceMode: z.string().min(1).max(20).default('pickup'),
+  tableLabel: z.string().max(30).default(''),
   note: z.string().max(500),
   units: z.array(productionUnitSnapshotSchema).min(1).max(600),
 }).strict().superRefine((payload, context) => {
@@ -338,6 +344,8 @@ export function createTicketFromOrder(order: {
   slot: string;
   channel: string;
   fulfillment: string;
+  service_mode?: string;
+  table_label?: string;
   note: string;
   items: string | unknown[];
 }): {payload: ProductionTicketPayload; flow: ProductionOrder} {
@@ -348,6 +356,8 @@ export function createTicketFromOrder(order: {
     slot: order.slot,
     channel: order.channel,
     fulfillment: order.fulfillment,
+    serviceMode: order.service_mode || 'pickup',
+    tableLabel: order.table_label || '',
     note: safeNote(order.note || ''),
     units: [],
   };
@@ -414,6 +424,8 @@ export function projectProductionTicket(input: {
     createdAt: input.payload.createdAt,
     channel: input.payload.channel,
     fulfillment: input.payload.fulfillment,
+    serviceMode: input.payload.serviceMode,
+    tableLabel: input.payload.tableLabel,
     note: input.payload.note,
     status: input.flow.status,
     revision: input.flow.revision,

@@ -50,6 +50,8 @@ type OrderRow = {
   slot: string;
   channel: string;
   fulfillment: string;
+  service_mode: string;
+  table_label: string;
   note: string;
   items: string;
 };
@@ -105,7 +107,7 @@ async function activeOrders(scope: StaffScopeKey): Promise<OrderRow[]> {
   const ORGANIZATION_ID = scope.organizationId;
   const LOCATION_ID = scope.locationId;
   const result = await db().prepare(
-    "SELECT id,organization_id,location_id,status,version,created_at,updated_at,slot,channel,fulfillment,note,items FROM orders WHERE organization_id=? AND location_id=? AND (status='preparing' OR (status='ready' AND updated_at>?)) ORDER BY CASE WHEN status='preparing' THEN 0 ELSE 1 END,slot,created_at LIMIT 150",
+    "SELECT id,organization_id,location_id,status,version,created_at,updated_at,slot,channel,fulfillment,service_mode,table_label,note,items FROM orders WHERE organization_id=? AND location_id=? AND (status='preparing' OR (status='ready' AND updated_at>?)) ORDER BY CASE WHEN status='preparing' THEN 0 ELSE 1 END,slot,created_at LIMIT 150",
   ).bind(ORGANIZATION_ID, LOCATION_ID, new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()).all<OrderRow>();
   return result.results;
 }
@@ -175,7 +177,7 @@ export async function POST(request: Request) {
       throw new ApiError(403, 'Votre rôle ne permet pas cette action à ce poste.');
     }
     const order = await db().prepare(
-      "SELECT id,organization_id,location_id,status,version,created_at,updated_at,slot,channel,fulfillment,note,items FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='preparing'",
+      "SELECT id,organization_id,location_id,status,version,created_at,updated_at,slot,channel,fulfillment,service_mode,table_label,note,items FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='preparing'",
     ).bind(input.orderId, ORGANIZATION_ID, LOCATION_ID).first<OrderRow>();
     if (!order) throw new ApiError(404, 'Commande active introuvable. Actualisez la liste.');
     const ticket = await ensureTicket(order);

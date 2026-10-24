@@ -21,6 +21,8 @@ export const staffOrderInputSchema = z.object({
   key: z.string().uuid(),
   ...staffScopeSchema.shape,
   channel: z.enum(['counter', 'phone', 'pos', 'kiosk']),
+  serviceMode: z.enum(['pickup', 'dine_in']).default('pickup'),
+  tableLabel: clean.max(30).default(''),
   customerName: clean.min(2).max(80),
   customerPhone: clean.max(30).refine(value => value === '' || normalizePhone(value) !== null),
   readySmsConfirmed: z.boolean(),

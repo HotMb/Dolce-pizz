@@ -109,6 +109,9 @@ async function postOrder(request: Request, url: URL) {
   const parsed = staffOrderInputSchema.safeParse(parseJson(text));
   if (!parsed.success) fail(400, 'Vérifiez les informations de la commande.');
   const input = parsed.data;
+  const serviceMode = input.channel === 'pos' ? input.serviceMode : 'pickup';
+  const tableLabel = serviceMode === 'dine_in' ? input.tableLabel.trim() : '';
+  if (serviceMode === 'dine_in' && !/^[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 .#-]{0,29}$/.test(tableLabel)) fail(400, 'Indiquez une table valide pour une commande sur place.');
   const scope = await loadAuthorizedScope(input.organizationId, input.locationId, actor);
   if (actor.deviceRole && ((actor.deviceRole === 'kiosk' && input.channel !== 'kiosk') || (actor.deviceRole === 'pos' && input.channel !== 'pos'))) fail(403, actor.deviceRole === 'pos' ? 'Ce poste POS ne peut créer que des commandes POS mobile.' : 'Une borne ne peut créer que des commandes borne.');
   if (!actor.deviceRole && (!scope || !staffOrderChannelAllowed(scope.roles, input.channel))) fail(403, 'Votre rôle ne permet pas de saisir cette commande.');
@@ -154,18 +157,18 @@ async function postOrder(request: Request, url: URL) {
   const insert = db().prepare(
     `INSERT INTO orders(
       id,user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,
-      status,reason,organization_id,location_id,channel,fulfillment,payment_status,payment_method,
+      status,reason,organization_id,location_id,channel,fulfillment,service_mode,table_label,payment_status,payment_method,
       notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version
     )
-    SELECT ?,?,?,?,?,'',?,?,?,?,?,0,?,0,0,'preparing','',?,?,?,'pickup','due_at_pickup',NULL,?,?,?,?,?,1
+    SELECT ?,?,?,?,?,'',?,?,?,?,?,0,?,0,0,'preparing','',?,?,?,'pickup',?,?,'due_at_pickup',NULL,?,?,?,?,?,1
     WHERE ${sqlGuard}
       AND COALESCE((SELECT version FROM location_config WHERE organization_id=? AND location_id=?),(SELECT version FROM config WHERE organization_id=?))=?
       AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled')) < ?
     ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING`,
-  ).bind(
+    ).bind(
     id, actor.id, input.key, input.customerName, storedPhone, JSON.stringify(items), input.note, slot,
     priced.subtotal, priced.offer, priced.total,
-    input.organizationId, input.locationId, input.channel, notificationPhone, contactBasis, contactCapturedAt, now, now,
+    input.organizationId, input.locationId, input.channel, serviceMode, tableLabel, notificationPhone, contactBasis, contactCapturedAt, now, now,
     input.organizationId, input.locationId, input.organizationId, actor.id, input.locationId,
     input.organizationId, input.locationId, input.organizationId, latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
   );

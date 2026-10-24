@@ -25,7 +25,8 @@ type Schedule={slots:Slot[];location:LocationInfo};
 type StaffCatalog={products:Product[];ingredients:Ingredient[];extraPrice:number};
 type CatalogState={scopeKey:string;data:StaffCatalog|null;error:string};
 type OrderReceipt={id:string;total:number;status:string;slot:string;locationId:string;channel:Channel};
-type Attempt={key:string;payload:{key:string;organizationId:string;locationId:string;channel:Channel;customerName:string;customerPhone:string;readySmsConfirmed:boolean;postalCode?:string;slot:string;note:string;items:CartLine[]}};
+type ServiceMode='pickup'|'dine_in';
+type Attempt={key:string;payload:{key:string;organizationId:string;locationId:string;channel:Channel;serviceMode:ServiceMode;tableLabel:string;customerName:string;customerPhone:string;readySmsConfirmed:boolean;postalCode?:string;slot:string;note:string;items:CartLine[]}};
 type ProductDraft={product:Product;size:CartLine['size'];quantity:number;option:string;removed:string[];added:string[];freeId:string;freeOption:string};
 const dateLabel=new Intl.DateTimeFormat('fr-FR',{timeZone:'Europe/Paris',weekday:'long',day:'numeric',month:'long'});
 const rolesFor:Record<Channel,string[]>={counter:['owner','manager','pos'],phone:['owner','manager','call_center'],pos:['owner','manager','pos']};
@@ -47,6 +48,8 @@ export function StaffOrderComposer(){
  const [cart,setCart]=useState<CartLine[]>([]);
  const [customerName,setCustomerName]=useState('');
  const [customerPhone,setCustomerPhone]=useState('');
+ const [serviceMode,setServiceMode]=useState<ServiceMode>('pickup');
+ const [tableLabel,setTableLabel]=useState('');
  const [readySmsConfirmed,setReadySmsConfirmed]=useState(false);
  const [postalCode,setPostalCode]=useState('');
  const [routingCandidates,setRoutingCandidates]=useState<RoutingCandidate[]>([]);
@@ -80,7 +83,7 @@ export function StaffOrderComposer(){
  const scope=selectable.find(item=>scopeQuery(item)===selected)||selectable[0];
  const routingOrganizationId=scope?.organizationId||'';
  const catalogKey=scope?scopeQuery(scope):'';
- if(previousScope!==catalogKey){setPreviousScope(catalogKey);setCart([]);setDraft(null);setSlot('');setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setFieldErrors({});}
+ if(previousScope!==catalogKey){setPreviousScope(catalogKey);setCart([]);setDraft(null);setSlot('');setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setFieldErrors({});}
  const catalog=catalogState.scopeKey===catalogKey?catalogState.data:null;
  const catalogLoading=!!scope&&(!catalog&&!catalogState.error||catalogState.scopeKey!==catalogKey);
  const catalogError=catalogState.scopeKey===catalogKey?catalogState.error:'';
@@ -150,7 +153,7 @@ export function StaffOrderComposer(){
  const changeScope=(value:string)=>{
   if(!canEdit)return;
   if(value===selected)return;
-  setSelected(value);setSlot('');setCart([]);setDraft(null);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setPageError('');setFieldErrors({});
+  setSelected(value);setSlot('');setCart([]);setDraft(null);setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setPageError('');setFieldErrors({});
   const target=selectable.find(item=>scopeQuery(item)===value);
   if(target)window.history.replaceState(null,'',`/equipe/commande?${scopeQuery(target)}&channel=${channel}`);
  };
@@ -168,6 +171,7 @@ export function StaffOrderComposer(){
   if(customerName.trim().length<2)errors.customerName='Indiquez le nom associé à la commande.';
   if(customerPhone.trim()&&!localPhoneValid(customerPhone))errors.customerPhone='Saisissez un mobile français valide ou effacez ce numéro.';
   if(readySmsConfirmed&&!customerPhone.trim())errors.customerPhone='Ajoutez le mobile que le client a confirmé pour recevoir le SMS de retrait.';
+  if(channel==='pos'&&serviceMode==='dine_in'&&!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 .#-]{0,29}$/.test(tableLabel.trim()))errors.tableLabel='Indiquez une table (ex. T4).';
   if(channel==='phone'&&postalCode.trim()&&!/^\d{5}$/.test(postalCode.trim()))errors.postalCode='Saisissez un code postal français à 5 chiffres.';
   if(!slot||!schedule?.slots.some(item=>item.iso===slot))errors.slot='Choisissez un créneau de retrait encore disponible.';
   if(!cart.length)errors.cart='Ajoutez au moins un article à la commande.';
@@ -184,7 +188,7 @@ export function StaffOrderComposer(){
   event.preventDefault();if(!canEdit||!validate())return;
   if(!scope)return;
   const key=crypto.randomUUID();
-  const payload:Attempt['payload']={key,organizationId:scope.organizationId,locationId:scope.locationId,channel,customerName:customerName.trim(),customerPhone:customerPhone.trim(),readySmsConfirmed,slot,note:note.trim(),items:cart,...(channel==='phone'&&postalCode.trim()?{postalCode:postalCode.trim()}:{})};
+  const payload:Attempt['payload']={key,organizationId:scope.organizationId,locationId:scope.locationId,channel,serviceMode:channel==='pos'?serviceMode:'pickup',tableLabel:channel==='pos'&&serviceMode==='dine_in'?tableLabel.trim():'',customerName:customerName.trim(),customerPhone:customerPhone.trim(),readySmsConfirmed,slot,note:note.trim(),items:cart,...(channel==='phone'&&postalCode.trim()?{postalCode:postalCode.trim()}:{})};
   setAttempt({key,payload});
   setAttemptError('');setAttemptUncertain(false);setConfirmOpen(true);
  };
@@ -196,7 +200,7 @@ export function StaffOrderComposer(){
    const result=await api<{order:OrderReceipt}>('staff/orders','POST',attempt.payload);
    if(!result?.order||typeof result.order.id!=='string')throw new Error('La réponse du serveur ne confirme pas la commande. Réessayez avec la même tentative.');
    const created=result.order;
-   setReceipt(created);setConfirmOpen(false);setAttempt(null);setAttemptUncertain(false);setCart([]);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setSlot('');setFieldErrors({});
+   setReceipt(created);setConfirmOpen(false);setAttempt(null);setAttemptUncertain(false);setCart([]);setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setSlot('');setFieldErrors({});
   }catch(cause){
    const error=cause as Error&{status?:number};setAttemptError(error.message||'La commande n’a pas pu être confirmée.');
    const status=error.status||0;setAttemptUncertain(status===0||status>=500);
@@ -238,6 +242,7 @@ export function StaffOrderComposer(){
    <div className="pos-main-column">
     <section className="panel pos-customer"><div className="pos-section-title"><UserRound size={20}/><div><h2>Qui vient retirer ?</h2><p>Le client paiera sur place à la récupération.</p></div></div><div className="pos-customer-fields"><Field label="Nom à annoncer au retrait" id="pos-customerName" error={fieldErrors.customerName}><input id="pos-customerName" maxLength={80} autoComplete="off" value={customerName} onChange={event=>setCustomerName(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.customerName} aria-describedby={fieldErrors.customerName?'pos-customerName-error':undefined}/></Field><div className="pos-phone-lookup"><Field label="Mobile, facultatif" id="pos-customerPhone" hint="Conservez-le seulement si le client le souhaite." error={fieldErrors.customerPhone}><input id="pos-customerPhone" type="tel" inputMode="tel" autoComplete="off" maxLength={30} value={customerPhone} onChange={event=>{setCustomerPhone(event.target.value);setCustomerLookup(null);setCustomerLookupMessage('');if(!event.target.value)setReadySmsConfirmed(false);}} disabled={!canEdit} aria-invalid={!!fieldErrors.customerPhone} aria-describedby={`${fieldErrors.customerPhone?'pos-customerPhone-error ':''}pos-customerPhone-hint`}/></Field>{channel==='phone'&&<Button type="button" tone="outline" busy={customerLookupLoading} disabled={!canEdit||!customerPhone.trim()} onClick={()=>void lookupCustomer()}>Rechercher le client</Button>}</div></div>
     {channel==='phone'&&customerLookupMessage&&<p className="pos-lookup-message" role="status">{customerLookupMessage}{customerLookup?.orderCount?` ${customerLookup.orderCount} commande${customerLookup.orderCount>1?'s':''} connue${customerLookup.orderCount>1?'s':''}.`:''}</p>}
+    {channel==='pos'&&<div className="pos-service-fields"><Field label="Type de service" id="pos-service-mode"><Select value={serviceMode} onValueChange={value=>{setServiceMode(value as ServiceMode);if(value==='pickup')setTableLabel('');}} disabled={!canEdit}><SelectTrigger id="pos-service-mode" className="staff-select"><SelectValue/></SelectTrigger><SelectContent className="staff-select-popup" position="popper"><SelectItem value="pickup">À emporter</SelectItem><SelectItem value="dine_in">Sur place</SelectItem></SelectContent></Select></Field>{serviceMode==='dine_in'&&<Field label="Table" id="pos-tableLabel" hint="Ex. T4 ou terrasse 2" error={fieldErrors.tableLabel}><input id="pos-tableLabel" maxLength={30} value={tableLabel} onChange={event=>setTableLabel(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.tableLabel}/></Field>}</div>}
     {channel==='phone'&&<><Field label="Code postal communiqué par le client" id="pos-postalCode" hint={routingLoading?'Recherche de l’établissement…':routingCandidates.length===1?`Établissement proposé : ${routingCandidates[0].name}`:'Le code postal sert à proposer le site de retrait; confirmez toujours l’adresse avec le client.'} error={fieldErrors.postalCode}><input id="pos-postalCode" inputMode="numeric" autoComplete="postal-code" maxLength={5} pattern="[0-9]{5}" value={postalCode} onChange={event=>setPostalCode(event.target.value.replace(/\D/g,'').slice(0,5))} disabled={!canEdit} aria-invalid={!!fieldErrors.postalCode} aria-describedby={`${fieldErrors.postalCode?'pos-postalCode-error ':''}pos-postalCode-hint`}/></Field>{routingCandidates.length>1&&<div className="pos-routing-options" role="group" aria-label="Établissements desservant ce code postal">{routingCandidates.map(candidate=><button type="button" key={candidate.locationId} className={`btn btn-outline ${scope?.locationId===candidate.locationId?'is-selected':''}`} onClick={()=>setSelected(`${scope?.organizationId}::${candidate.locationId}`)} disabled={!canEdit}>{candidate.name}{candidate.locality?` · ${candidate.locality}`:''}</button>)}</div>}</>}
     <label className={`pos-sms-choice ${!customerPhone.trim()?'is-disabled':''}`}><Checkbox checked={readySmsConfirmed} disabled={!canEdit||!customerPhone.trim()} onCheckedChange={value=>setReadySmsConfirmed(value===true)}/><span><b>Envoyer un SMS quand la commande sera prête</b><small>À cocher uniquement avec l’accord du client. Cette préférence ne l’inscrit pas aux promotions.</small></span></label>
     </section>

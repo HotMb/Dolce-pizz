@@ -165,10 +165,13 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
   assert.equal(stored.notification_phone, '+33612345678');
   assert.equal(stored.notification_phone_basis, 'staff_confirmed');
   assert.ok(stored.notification_phone_captured_at);
-  const mobilePos = await call<{order:{channel:string;locationId:string}}>(api.POST, 'POST', {...base, key: crypto.randomUUID(), channel: 'pos'}, {cookie: posCookie});
+  const mobilePos = await call<{order:{id:string;channel:string;locationId:string}}>(api.POST, 'POST', {...base, key: crypto.randomUUID(), channel: 'pos', serviceMode: 'dine_in', tableLabel: 'T4'}, {cookie: posCookie});
   assert.equal(mobilePos.response.status, 201);
   assert.equal(mobilePos.body.order.channel, 'pos');
   assert.equal(mobilePos.body.order.locationId, 'ronchin');
+  const mobilePosStored = database.prepare('SELECT service_mode,table_label FROM orders WHERE id=?').get(mobilePos.body.order.id) as {service_mode:string;table_label:string};
+  assert.equal(mobilePosStored.service_mode, 'dine_in');
+  assert.equal(mobilePosStored.table_label, 'T4');
 
   // A staff member explicitly assigned to a second tenant sees that tenant's
   // menu/configuration, and can reuse the same idempotency key in its scope.
