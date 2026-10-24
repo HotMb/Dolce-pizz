@@ -37,6 +37,32 @@
 @media(max-width:700px){.report-columns{grid-template-columns:1fr}.report-period>div{width:100%}}
 .local-catalog-list{display:grid;gap:12px;margin-top:16px}.local-catalog-row{display:grid;grid-template-columns:minmax(180px,1fr) repeat(3,minmax(110px,150px)) auto;align-items:end;gap:14px;padding:18px}.local-catalog-name{display:grid;gap:5px;align-self:center}.local-catalog-name small{color:var(--muted-foreground)}.local-catalog-row label{display:grid;gap:6px;font-size:12px;font-weight:700}.local-catalog-row input,.local-catalog-row select{min-height:40px;padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--foreground)}
 @media(max-width:760px){.local-catalog-row{grid-template-columns:1fr 1fr}.local-catalog-name{grid-column:1/-1}.local-catalog-row .btn{grid-column:1/-1}}
+
+/* The restaurant console is a separate product surface from the public site. */
+body:has(.staff-shell){background:#eef2f5;color:#162536;font-family:"Segoe UI",Arial,sans-serif}
+.staff-shell{--background:#f7f9fb;--foreground:#162536;--card:#ffffff;--muted-foreground:#637286;--border:#d8e0e8;--input:#c9d3de;--primary:#d94d2f;--primary-foreground:#fff;--secondary:#e9eff4;--accent:#0f8a78;--accent-foreground:#fff;--destructive:#c93636;--ring:#4b8fbd;color:#162536}
+.staff-shell h1,.staff-shell h2,.staff-shell h3,.staff-shell button,.staff-shell input,.staff-shell select,.staff-shell textarea{font-family:"Segoe UI",Arial,sans-serif}
+.staff-shell h1{font-weight:800;letter-spacing:-.035em;text-transform:none}
+.staff-shell h1 span{color:#d94d2f}
+.staff-shell .panel{border:1px solid #d8e0e8;background:#fff;box-shadow:0 8px 24px rgb(35 55 75 / 7%);border-radius:14px}
+.staff-shell .staff-eyebrow{color:#d94d2f;letter-spacing:.08em}
+.staff-shell .btn-primary{background:#d94d2f;border-color:#d94d2f;color:#fff}
+.staff-shell .btn-outline{border-color:#b9c7d4;color:#1b3349;background:#fff}
+.staff-shell .btn-outline:hover:not(:disabled){border-color:#d94d2f;color:#b53d26;background:#fff7f4}
+.staff-admin-shortcuts{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:24px;margin:18px 0;padding:20px 22px;border-left:4px solid #d94d2f!important}
+.staff-admin-shortcuts h2{margin:6px 0;font-size:22px}
+.staff-admin-shortcuts p:not(.staff-eyebrow){margin:0;color:#637286;font-size:14px}
+.staff-admin-links{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;max-width:560px}
+.staff-admin-links a{display:inline-flex;align-items:center;min-height:40px;padding:8px 12px;border:1px solid #cbd6e0;border-radius:9px;background:#f8fafc;color:#1b3349;text-decoration:none;font-size:14px;font-weight:700}
+.staff-admin-links a:hover{border-color:#d94d2f;color:#b53d26;background:#fff7f4}
+.pos-product{background:#fff;border-color:#d7e0e8;border-radius:12px;box-shadow:0 4px 12px rgb(35 55 75 / 5%)}
+.pos-product h3{font-size:18px;color:#162536}
+.pos-product-footer>span{font-size:18px;color:#0b7568}
+.pos-category-list button{background:#f7f9fb;border-color:#cbd6e0;color:#1b3349}
+.pos-category-list button.is-active{background:#d94d2f;border-color:#d94d2f}
+.pos-ticket{box-shadow:0 10px 28px rgb(35 55 75 / 10%)}
+.pos-ticket-total .pos-total-due strong{color:#d94d2f}
+@media(max-width:760px){.staff-admin-shortcuts{grid-template-columns:1fr}.staff-admin-links{justify-content:flex-start}}
 .staff-workspaces{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px}
 .staff-workspace{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:24px}
 .staff-workspace>svg{color:var(--primary)}
