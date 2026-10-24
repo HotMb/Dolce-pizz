@@ -103,6 +103,11 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.equal(deviceStream.status,200);deviceStream.body?.cancel();
  const crossSiteStream=await productionStream.GET(new Request('http://localhost/api/production/stream?organizationId=dolce-pizza&locationId=tourcoing&station=oven',{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));
  assert.equal(crossSiteStream.status,403);
+ const revokedDevice=await call(staff.POST,'staff','POST',{action:'revoke',...scope,membershipId:'not-used'},ownerCookie);
+ assert.equal(revokedDevice.response.status,404);
+ const deviceRevoke=await devices.POST(new Request('http://localhost/api/staff/devices',{method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({...scope,action:'revoke',deviceId:ovenDevice.device.id})}));
+ assert.equal(deviceRevoke.status,200);
+ assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,401);
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,workerCookie)).response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,workerCookie)).response.status,403);
  assert.equal((await call(staff.POST,'staff','POST',{action:'grant',...scope,principalId:worker.body.account.id,role:'manager'},workerCookie)).response.status,403);
