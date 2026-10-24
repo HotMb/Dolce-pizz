@@ -2,6 +2,8 @@
 
 Ce suivi conserve le périmètre demandé : un POS/KDS SaaS commercialisable auprès de plusieurs enseignes et établissements en France. Un composant livré ne prouve pas que le produit complet est exploitable. Les commandes directes du pilote sont à retirer et payer sur place; aucune livraison maison n’est prévue. Uber Eats reste un canal partenaire distinct.
 
+La progression opérationnelle se fait selon [`phase-roadmap.md`](./phase-roadmap.md), puis se clôture établissement par établissement avec [`go-live-checklist.md`](./go-live-checklist.md).
+
 La recette d’un établissement doit suivre [`go-live-checklist.md`](./go-live-checklist.md), qui distingue les contrôles automatisés des validations fournisseurs et terrain.
 
 | Exigence | État actuel et preuve | Travail restant pour la cible |
