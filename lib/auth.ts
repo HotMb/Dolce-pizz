@@ -17,7 +17,7 @@ export async function sessionUser(cookieHeader:string|null):Promise<Member|null>
  // session when both exist, while keeping staff sessions usable for internal
  // order entry without merging the two cookies.
  const token=readCookie(cookieHeader,COOKIE)||readCookie(cookieHeader,STAFF_COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
- return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?').bind(await sha256(token),Date.now()).first<Member>();
+ return await db().prepare("SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?").bind(await sha256(token),Date.now()).first<Member>();
 }
 /** Staff and administration routes require a recent OTP session on shared devices. */
 export async function staffSessionUser(cookieHeader:string|null):Promise<Member|null>{
@@ -25,13 +25,13 @@ export async function staffSessionUser(cookieHeader:string|null):Promise<Member|
  // at once; new staff logins use their own cookie and cannot overwrite a client session.
  const token=readCookie(cookieHeader,STAFF_COOKIE)||readCookie(cookieHeader,COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
  const cutoff=new Date(Date.now()-STAFF_SESSION_HOURS*HOUR).toISOString();
- return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
+ return await db().prepare("SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 /** Sensitive organisation changes require a fresh OTP session, not merely a still-valid staff session. */
 export async function recentStaffSessionUser(cookieHeader:string|null,maxAgeMinutes=15):Promise<Member|null>{
  const token=readCookie(cookieHeader,STAFF_COOKIE)||readCookie(cookieHeader,COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
  const cutoff=new Date(Date.now()-maxAgeMinutes*60000).toISOString();
- return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
+ return await db().prepare("SELECT u.id,u.phone,COALESCE((SELECT p.name FROM customer_profiles p WHERE p.user_id=u.id AND p.name<>'' ORDER BY p.updated_at DESC LIMIT 1),u.name) AS name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
 export const sessionCookie=(token:string,secure:boolean,audience:SessionAudience='customer')=>`${audience==='staff'?STAFF_COOKIE:COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?(audience==='staff'?STAFF_SESSION_HOURS*3600:SESSION_DAYS*86400):0}${secure?'; Secure':''}`;
