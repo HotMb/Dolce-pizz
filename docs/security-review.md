@@ -10,6 +10,8 @@ Le manifeste local `.openai/hosting.json` et le projet Sites attaché portent le
 
 ## Correctifs appliqués
 
+- `proxy.ts` applique les en-têtes de sécurité au niveau de la réponse pour toutes les routes, y compris les pages et API qui ne passent pas par les helpers JSON. Cette protection est incluse dans le build ; le contrôle HTTP public devra être rejoué après le prochain déploiement pour confirmer la propagation sur le Worker.
+
 - Les réponses web portent des en-têtes de défense en profondeur (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` et `Permissions-Policy`) ainsi qu’une CSP appliquée et recopiée en `Report-Only` pour observation. `unsafe-eval` a été supprimé après vérification qu’aucun code applicatif ne l’utilise; `unsafe-inline` reste nécessaire au runtime généré par le framework et fera l’objet d’un chantier nonce/hash séparé avant une exposition générale.
 
 - Les codes de connexion par SMS ne sont plus renvoyés par l’API hébergée. En l’absence de fournisseur SMS, l’authentification hébergée échoue proprement; seul un appel local sur loopback peut afficher un code de test.
