@@ -10,7 +10,7 @@ import '../staff.css';
 type Scope={organizationId:string;organizationName:string;locationId:string;locationName:string;roles:string[]};
 type Check={id:string;status:'ok'|'attention'|'blocked';details:Record<string,number|string|boolean>};
 type Data={overall:'ok'|'attention'|'blocked';checkedAt:string;checks:Check[];locationId:string|null};
-const labels:Record<string,string>={locations:'Établissements',location_configuration:'Configuration locale',devices:'Appareils',notifications:'SMS transactionnels',printing:'Impression'};
+const labels:Record<string,string>={locations:'Établissements',location_configuration:'Configuration locale',devices:'Appareils',notifications:'SMS transactionnels',printing:'Impression',delivery_integrations:'Agrégateurs de livraison'};
 const statusLabel:Record<string,string>={ok:'Opérationnel',attention:'À vérifier',blocked:'Bloquant'};
 const value=(check:Check,key:string)=>check.details[key]??0;
 const date=(value:string)=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'medium'}).format(new Date(value));

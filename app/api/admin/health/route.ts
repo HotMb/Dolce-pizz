@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       WHERE l.organization_id=?${locationFilter} ORDER BY l.id`).bind(...locationParams).all<{id: string; status: string; configured: number}>();
     if (!locations.results.length) throw new HealthApiError(404, 'Établissement introuvable dans cette enseigne.');
     const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
-    const [devices, notifications, prints] = await Promise.all([
+    const [devices, notifications, prints, delivery] = await Promise.all([
       db().prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN d.status='active' THEN 1 ELSE 0 END),0) AS active,
         COALESCE(SUM(CASE WHEN d.status='active' AND (d.last_seen_at IS NULL OR d.last_seen_at<?) THEN 1 ELSE 0 END),0) AS stale
         FROM devices d WHERE d.organization_id=?${parsed.locationId ? ' AND d.location_id=?' : ''}`).bind(...(parsed.locationId ? [cutoff, parsed.organizationId, parsed.locationId] : [cutoff, parsed.organizationId])).first<{total: number;active: number;stale: number}>(),
@@ -39,6 +39,9 @@ export async function GET(request: Request) {
       db().prepare(`SELECT COALESCE(SUM(CASE WHEN status IN ('pending','printing') THEN 1 ELSE 0 END),0) AS open,
         COALESCE(SUM(CASE WHEN status IN ('unknown','failed') THEN 1 ELSE 0 END),0) AS errors
         FROM print_outbox WHERE organization_id=?${parsed.locationId ? ' AND location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number;errors: number}>(),
+      db().prepare(`SELECT COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS open,
+        COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS errors
+        FROM delivery_inbox WHERE organization_id=?${parsed.locationId ? ' AND location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number;errors: number}>(),
     ]);
 
     const checks: HealthCheck[] = [
@@ -47,6 +50,7 @@ export async function GET(request: Request) {
       {id: 'devices', status: Number(devices?.stale || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), stale: Number(devices?.stale || 0), staleAfterMinutes: 5}},
       {id: 'notifications', status: Number(notifications?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(notifications?.open || 0), errors: Number(notifications?.errors || 0)}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
+      {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},
     ];
     const overall: CheckStatus = checks.some(check => check.status === 'blocked') ? 'blocked' : checks.some(check => check.status === 'attention') ? 'attention' : 'ok';
     return json({organizationId: parsed.organizationId, locationId: parsed.locationId || null, checkedAt: new Date().toISOString(), overall, checks});
