@@ -24,6 +24,7 @@ const required = {
   'x-frame-options': 'DENY',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  'content-security-policy': "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
 };
 const failures = Object.entries(required).filter(([name, expected]) => response.headers.get(name)?.trim() !== expected).map(([name, expected]) => `${name} doit valoir ${expected}`);
 if (failures.length) {
