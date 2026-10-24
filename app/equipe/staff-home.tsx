@@ -29,7 +29,7 @@ export function StaffHome(){
  const copy=async()=>{if(!access.data)return;try{await navigator.clipboard.writeText(access.data.account.id);setCopyMessage('Identifiant copié.');}catch{copyInput.current?.focus();copyInput.current?.select();setCopyMessage('Copie indisponible. L’identifiant est sélectionné : copiez-le manuellement.');}};
 
  return <main id="contenu" className="page-shell staff-shell" onClickCapture={intercept}>
-  <header className="staff-heading"><div><Link href="/" className="staff-back"><ArrowLeft size={18}/> Retour au site</Link><p className="staff-eyebrow"><Users size={17}/> ESPACE ÉQUIPE</p><h1>Votre service<span>.</span></h1><p>Retrouvez les établissements et les postes auxquels votre compte a accès.</p></div><Button tone="outline" busy={access.refreshing} onClick={()=>void access.refresh()}><RefreshCw size={18}/> Actualiser les accès</Button></header>
+  <header className="staff-heading"><div><Link href="/interne" className="staff-back"><ArrowLeft size={18}/> Retour à l’exploitation</Link><p className="staff-eyebrow"><Users size={17}/> ESPACE ÉQUIPE</p><h1>Votre service<span>.</span></h1><p>Retrouvez les établissements et les postes auxquels votre compte a accès.</p></div><Button tone="outline" busy={access.refreshing} onClick={()=>void access.refresh()}><RefreshCw size={18}/> Actualiser les accès</Button></header>
   {access.loading&&!access.data?<div className="staff-loading" role="status"><LoaderCircle size={24} className="spin"/>Vérification de vos accès…</div>:null}
   {access.error&&<ErrorBox message={access.error} retry={()=>void access.refresh()}/>}
   {access.status===401&&<p><Link className="btn btn-primary" href={loginPath('/equipe')}>Se reconnecter par SMS</Link></p>}
