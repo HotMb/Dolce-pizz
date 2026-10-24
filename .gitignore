@@ -48,6 +48,7 @@ backups/*.sql
 backups/*.sqlite
 # Local audit and assistant state; never publish these files.
 premium-audit.json
+premium-ui.json
 tsconfig.tsbuildinfo
 .staff-premium-audit.json
 .claude/
