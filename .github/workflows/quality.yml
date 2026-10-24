@@ -35,7 +35,7 @@ jobs:
         run: npm audit --omit=dev
 
       - name: Scanner les secrets du dépôt
-        run: npm run security:scan
+        run: npm run security:scan:env
 
       - name: Exécuter les tests
         run: npm test
