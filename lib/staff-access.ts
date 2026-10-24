@@ -64,13 +64,13 @@ export function resolveStaffScope(principalId: string, site: StaffSite, membersh
   const stations = staffStations.filter(station => allReads || writeStations.includes(station));
   return {organizationId: site.organizationId, organizationName: site.organizationName,
     locationId: site.locationId, locationName: site.locationName, roles, stations, writeStations,
-    canMarkReady: writeStations.includes('expeditor'), canManageStaff: roles.includes('owner')};
+    canMarkReady: writeStations.includes('oven') || writeStations.includes('expeditor'), canManageStaff: roles.includes('owner')};
 }
 
 export function canOperateStation(scope: StaffScope | null, station: ProductionStation, action: 'read' | 'start' | 'complete' | 'ready'): boolean {
   if (!scope) return false;
   return action === 'read' ? scope.stations.includes(station)
-    : action === 'ready' ? station === 'expeditor' && scope.canMarkReady
+    : action === 'ready' ? (station === 'oven' || station === 'expeditor') && scope.canMarkReady
       : scope.writeStations.includes(station);
 }
 

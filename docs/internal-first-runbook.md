@@ -27,6 +27,10 @@ Ne pas ouvrir le port du serveur sur Internet et ne pas configurer de redirectio
 - Caisse : paiement espèces ou carte au retrait.
 - Borne : commande autonome ; à utiliser après validation du parcours employé.
 
+Le flux standard ne dépend pas d’Expeditor : la validation du Make Line fait passer l’article au Four, puis le Four peut cliquer « Marquer prête · SMS + ticket » lorsque les préparations requises sont terminées. Expeditor reste un poste facultatif pour les commandes complexes ou lorsqu’un responsable veut contrôler l’assemblage complet.
+
+Quand le Four marque la commande prête, le serveur crée une notification SMS si un numéro autorisé existe et crée un job `ready_ticket` dans la file d’impression. Le relais imprimante enrôlé récupère cette file et imprime automatiquement. Uber Eats et les commandes sans numéro restent sans SMS.
+
 Dans `/equipe`, le propriétaire enrôle chaque appareil et donne un jeton limité à son rôle. Le jeton ne doit pas être photographié ni partagé entre établissements.
 
 ## Test de réception avant le service
@@ -41,3 +45,9 @@ Dans `/equipe`, le propriétaire enrôle chaque appareil et donne un jeton limit
 8. Vérifier le ticket dans la supervision impression.
 
 Le SMS, l’imprimante physique, le TPE et Uber Eats restent des intégrations à configurer avec leurs identifiants réels. Leur absence ne doit pas empêcher le flux interne de fonctionner.
+
+## Accès depuis le domicile
+
+Ne publiez pas directement le port `5173` et ne faites pas de redirection de port sur la box. Pour consulter l’activité depuis chez vous, installez un VPN privé comme Tailscale sur le serveur de la pizzeria et sur votre ordinateur personnel, puis autorisez uniquement votre compte dans une règle d’accès en lecture seule. Une autre option est un tunnel Cloudflare Access avec MFA ; il doit protéger `/equipe`, `/equipe/sante`, `/equipe/impression`, `/equipe/notifications` et `/equipe/audit`.
+
+L’accès distant doit permettre de consulter les journaux et l’état des files, mais pas d’utiliser un jeton de tablette, d’encaisser une commande ou de modifier la production sans rôle responsable. Les postes de cuisine restent sur le Wi-Fi privé local.

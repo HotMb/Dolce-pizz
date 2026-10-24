@@ -18,7 +18,7 @@ const site: StaffSite = {organizationId: 'dolce-pizza', organizationName: 'Dolce
 const member = (role: string, changes: Partial<StaffMembership> = {}): StaffMembership => ({id: `membership-${role}`,
   organization_id: site.organizationId, location_id: site.locationId, principal_id: 'employee-1', role, status: 'active', ...changes});
 
-test('a station operator can advance only that station and cannot mark a whole order ready', () => {
+test('a station operator can advance only that station and only the oven can release a ready order', () => {
   const scope = resolveStaffScope('employee-1', site, [member('make_line')]);
   assert.equal(canOperateStation(scope, 'make_line', 'complete'), true);
   assert.equal(canOperateStation(scope, 'oven', 'read'), false);

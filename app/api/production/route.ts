@@ -12,7 +12,7 @@ import {
 } from '@/lib/staff-access';
 import {
   completeStation,
-  markOrderReady,
+  markOrderReady, markOrderReadyAtOven,
   startStation,
   type ProductionOrder,
   type ProductionStation as Station,
@@ -220,7 +220,7 @@ export async function POST(request: Request) {
       expectedRevision: input.expectedRevision,
     };
     const transitioned = input.action === 'ready'
-      ? markOrderReady(current, command)
+      ? input.station === 'oven' ? markOrderReadyAtOven(current, command) : markOrderReady(current, command)
       : input.action === 'start'
         ? startStation(current, input.itemId, input.station, command)
         : completeStation(current, input.itemId, input.station, command);
@@ -259,6 +259,9 @@ export async function POST(request: Request) {
       db().prepare(
         "INSERT INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,updated_at,sent_at) SELECT ?,?,?,?,?,'order_ready',?,'pending',0,?,?,?,NULL FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND fulfillment='pickup' AND channel IN ('web','phone','pos','kiosk','counter') AND phone<>'' AND notification_phone<>'' AND notification_phone_basis IN ('account_otp','staff_confirmed') AND notification_phone_captured_at IS NOT NULL AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
       ).bind(`${operationId}:notification`, `${operationId}:notification`, ORGANIZATION_ID, LOCATION_ID, input.orderId, JSON.stringify({orderId: input.orderId, eventType: 'order_ready'}), now, now, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),
+      db().prepare(
+        "INSERT OR IGNORE INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at) SELECT ?,?,?,?,?,? ,?,'pending',0,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
+      ).bind(`${operationId}:ready-ticket`, `${operationId}:ready-ticket`, ORGANIZATION_ID, LOCATION_ID, input.orderId, 'ready_ticket', JSON.stringify({orderId: input.orderId, format: 'ready-ticket-v1'}), now, now, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),
     ]);
     if (!results[0].meta.changes) {
       const latest = await currentTicketRevision(input.orderId, scope);

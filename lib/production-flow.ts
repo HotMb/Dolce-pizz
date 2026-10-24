@@ -300,6 +300,35 @@ export function markOrderReady(
   );
 }
 
+/**
+ * Standard pizzeria flow: the oven can release the order once every required
+ * preparation step is complete. Expeditor steps are optional in this mode and
+ * are closed by the system so drinks and desserts do not block the pickup.
+ */
+export function markOrderReadyAtOven(
+  order: ProductionOrder,
+  command: ProductionCommand,
+): ProductionFlowResult {
+  const commandError = validateCommand(order, command);
+  if (commandError) return commandError;
+  if (order.status === 'ready') return {ok: false, error: 'order_already_ready'};
+  const statusError = requireInProgress(order);
+  if (statusError) return statusError;
+  if (order.items.length === 0) return {ok: false, error: 'empty_order'};
+  const incompleteItemIds = order.items
+    .filter((item) => item.steps.some((step) => step.station !== 'expeditor' && step.status !== 'completed'))
+    .map((item) => item.id);
+  if (incompleteItemIds.length > 0) return {ok: false, error: 'incomplete_items', incompleteItemIds};
+  const items = order.items.map((item) => ({
+    ...item,
+    steps: item.steps.map((step) => step.station === 'expeditor' && step.status !== 'completed'
+      ? {...step, status: 'completed' as const, completedAt: command.at}
+      : step),
+  }));
+  return succeed({...order, status: 'ready'}, items,
+    {type: 'order_ready', actorId: command.actorId.trim(), at: command.at});
+}
+
 export function cancelProductionOrder(
   order: ProductionOrder,
   command: ReasonedProductionCommand,

@@ -12,7 +12,7 @@ const postes=[
  {href:'/equipe/commande',title:'Prise de commande',text:'Comptoir et téléphone : créer la commande, choisir le retrait et encaisser au retrait.',icon:ShoppingBasket},
  {href:'/production?station=make_line',title:'Make Line',text:'Montage des pizzas et préparation manuelle avec modificateurs et allergènes.',icon:ChefHat},
  {href:'/production?station=oven',title:'Four',text:'Ordre d’enfournement, minuteries et validation de cuisson.',icon:Flame},
- {href:'/production?station=expeditor',title:'Expeditor',text:'Réunir les pizzas, boissons et desserts puis déclarer la commande prête.',icon:PackageCheck},
+ {href:'/production?station=expeditor',title:'Expeditor (optionnel)',text:'Contrôler l’assemblage complet des commandes complexes avant la remise.',icon:PackageCheck},
  {href:'/equipe/caisse',title:'Encaissement au retrait',text:'Retrouver une commande prête et enregistrer espèces ou carte.',icon:Banknote},
 ];
 

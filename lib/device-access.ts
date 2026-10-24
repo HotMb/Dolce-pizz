@@ -28,6 +28,6 @@ export async function productionDeviceSession(database: D1Database, request: Req
   return {deviceId: row.device_id, principalId: row.created_by, label: row.label, role: row.role, expiresAt: row.expires_at, scope: {
     organizationId: row.organization_id, organizationName: row.organization_name,
     locationId: row.location_id, locationName: row.location_name,
-    roles: [station], stations: [station], writeStations: [station], canMarkReady: station === 'expeditor', canManageStaff: false,
+    roles: [station], stations: [station], writeStations: [station], canMarkReady: station === 'oven' || station === 'expeditor', canManageStaff: false,
   }};
 }

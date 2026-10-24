@@ -230,7 +230,7 @@ const productionCommandSchema = z.discriminatedUnion('action', [
   z.object({
     orderId: z.string().uuid(),
     action: z.literal('ready'),
-    station: z.literal('expeditor'),
+    station: z.enum(['oven', 'expeditor']),
     expectedRevision: z.number().int().nonnegative(),
   }).strict(),
 ]);

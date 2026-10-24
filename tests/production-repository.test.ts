@@ -106,7 +106,7 @@ test('production command validation rejects client supplied tenant scope and mal
   assert.deepEqual(parseProductionCommand(ready), ready);
   assert.throws(() => parseProductionCommand({...valid, locationId: 'tourcoing'}));
   assert.throws(() => parseProductionCommand({...valid, station: 'expeditor', expectedRevision: -1}));
-  assert.throws(() => parseProductionCommand({...ready, station: 'oven'}));
+  assert.deepEqual(parseProductionCommand({...ready, station: 'oven'}), {...ready, station: 'oven'});
   assert.throws(() => parseProductionCommand({orderId: valid.orderId, action: 'ready', expectedRevision: 1}));
   assert.throws(() => parseProductionCommand({...ready, itemId: valid.itemId}));
 });
