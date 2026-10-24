@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     let raw: unknown;
     try {raw = JSON.parse(text);} catch {throw new ApiError(400, 'La demande est illisible.');}
     const input = inputSchema.parse(raw);
-    await requireCashier(request, {organizationId: input.organizationId, locationId: input.locationId});
+    const actor = await requireCashier(request, {organizationId: input.organizationId, locationId: input.locationId});
     const order = await db().prepare('SELECT id,total,paid_total,status,payment_status FROM orders WHERE id=? AND organization_id=? AND location_id=? AND fulfillment=\'pickup\'')
       .bind(input.orderId, input.organizationId, input.locationId).first<{id:string; total:number; paid_total:number; status:string; payment_status:string}>();
     if (!order) throw new ApiError(404, 'Commande introuvable dans cet établissement.');
@@ -56,6 +56,9 @@ export async function POST(request: Request) {
     });
     const ledgerResponse = await recordCashierPayment(ledgerRequest);
     if (!ledgerResponse.ok) {
+      await db().prepare("INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) VALUES(?,?,?,?,?,?)")
+        .bind(`${input.orderId}:terminal-reconciliation:${input.idempotencyKey}`, input.orderId, 'payment_reconciliation_required', actor.id,
+          'Le terminal a confirmé la carte mais le journal de caisse doit être rapproché.', new Date().toISOString()).run();
       return json({error: 'Le terminal a confirmé la carte, mais le journal de caisse doit être rapproché.', code: 'terminal_capture_reconciliation_required'}, 503);
     }
     const ledger = await ledgerResponse.json().catch(() => null);
