@@ -32,7 +32,7 @@ async function deviceTokenActor(request: Request): Promise<OrderActor | null> {
     JOIN users u ON u.id=c.created_by
     WHERE c.token_hash=? AND c.revoked_at IS NULL AND c.expires_at>? AND d.status='active'`)
     .bind(hash, Date.now()).first<{created_by:string;organization_id:string;location_id:string;role:string;phone:string;name:string}>();
-  if (!row || row.role !== 'kiosk') return null;
+  if (!row || !['kiosk','pos'].includes(row.role)) return null;
   await db().prepare('UPDATE device_credentials SET last_seen_at=? WHERE token_hash=? AND revoked_at IS NULL').bind(new Date().toISOString(), hash).run();
   return {id:row.created_by, phone:row.phone, name:row.name, deviceRole:row.role, deviceOrganizationId:row.organization_id, deviceLocationId:row.location_id};
 }
@@ -110,7 +110,7 @@ async function postOrder(request: Request, url: URL) {
   if (!parsed.success) fail(400, 'Vérifiez les informations de la commande.');
   const input = parsed.data;
   const scope = await loadAuthorizedScope(input.organizationId, input.locationId, actor);
-  if (actor.deviceRole && input.channel !== 'kiosk') fail(403, 'Une borne ne peut créer que des commandes borne.');
+  if (actor.deviceRole && ((actor.deviceRole === 'kiosk' && input.channel !== 'kiosk') || (actor.deviceRole === 'pos' && input.channel !== 'pos'))) fail(403, actor.deviceRole === 'pos' ? 'Ce poste POS ne peut créer que des commandes POS mobile.' : 'Une borne ne peut créer que des commandes borne.');
   if (!actor.deviceRole && (!scope || !staffOrderChannelAllowed(scope.roles, input.channel))) fail(403, 'Votre rôle ne permet pas de saisir cette commande.');
 
   const previous = await db().prepare(
@@ -188,7 +188,7 @@ async function postOrder(request: Request, url: URL) {
       id: string; total: number; status: string; slot: string; location_id: string; channel: string;
     }>();
     if (duplicate) return json({order: orderResponse(duplicate)});
-    if (actor.deviceRole) fail(409, 'La commande borne a déjà été enregistrée ou le créneau est complet.');
+    if (actor.deviceRole) fail(409, 'Le poste a déjà enregistré cette commande ou le créneau est complet.');
     const stillAuthorized = await loadStaffScope(db(), actor.id, {organizationId: input.organizationId, locationId: input.locationId});
     if (!stillAuthorized || !staffOrderChannelAllowed(stillAuthorized.roles, input.channel)) fail(403, 'Votre accès à cet établissement a changé. Actualisez votre session.');
     fail(409, 'Le créneau est complet ou la configuration a changé. Actualisez les disponibilités et réessayez.');

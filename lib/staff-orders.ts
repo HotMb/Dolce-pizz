@@ -20,7 +20,7 @@ export const staffOrderLineSchema = z.object({
 export const staffOrderInputSchema = z.object({
   key: z.string().uuid(),
   ...staffScopeSchema.shape,
-  channel: z.enum(['counter', 'phone', 'kiosk']),
+  channel: z.enum(['counter', 'phone', 'pos', 'kiosk']),
   customerName: clean.min(2).max(80),
   customerPhone: clean.max(30).refine(value => value === '' || normalizePhone(value) !== null),
   readySmsConfirmed: z.boolean(),
@@ -37,7 +37,7 @@ export const pilotOrderScope = {organizationId: 'dolce-pizza', locationId: 'ronc
 
 export function staffOrderChannelAllowed(roles: readonly string[], channel: StaffOrderChannel): boolean {
   return roles.includes('owner') || roles.includes('manager')
-    || (channel === 'counter' ? roles.includes('pos') : channel === 'phone' ? roles.includes('call_center') : roles.includes('kiosk'));
+    || (channel === 'counter' ? roles.includes('pos') : channel === 'phone' ? roles.includes('call_center') : channel === 'pos' ? roles.includes('pos') : roles.includes('kiosk'));
 }
 
 export function hasStaffOrderAccess(roles: readonly string[]): boolean {
@@ -45,7 +45,7 @@ export function hasStaffOrderAccess(roles: readonly string[]): boolean {
 }
 
 export function staffOrderSqlGuard(channel: StaffOrderChannel): string {
-  const channelRoles = channel === 'counter' ? "'owner','manager','pos'" : channel === 'phone' ? "'owner','call_center'" : "'owner'";
+  const channelRoles = channel === 'counter' || channel === 'pos' ? "'owner','manager','pos'" : channel === 'phone' ? "'owner','call_center'" : "'owner'";
   const organizationRoles = channel === 'phone' ? "'owner','call_center'" : "'owner'";
   return `EXISTS(
     SELECT 1 FROM locations sl

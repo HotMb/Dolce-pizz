@@ -16,7 +16,7 @@ import {scopeQuery,useStaffAccess,type StaffScope} from '../staff-access';
 import '../staff.css';
 import './order-composer.css';
 
-type Channel='counter'|'phone';
+type Channel='counter'|'phone'|'pos';
 type Slot={iso:string;date:string;label:string;remaining:number};
 type LocationInfo={name:string;addressLine1:string|null;postalCode:string|null;locality:string|null;phone:string|null};
 type RoutingCandidate={locationId:string;code:string;name:string;addressLine1:string|null;pickupPostalCode:string|null;locality:string|null;phone:string|null;priority:number};
@@ -28,7 +28,7 @@ type OrderReceipt={id:string;total:number;status:string;slot:string;locationId:s
 type Attempt={key:string;payload:{key:string;organizationId:string;locationId:string;channel:Channel;customerName:string;customerPhone:string;readySmsConfirmed:boolean;postalCode?:string;slot:string;note:string;items:CartLine[]}};
 type ProductDraft={product:Product;size:CartLine['size'];quantity:number;option:string;removed:string[];added:string[];freeId:string;freeOption:string};
 const dateLabel=new Intl.DateTimeFormat('fr-FR',{timeZone:'Europe/Paris',weekday:'long',day:'numeric',month:'long'});
-const rolesFor:Record<Channel,string[]>={counter:['owner','manager','pos'],phone:['owner','manager','call_center']};
+const rolesFor:Record<Channel,string[]>={counter:['owner','manager','pos'],phone:['owner','manager','call_center'],pos:['owner','manager','pos']};
 const roleCan=(scope:StaffScope,channel:Channel)=>scope.roles.some(role=>rolesFor[channel].includes(role));
 const localPhoneValid=(value:string)=>/^(?:\+33|0033|0)[67](?:[ .-]?\d){8}$/.test(value.trim());
 const initialDraft=(product:Product):ProductDraft=>({product,size:product.xxl===null?'unique':'senior',quantity:1,option:product.options?.[0]||'',removed:[],added:[],freeId:product.offer?product.id:'',freeOption:product.options?.[0]||''});
@@ -72,8 +72,9 @@ export function StaffOrderComposer(){
 
  const scopes=access.data?.scopes||[];
  const showCallCenter=scopes.some(item=>roleCan(item,'phone'));
+ const showPos=scopes.some(item=>roleCan(item,'pos'));
  const showCounter=scopes.some(item=>roleCan(item,'counter'));
- const channel:Channel=requestedChannel==='counter'?(showCounter?'counter':showCallCenter?'phone':'counter'):(showCallCenter?'phone':showCounter?'counter':'phone');
+ const channel:Channel=requestedChannel==='counter'?(showCounter?'counter':showCallCenter?'phone':showPos?'pos':'counter'):requestedChannel==='phone'?(showCallCenter?'phone':showCounter?'counter':showPos?'pos':'phone'):(showPos?'pos':showCounter?'counter':showCallCenter?'phone':'pos');
  const selectable=scopes.filter(scope=>roleCan(scope,channel));
  const selectableKey=selectable.map(item=>scopeQuery(item)).join('|');
  const scope=selectable.find(item=>scopeQuery(item)===selected)||selectable[0];
@@ -98,7 +99,7 @@ export function StaffOrderComposer(){
    const organizationId=params.get('organizationId'),locationId=params.get('locationId');
    if(organizationId&&locationId)setSelected(new URLSearchParams({organizationId,locationId}).toString());
    const requested=params.get('channel');
-   if(requested==='counter'||requested==='phone')setRequestedChannel(requested);
+   if(requested==='counter'||requested==='phone'||requested==='pos')setRequestedChannel(requested);
   },0);
   return()=>window.clearTimeout(timer);
  },[]);
@@ -143,7 +144,7 @@ export function StaffOrderComposer(){
  },[channel,postalCode,routingOrganizationId,selectableKey]);
 
  const changeChannel=(next:Channel)=>{
-  if(!showCounter||!showCallCenter||!canEdit)return;
+  if(!canEdit)return;
   setRequestedChannel(next);setSelected('');setSlot('');setCart([]);setDraft(null);setPageError('');setFieldErrors({});
  };
  const changeScope=(value:string)=>{
@@ -230,7 +231,7 @@ export function StaffOrderComposer(){
   {access.error&&<ErrorBox message={`${access.error} Les commandes restent bloquées tant que les accès ne sont pas vérifiés.`} retry={()=>void access.refresh()}/>}
   {receipt&&<section className="panel pos-receipt-success" role="status"><CheckCircle2 size={26}/><div><h2>Commande envoyée en cuisine.</h2><p>{receipt.channel==='phone'?'Commande prise par téléphone':'Commande du comptoir'} · {scope.locationName} · {money(receipt.total)} à régler au retrait.</p></div><Button tone="outline" onClick={()=>setReceipt(null)}>Prendre une autre commande</Button></section>}
   <div className="pos-context panel">
-   <div className="pos-channel"><p className="staff-eyebrow">CANAL DE COMMANDE</p><div role="group" aria-label="Canal de prise de commande">{showCounter&&<button type="button" aria-pressed={channel==='counter'} disabled={!canEdit} onClick={()=>changeChannel('counter')}><Utensils size={18}/> Comptoir</button>}{showCallCenter&&<button type="button" aria-pressed={channel==='phone'} disabled={!canEdit} onClick={()=>changeChannel('phone')}><PhoneCall size={18}/> Centre d’appels</button>}</div></div>
+   <div className="pos-channel"><p className="staff-eyebrow">CANAL DE COMMANDE</p><div role="group" aria-label="Canal de prise de commande">{showCounter&&<button type="button" aria-pressed={channel==='counter'} disabled={!canEdit} onClick={()=>changeChannel('counter')}><Utensils size={18}/> Comptoir</button>}{showPos&&<button type="button" aria-pressed={channel==='pos'} disabled={!canEdit} onClick={()=>changeChannel('pos')}><ShoppingBasket size={18}/> POS mobile</button>}{showCallCenter&&<button type="button" aria-pressed={channel==='phone'} disabled={!canEdit} onClick={()=>changeChannel('phone')}><PhoneCall size={18}/> Centre d’appels</button>}</div></div>
    <div className="pos-site-select"><Field label="Établissement de retrait" id="pos-scope" hint="Confirmez le nom et l’adresse du point de retrait avec le client."><Select value={scopeQuery(scope)} onValueChange={changeScope} disabled={!canEdit||selectable.length<2}><SelectTrigger id="pos-scope" className="staff-select"><SelectValue/></SelectTrigger><SelectContent className="staff-select-popup" position="popper">{selectable.map(item=><SelectItem key={scopeQuery(item)} value={scopeQuery(item)}>{item.organizationName} · {item.locationName}</SelectItem>)}</SelectContent></Select></Field></div>
   </div>
   <form className="pos-layout" noValidate onSubmit={openConfirmation}>
