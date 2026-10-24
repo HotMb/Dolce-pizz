@@ -65,8 +65,12 @@ export async function verifyCode(phone:string,code:string){
 }
 /** 'live' sends through Brevo; 'demo' (local preview or SMS_CAMPAIGNS_DEMO=1) only simulates; 'off' cannot send. */
 export const smsMode=(local:boolean)=>vars.BREVO_API_KEY?'live':local||vars.SMS_CAMPAIGNS_DEMO==='1'?'demo':'off';
-export async function sendSms(phone:string,content:string,type:'transactional'|'marketing',tag:string){
+export type SmsProviderResult={accepted:boolean;outcome:'accepted'|'rejected'|'unknown';providerMessageId?:string};
+export async function sendSmsDetailed(phone:string,content:string,type:'transactional'|'marketing',tag:string):Promise<SmsProviderResult>{
  const r=await fetch('https://api.brevo.com/v3/transactionalSMS/send',{method:'POST',headers:{'api-key':vars.BREVO_API_KEY||'','content-type':'application/json',accept:'application/json'},body:JSON.stringify({sender:vars.SMS_SENDER||'DolcePizz',recipient:phone.slice(1),content,type,tag}),signal:AbortSignal.timeout(12000)}).catch(()=>null);
- if(!r?.ok)console.error('Brevo SMS error',r?.status??'network');
- return !!r?.ok;
+ if(!r)return {accepted:false,outcome:'unknown'};
+ if(!r.ok){console.error('Brevo SMS error',r.status);return {accepted:false,outcome:r.status===408||r.status===425||r.status===429||r.status>=500?'unknown':'rejected'};}
+ let providerMessageId='';try{const body=await r.json() as {messageId?:unknown};if(typeof body.messageId==='string'||typeof body.messageId==='number')providerMessageId=String(body.messageId).slice(0,160);}catch{return {accepted:false,outcome:'unknown'};}
+ return providerMessageId?{accepted:true,outcome:'accepted',providerMessageId}:{accepted:false,outcome:'unknown'};
 }
+export async function sendSms(phone:string,content:string,type:'transactional'|'marketing',tag:string){return (await sendSmsDetailed(phone,content,type,tag)).accepted;}

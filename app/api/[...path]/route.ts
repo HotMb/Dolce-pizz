@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 import {env} from 'cloudflare:workers';
 import {z} from 'zod';
 import {db,ensureSeed,settings,productList,ingredientList,menu,balance,isAdmin,orderView,secret,marketingStopSecret,insertProduct,toProduct,toIngredient} from '@/lib/server';
-import {sessionUser,sendCode,verifyCode,sessionCookie,endSession,normalizePhone,localPhone,AuthError,underLimit,smsMode,sendSms} from '@/lib/auth';
+import {sessionUser,sendCode,verifyCode,sessionCookie,endSession,normalizePhone,localPhone,AuthError,underLimit,smsMode,sendSmsDetailed} from '@/lib/auth';
 import {slots,allowedSlot,nextStatus,parisParts} from '@/lib/rules';
 import {priceCart} from '@/lib/pricing';
 import {categories,type Product} from '@/lib/catalog';
@@ -448,15 +448,15 @@ async function campaigns(url:URL,id:string|undefined,sub:string|undefined,method
      WHERE organization_id=? AND campaign_id=? AND user_id=? AND status='processing' AND lease_token=? AND ${campaignOwnerGuardSql}`).bind(now,organizationId,id,recipient.user_id,leaseToken,organizationId,actor).run();
     continue;
    }
-   let status:'sent'|'simulated'|'failed';let lastError='';
+   let status:'sent'|'simulated'|'failed'|'unknown';let lastError='';let providerMessageId='';
    if(campaign.simulated)status='simulated';
    else{
     const token=await marketingStopProof(organizationId,recipient.phone);const link=new URL('/api/marketing/stop',url.origin);link.searchParams.set('token',token);
     const content=`${campaign.message.replace(/\nSTOP SMS : [^\n]*$/,'')}\nSTOP SMS : ${link.toString()}`;
-    const sent=await sendSms(recipient.phone,content,'marketing','promo');status=sent?'sent':'failed';lastError=sent?'':'provider_rejected_or_unknown';
+    const receipt=await sendSmsDetailed(recipient.phone,content,'marketing','promo');status=receipt.accepted?'sent':receipt.outcome==='unknown'?'unknown':'failed';lastError=receipt.accepted?'':receipt.outcome==='unknown'?'provider_receipt_unknown':'provider_rejected';providerMessageId=receipt.providerMessageId||'';
    }
-   await db().prepare(`UPDATE campaign_recipients SET status=?,sent_at=?,lease_token=NULL,lease_expires_at=NULL,last_error=?
-    WHERE organization_id=? AND campaign_id=? AND user_id=? AND status='processing' AND lease_token=? AND ${campaignOwnerGuardSql}`).bind(status,now,lastError,organizationId,id,recipient.user_id,leaseToken,organizationId,actor).run();
+   await db().prepare(`UPDATE campaign_recipients SET status=?,sent_at=?,lease_token=NULL,lease_expires_at=NULL,last_error=?,provider_message_id=?
+    WHERE organization_id=? AND campaign_id=? AND user_id=? AND status='processing' AND lease_token=? AND ${campaignOwnerGuardSql}`).bind(status,now,lastError,providerMessageId,organizationId,id,recipient.user_id,leaseToken,organizationId,actor).run();
   }
   await finalizeCampaign(organizationId,id,actor,now);
   return json({campaign:await campaignRow(organizationId,id)});

@@ -57,7 +57,7 @@ Une mise à jour atomique réclame chaque événement par son identifiant : `pen
 
 La reprise automatique d'un refus 429 repose sur la [documentation officielle des limites Brevo](https://developers.brevo.com/docs/api-limits), qui présente ce statut comme la réponse aux requêtes dépassant la limite. Les autres erreurs transitoires sont traitées avec prudence, car le fournisseur a pu accepter le SMS avant la coupure. Le format de requête et l'identifiant de succès suivent la [documentation officielle SMS transactionnels](https://developers.brevo.com/docs/transactional-sms-endpoints).
 
-Le jeton empêche une double réclamation de la même ligne; il n'impose pas l'idempotence à Brevo. La route SMS documentée ne fournit pas ici de garantie d'envoi exactement une fois. Une modification ou annulation peut aussi survenir entre la dernière lecture et l'acceptation réseau; ce bref intervalle ne peut être rendu atomique avec une API externe.
+Le jeton empêche une double réclamation de la même ligne; il n'impose pas l'idempotence à Brevo. Pour les campagnes marketing, l'identifiant de message renvoyé par Brevo est maintenant conservé dans `campaign_recipients.provider_message_id` lorsqu'il est disponible. Un résultat inconnu reste terminal et n'est jamais renvoyé automatiquement. La route SMS documentée ne fournit donc pas une garantie d'envoi exactement une fois. Une modification ou annulation peut aussi survenir entre la dernière lecture et l'acceptation réseau; ce bref intervalle ne peut être rendu atomique avec une API externe.
 
 ## Surveillance et réconciliation
 
