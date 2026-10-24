@@ -72,6 +72,21 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 
 ### Réseau et matériel
 
+### Créer une nouvelle enseigne
+
+Le premier déploiement d’une enseigne est volontairement contrôlé. Un propriétaire déjà connecté appelle `POST /api/admin/onboarding` avec `installationCode`, les identifiants de l’organisation et du site, puis l’adresse française du point de retrait. Le code d’installation reste un secret Cloudflare (`ADMIN_SETUP_CODE`) et n’est jamais envoyé au navigateur ni enregistré en base. La route vérifie l’origine, la session, le format strict, le quota d’essais et crée dans un seul lot D1 l’organisation active, le site, les réglages, le propriétaire et le catalogue initial.
+
+Exemple de liaison de domaine après création :
+
+```json
+{
+  "tourcoing.dolcepizza.fr": { "organizationId": "dolce-pizza", "locationId": "tourcoing" },
+  "ronchin.dolcepizza.fr": { "organizationId": "dolce-pizza", "locationId": "ronchin" }
+}
+```
+
+En production, cette valeur est injectée dans le secret ou la variable Worker `TENANT_HOSTS_JSON`. Un domaine absent de cette liste est refusé par l’API; aucun paramètre d’URL ne peut choisir une autre enseigne. La gestion graphique des domaines et l’auto-provisionnement DNS restent un jalon de back-office à livrer.
+
 1. Installer un routeur professionnel; réserver un réseau/SSID aux appareils POS/KDS et empêcher les clients Wi-Fi d’accéder aux appareils métier.
 2. Raccorder le relais local et l’imprimante cuisine en Ethernet si possible; donner une alimentation protégée au relais, au routeur et à l’imprimante. Le relais utilise le rôle d’appareil `printer_gateway` et récupère les jobs sur `/api/internal/print-jobs` avec son jeton Bearer; le jeton n’est jamais imprimé dans les journaux.
 3. Installer des écrans tactiles lisibles depuis le poste de travail, avec supports fixes et alimentation sécurisée.
