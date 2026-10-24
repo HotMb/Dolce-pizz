@@ -74,6 +74,12 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
     const response = await handler(new Request('http://localhost/api/staff/payments', {method: 'POST', headers, body: JSON.stringify(body)}));
     return {response, body: await response.json() as T};
   }
+  async function list<T = Record<string, unknown>>(cookie = '') {
+    const headers = new Headers({origin: 'http://localhost'});
+    if (cookie) headers.set('cookie', cookie);
+    const response = await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers}));
+    return {response, body: await response.json() as T};
+  }
   async function session(userId: string, token: string) {
     const now = new Date().toISOString();
     database.prepare('INSERT INTO users(id,phone,name,created_at) VALUES(?,?,?,?)').run(userId, `+336000000${userId === 'owner' ? '1' : '2'}`, userId, now);
@@ -88,6 +94,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
     VALUES('ready-order','worker',NULL,'order-key','Client','','','[]','', '2026-10-24T18:00:00.000Z',1200,0,0,1200,0,0,'ready','', 'dolce-pizza','ronchin','counter','pickup','due_at_pickup',NULL,'','none',NULL,?,?,1)`).run(now, now);
   const base = {organizationId: 'dolce-pizza', locationId: 'ronchin', orderId: 'ready-order', idempotencyKey: crypto.randomUUID(), amount: 1200, method: 'cash' as const};
   assert.equal((await call(api.POST, base)).response.status, 401);
+  const readyList = await list<{orders: {id: string; total: number}[]}>(workerCookie);
+  assert.equal(readyList.response.status, 200);
+  assert.deepEqual(readyList.body.orders.map(order => [order.id, order.total]), [['ready-order', 1200]]);
   assert.equal((await call(api.POST, {...base, amount: 1100}, ownerCookie)).response.status, 409);
   const captured = await call<{payment: {id: string; amount: number; method: string}; order: {status: string; paymentStatus: string}}>(api.POST, base, workerCookie);
   assert.equal(captured.response.status, 201, JSON.stringify(captured.body));

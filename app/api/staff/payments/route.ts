@@ -46,10 +46,10 @@ function paymentResponse(payment: PaymentRow, orderStatus: string, paymentStatus
   };
 }
 
-async function requireCashier(request: Request, scope: StaffScopeKey) {
+async function requireCashier(request: Request, scope: StaffScopeKey, requireOrigin: boolean) {
   const origin = request.headers.get('origin');
   const url = new URL(request.url);
-  if (!origin || origin !== url.origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
+  if (requireOrigin && (!origin || origin !== url.origin)) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
   const user = await sessionUser(request.headers.get('cookie'));
   if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
   await ensureSeed();
@@ -60,6 +60,40 @@ async function requireCashier(request: Request, scope: StaffScopeKey) {
   return user;
 }
 
+export async function GET(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const scope = z.object({organizationId: z.string().min(1).max(128), locationId: z.string().min(1).max(128)}).strict()
+      .safeParse({organizationId: url.searchParams.get('organizationId'), locationId: url.searchParams.get('locationId')});
+    if (!scope.success) throw new ApiError(400, 'Choisissez un établissement valide.');
+    await requireCashier(request, scope.data, false);
+    const rows = await db().prepare(
+      `SELECT id,name,total,slot,channel,updated_at,created_at
+       FROM orders
+       WHERE organization_id=? AND location_id=? AND fulfillment='pickup' AND status='ready' AND payment_status='due_at_pickup'
+       ORDER BY slot,created_at
+       LIMIT 150`,
+    ).bind(scope.data.organizationId, scope.data.locationId).all<{
+      id: string; name: string; total: number; slot: string; channel: string; updated_at: string; created_at: string;
+    }>();
+    return json({orders: rows.results.map(row => ({
+      id: row.id,
+      label: row.id.slice(0, 6).toUpperCase(),
+      name: row.name,
+      total: row.total,
+      slot: row.slot,
+      channel: row.channel,
+      readyAt: row.updated_at,
+      createdAt: row.created_at,
+    })), scope: scope.data});
+  } catch (error) {
+    if (error instanceof z.ZodError) return json({error: error.issues[0]?.message || 'Vérifiez les informations.'}, 400);
+    if (error instanceof ApiError) return json({error: error.message}, error.status);
+    console.error('Payment list API error', error instanceof Error ? error.message : 'unknown');
+    return json({error: 'La liste de caisse est momentanément indisponible.'}, 503);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const contentLength = Number(request.headers.get('content-length') || 0);
@@ -68,7 +102,7 @@ export async function POST(request: Request) {
     let raw: unknown;
     try {raw = JSON.parse(text);} catch {throw new ApiError(400, 'La demande est illisible.');}
     const input = paymentInput.parse(raw);
-    const user = await requireCashier(request, {organizationId: input.organizationId, locationId: input.locationId});
+    const user = await requireCashier(request, {organizationId: input.organizationId, locationId: input.locationId}, true);
 
     const duplicate = await db().prepare(
       `SELECT p.id,p.organization_id,p.location_id,p.order_id,p.idempotency_key,p.amount,p.method,p.status,

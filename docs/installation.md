@@ -1,6 +1,6 @@
 # Installation et exploitation — Dolce Pizz’
 
-Ce guide couvre le prototype web, le KDS, la prise de commande simple par le personnel et les accès nominatifs par établissement. Make Line, Four et Expeditor sont présents à `/production`; `/equipe` permet d’ouvrir les postes autorisés et de gérer leurs accès. L’écran `/equipe/commande` accepte les commandes comptoir et téléphone à retirer, recalcule les prix côté serveur et les envoie à la production. Le paiement reste à faire en personne; l’API `POST /api/staff/payments` capture désormais le montant exact en cash ou carte sans donnée carte, mais l’écran de caisse et le raccordement TPE restent à intégrer. Un consommateur SMS « commande prête » est livré, mais son fournisseur et son ordonnanceur doivent être configurés avant l’envoi réel. POS mobile de salle, bornes, routage automatique du centre d’appels, relais hors ligne et Uber Eats restent à intégrer.
+Ce guide couvre le prototype web, le KDS, la prise de commande simple par le personnel et les accès nominatifs par établissement. Make Line, Four et Expeditor sont présents à `/production`; `/equipe` permet d’ouvrir les postes autorisés et de gérer leurs accès. L’écran `/equipe/commande` accepte les commandes comptoir et téléphone à retirer, recalcule les prix côté serveur et les envoie à la production. `/equipe/caisse` liste les commandes prêtes et permet de confirmer le paiement au retrait; l’API `POST /api/staff/payments` capture le montant exact en cash ou carte sans donnée carte. Le raccordement TPE et la clôture de caisse restent à intégrer. Un consommateur SMS « commande prête » est livré, mais son fournisseur et son ordonnanceur doivent être configurés avant l’envoi réel. POS mobile de salle, bornes, routage automatique du centre d’appels, relais hors ligne et Uber Eats restent à intégrer.
 
 ## 1. Prérequis
 
@@ -78,7 +78,7 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 
 ### Profils d’écran
 
-- **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; l’API d’encaissement existe, mais l’écran, la caisse, le TPE et la clôture restent à livrer.
+- **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; l’écran `/equipe/caisse` couvre le paiement au retrait, mais la caisse, le TPE et la clôture restent à livrer.
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
 - **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; le point de retrait se choisit manuellement, le routage à partir des zones postales n’est pas livré.
 - **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
