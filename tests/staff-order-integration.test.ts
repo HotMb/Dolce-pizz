@@ -57,6 +57,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const staffOrders=await import('../app/api/staff/orders/route');
  const devices=await import('../app/api/staff/devices/route');
  const production=await import('../app/api/production/route');
+ const productionStream=await import('../app/api/production/stream/route');
  const notifications=await import('../app/api/internal/notifications/route');
  type Handler=(request:Request)=>Promise<Response>;
  async function call<T=Record<string,unknown>>(handler:Handler,path:string,method='GET',body?:unknown,cookie='',extraHeaders:Record<string,string>={}){
@@ -98,6 +99,10 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const ovenDevice=await ovenDeviceResponse.json() as {credential:string;device:{id:string}};
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,403);
+ const deviceStream=await productionStream.GET(new Request(`http://localhost/api/production/stream?${query}&station=oven`,{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));
+ assert.equal(deviceStream.status,200);deviceStream.body?.cancel();
+ const crossSiteStream=await productionStream.GET(new Request('http://localhost/api/production/stream?organizationId=dolce-pizza&locationId=tourcoing&station=oven',{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));
+ assert.equal(crossSiteStream.status,403);
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,workerCookie)).response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,workerCookie)).response.status,403);
  assert.equal((await call(staff.POST,'staff','POST',{action:'grant',...scope,principalId:worker.body.account.id,role:'manager'},workerCookie)).response.status,403);

@@ -12,6 +12,7 @@ export async function GET(request:Request){
  const parsed=querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams.entries()));
  if(!parsed.success)return new Response('invalid_scope',{status:400});
  const user=await staffSessionUser(request.headers.get('cookie'));const device=!user?await productionDeviceSession(db(),request):null;if(!user&&!device)return new Response('unauthorized',{status:401});
+ if(device&&(device.scope.organizationId!==parsed.data.organizationId||device.scope.locationId!==parsed.data.locationId))return new Response('forbidden',{status:403});
  await ensureSeed();const scope=device?.scope||await loadStaffScope(db(),user!.id,{organizationId:parsed.data.organizationId,locationId:parsed.data.locationId});
  if(!scope||!canOperateStation(scope,parsed.data.station,'read'))return new Response('forbidden',{status:403});
  let closed=false;let timer:number|undefined;let closeTimer:number|undefined;
