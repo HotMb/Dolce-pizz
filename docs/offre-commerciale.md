@@ -12,7 +12,7 @@ Le nom commercial du produit reste à choisir. Dolce Pizz’ sert de premier sit
 |---|---|---|
 | Commande web à emporter | Menu, personnalisation, créneau, suivi et fidélité | Prototype présent pour Ronchin |
 | POS comptoir et mobile | Saisie de commandes, encaissement, remise et clôture | À construire; la démo permet à l’équipe de valider les commandes web |
-| Centre d’appels | Recherche par téléphone, adresse, commande assistée et choix du site de retrait selon la zone | À construire; routage postal pur et données d’organisation amorcés |
+| Centre d’appels | Commande assistée, code postal de suggestion, choix explicite du site de retrait, créneau et envoi en production | Recherche client et historique d’appel restent à ajouter; les zones postales doivent être provisionnées par enseigne |
 | Bornes | Commande autonome avec le menu publié du site | À construire |
 | KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | KDS persisté avec comptes nominatifs et permissions par organisation/site/poste; Ronchin configuré, exploitation commerciale et appareils à finaliser |
 | Menu et recettes | Publication contrôlée des prix, disponibilité, suppléments et allergènes | Administration de carte, ingrédients et origines déjà dans la démo; versions par site à faire |
@@ -63,6 +63,6 @@ Ce découpage est une hypothèse produit; il faudra le tester avec des restaurat
 - **Tourcoing** : la page de démonstration publique ne montre que Ronchin et le dépôt ne contient pas l’adresse ni les zones de Tourcoing. Le lieu reste désactivé pour toute décision automatique tant que ses coordonnées et zones ne sont pas confirmées.
 - **Commande directe** : web et téléphone à emporter seulement; le client paie au retrait selon la règle communiquée. Pas de livraison maison.
 - **Uber Eats** : le connecteur doit être autorisé par le programme partenaire, associer chaque identifiant de magasin au bon site et gérer les webhooks signés et les délais d’acceptation du fournisseur.
-- **Canaux** : le produit cible tous les canaux demandés, mais le POS complet, le centre d’appels, les bornes, Uber Eats, la caisse et le SMS transactionnel effectif restent à livrer.
+- **Canaux** : le socle couvre déjà web, comptoir/téléphone, bornes, KDS, caisse de retrait, Uber Eats signé et SMS transactionnel en file; le POS mobile de salle, le fournisseur SMS réel, le TPE automatique et les adaptateurs matériels restent à livrer.
 
 Il faut donc présenter le projet comme un prototype enrichi et une plateforme en construction, pas comme un POS franchise déjà opérationnel. La phase commerciale pilote doit démarrer avec les fonctions effectivement terminées, puis activer les modules après leurs tests et l’accord des fournisseurs.
