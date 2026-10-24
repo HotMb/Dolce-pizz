@@ -262,7 +262,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const reprintBody = JSON.parse(reprintText) as {jobId:string;sourceJobId:string};
   assert.equal(reprintBody.sourceJobId,'print-test');
   assert.equal(database.prepare("SELECT status,job_type,order_id FROM print_outbox WHERE id=?").get(reprintBody.jobId)?.status,'pending');
-  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM events WHERE order_id='ready-order' AND note LIKE 'Réimpression du ticket%'").get()?.count,1);
+  const reprintAudit = database.prepare("SELECT actor,note FROM events WHERE order_id='ready-order' AND note LIKE 'Réimpression du ticket%'").get() as {actor:string;note:string};
+  assert.equal(reprintAudit.actor,'owner');
+  assert.equal(reprintAudit.note,'Réimpression du ticket print-test');
   database.prepare("UPDATE print_outbox SET status='failed',last_error='connection_refused',updated_at=? WHERE id=?").run(new Date().toISOString(),'print-test');
   const printingList = await printing.GET(new Request('http://localhost/api/admin/printing?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:ownerCookie})}));
   assert.equal(printingList.status,200);

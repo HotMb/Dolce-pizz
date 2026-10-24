@@ -37,7 +37,7 @@ export async function POST(request:Request){
    const id=`${source.id}:reprint:${crypto.randomUUID()}`;const operationId=`${source.id}:reprint:${crypto.randomUUID()}`;
    const result=await db().batch([
     db().prepare("INSERT INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at) SELECT ?,?,?,?,?,?,?,'pending',0,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND organization_id=? AND location_id=?)").bind(id,operationId,source.organization_id,source.location_id,source.order_id,source.job_type,source.payload,now,now,now,source.order_id,source.organization_id,source.location_id),
-    db().prepare('INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,status,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(`${id}:audit`,'owner:print',`Réimpression du ticket ${source.id.slice(0,24)}`,now,source.order_id,source.organization_id,source.location_id),
+    db().prepare('INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,status,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(`${id}:audit`,user.id,`Réimpression du ticket ${source.id.slice(0,24)}`,now,source.order_id,source.organization_id,source.location_id),
    ]);
    if(!result[0]?.meta.changes)throw new PrintingError(409,'La commande n’est plus disponible pour une réimpression.');
    return json({ok:true,jobId:id,sourceJobId:source.id},201);
