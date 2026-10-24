@@ -63,6 +63,6 @@ Ce découpage est une hypothèse produit; il faudra le tester avec des restaurat
 - **Tourcoing** : la page de démonstration publique ne montre que Ronchin et le dépôt ne contient pas l’adresse ni les zones de Tourcoing. Le lieu reste désactivé pour toute décision automatique tant que ses coordonnées et zones ne sont pas confirmées.
 - **Commande directe** : web et téléphone à emporter seulement; le client paie au retrait selon la règle communiquée. Pas de livraison maison.
 - **Uber Eats** : le connecteur doit être autorisé par le programme partenaire, associer chaque identifiant de magasin au bon site et gérer les webhooks signés et les délais d’acceptation du fournisseur.
-- **Canaux** : le socle couvre déjà web, comptoir/téléphone, bornes, KDS, caisse de retrait, Uber Eats signé et SMS transactionnel en file; le POS mobile de salle, le fournisseur SMS réel, le TPE automatique et les adaptateurs matériels restent à livrer.
+- **Canaux** : le socle couvre déjà web, comptoir/téléphone, bornes, POS mobile enrôlé, KDS, caisse de retrait, Uber Eats signé et SMS transactionnel en file; le fournisseur SMS réel, le TPE automatique et les adaptateurs matériels restent à livrer.
 
 Il faut donc présenter le projet comme un prototype enrichi et une plateforme en construction, pas comme un POS franchise déjà opérationnel. La phase commerciale pilote doit démarrer avec les fonctions effectivement terminées, puis activer les modules après leurs tests et l’accord des fournisseurs.
