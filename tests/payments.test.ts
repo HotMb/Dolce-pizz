@@ -294,6 +294,10 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const revokeResponse = await sessionRevoke.POST(new Request('http://localhost/api/staff/sessions', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId: 'dolce-pizza', locationId: 'ronchin', principalId: 'worker'})}));
   assert.equal(revokeResponse.status, 200);
   assert.equal((await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers: new Headers({origin: 'http://localhost', cookie: workerCookie})}))).status, 401);
+  database.prepare("UPDATE sessions SET created_at='2020-01-01T00:00:00.000Z' WHERE user_id='owner'").run();
+  const staleTransfer = await ownership.POST(new Request('http://localhost/api/admin/ownership', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',targetPrincipalId:'worker',confirmation:'TRANSFERER LA PROPRIETE'})}));
+  assert.equal(staleTransfer.status,401);
+  database.prepare('UPDATE sessions SET created_at=? WHERE user_id=?').run(new Date().toISOString(),'owner');
   const transfer = await ownership.POST(new Request('http://localhost/api/admin/ownership', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',targetPrincipalId:'worker',confirmation:'TRANSFERER LA PROPRIETE'})}));
   assert.equal(transfer.status,200,await transfer.text());
   assert.equal((await api.GET(new Request('http://localhost/api/staff?organizationId=dolce-pizza&locationId=ronchin&members=1', {headers:new Headers({cookie:ownerCookie})}))).status,403);
