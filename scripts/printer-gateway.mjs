@@ -33,7 +33,8 @@ const parseItems = (value) => {
   catch { return []; }
 };
 const render = (ticket) => {
-  const lines = ['DOLCE PIZZ’', `COMMANDE ${text(ticket.orderId).slice(0, 18)}`, `RETRAIT ${text(ticket.slot)}`, `${text(ticket.customerName)} ${text(ticket.phone)}`];
+  const customerReceipt = ticket.jobType === 'customer_receipt';
+  const lines = ['DOLCE PIZZ’', customerReceipt ? 'TICKET CLIENT' : `COMMANDE ${text(ticket.orderId).slice(0, 18)}`, `RETRAIT ${text(ticket.slot)}`, `${text(ticket.customerName)}${customerReceipt ? '' : ` ${text(ticket.phone)}`}`];
   for (const item of parseItems(ticket.items)) {
     const quantity = Number(item.quantity || 1);
     lines.push(`${quantity} x ${text(item.name || item.productName || 'Article').slice(0, 38)}`);

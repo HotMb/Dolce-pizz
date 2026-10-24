@@ -37,7 +37,7 @@ export async function handlePrintOutboxRequest(request:Request):Promise<Response
     const jobs=[];for(const row of rows.results){const lease=crypto.randomUUID();const expires=new Date(Date.now()+120000).toISOString();const claimed=await db().prepare("UPDATE print_outbox SET status='printing',attempts=attempts+1,lease_token=?,lease_expires_at=?,updated_at=? WHERE id=? AND organization_id=? AND location_id=? AND status='pending' AND available_at<=?").bind(lease,expires,now,row.id,device.organization_id,device.location_id,now).run();if(claimed.meta.changes){const job=await db().prepare(`SELECT p.id,p.order_id,p.job_type,p.payload,p.attempts,p.lease_token,p.lease_expires_at,
         o.name AS customer_name,o.phone,o.slot,o.note,o.total,o.items,o.channel
         FROM print_outbox p JOIN orders o ON o.id=p.order_id AND o.organization_id=p.organization_id AND o.location_id=p.location_id
-        WHERE p.id=? AND p.organization_id=? AND p.location_id=?`).bind(row.id,device.organization_id,device.location_id).first();if(job)jobs.push({...job,ticket:{orderId:job.order_id,customerName:job.customer_name,phone:job.phone,slot:job.slot,note:job.note,totalCents:job.total,channel:job.channel,items:job.items}});}}
+        WHERE p.id=? AND p.organization_id=? AND p.location_id=?`).bind(row.id,device.organization_id,device.location_id).first();if(job)jobs.push({...job,ticket:{jobType:job.job_type,orderId:job.order_id,customerName:job.customer_name,phone:job.phone,slot:job.slot,note:job.note,totalCents:job.total,channel:job.channel,items:job.items}});}}
     return json({jobs},200);
   }
   const id=typeof value.id==='string'&&value.id.length<=128?value.id:'';const lease=typeof value.leaseToken==='string'&&value.leaseToken.length<=128?value.leaseToken:'';
