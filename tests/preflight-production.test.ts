@@ -22,3 +22,9 @@ test('production preflight accepts a real HTTPS domain and tenant binding',()=>{
  assert.equal(result.status,0,`${result.stdout}${result.stderr}`);
  assert.match(result.stdout,/Préflight production réussi/);
 });
+
+test('production preflight rejects an invalid SMS sender',()=>{
+ const result=run({SMS_SENDER:'<script>'});
+ assert.notEqual(result.status,0);
+ assert.match(`${result.stdout}${result.stderr}`,/SMS_SENDER/);
+});
