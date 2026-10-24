@@ -112,11 +112,11 @@ export async function GET(request: Request) {
       id: string; name: string; total: number; paid_total: number; slot: string; channel: string; service_mode: string; table_label: string; updated_at: string; created_at: string;
     }>();
     const totals = shift ? await db().prepare(
-      `SELECT COALESCE(SUM(CASE WHEN e.method='cash' THEN e.amount ELSE 0 END),0) AS cash_sales,
-        COALESCE(SUM(CASE WHEN e.method='card' THEN e.amount ELSE 0 END),0) AS card_sales,
-        COUNT(*) AS payment_count
-       FROM cash_shift_entries e WHERE e.organization_id=? AND e.location_id=? AND e.shift_id=?`,
-    ).bind(scope.data.organizationId, scope.data.locationId, shift.id).first<{cash_sales: number; card_sales: number; payment_count: number}>() : null;
+      `SELECT
+        COALESCE((SELECT SUM(CASE WHEN e.method='cash' THEN e.amount ELSE 0 END) FROM cash_shift_entries e WHERE e.organization_id=? AND e.location_id=? AND e.shift_id=?),0)+COALESCE((SELECT SUM(CASE WHEN a.method='cash' THEN a.amount ELSE 0 END) FROM cash_shift_adjustments a WHERE a.organization_id=? AND a.location_id=? AND a.shift_id=?),0) AS cash_sales,
+        COALESCE((SELECT SUM(CASE WHEN e.method='card' THEN e.amount ELSE 0 END) FROM cash_shift_entries e WHERE e.organization_id=? AND e.location_id=? AND e.shift_id=?),0)+COALESCE((SELECT SUM(CASE WHEN a.method='card' THEN a.amount ELSE 0 END) FROM cash_shift_adjustments a WHERE a.organization_id=? AND a.location_id=? AND a.shift_id=?),0) AS card_sales,
+        (SELECT COUNT(*) FROM cash_shift_entries e WHERE e.organization_id=? AND e.location_id=? AND e.shift_id=?) AS payment_count`,
+    ).bind(scope.data.organizationId,scope.data.locationId,shift.id,scope.data.organizationId,scope.data.locationId,shift.id,scope.data.organizationId,scope.data.locationId,shift.id,scope.data.organizationId,scope.data.locationId,shift.id,scope.data.organizationId,scope.data.locationId,shift.id).first<{cash_sales: number; card_sales: number; payment_count: number}>() : null;
     return json({shift: shift ? {id: shift.id, businessDate: shift.business_date, openingFloat: shift.opening_float, openedAt: shift.opened_at, cashSales: totals?.cash_sales||0, cardSales: totals?.card_sales||0, paymentCount: totals?.payment_count||0, expectedCash: shift.opening_float + (totals?.cash_sales||0)} : null, orders: rows.results.map(row => ({
       id: row.id,
       label: row.id.slice(0, 6).toUpperCase(),

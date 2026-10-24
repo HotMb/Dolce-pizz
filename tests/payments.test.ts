@@ -188,6 +188,10 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(refund.body.refund.amount,100);
   assert.equal(refund.body.order.payment_status,'partially_refunded');
   assert.equal(refund.body.order.paid_total,1100);
+  const refundAdjustment = database.prepare('SELECT amount,method,shift_id FROM cash_shift_adjustments WHERE refund_id=?').get(refund.body.refund.id) as {amount:number;method:string;shift_id:string};
+  assert.equal(refundAdjustment.amount, -100);
+  assert.equal(refundAdjustment.method, 'cash');
+  assert.equal(refundAdjustment.shift_id, 'shift-1');
   assert.equal((await refundCall({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:50,reason:'Tentative équipe'},workerCookie)).response.status,403);
   assert.equal((await refundCall({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:101,reason:'Dépassement solde remboursable'},ownerCookie)).response.status,409);
   assert.equal((await call(api.POST, {...base, idempotencyKey: crypto.randomUUID()}, workerCookie)).response.status, 409);

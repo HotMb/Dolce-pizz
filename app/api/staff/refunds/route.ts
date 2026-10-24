@@ -22,15 +22,18 @@ export async function POST(request:Request){
   if(!payment)throw new ApiError(404,'Paiement introuvable dans cet établissement.');
   const refunded=await db().prepare("SELECT COALESCE(SUM(amount),0) AS amount FROM payment_refunds WHERE payment_id=? AND organization_id=? AND location_id=? AND status IN ('recorded','pending_provider','completed')").bind(payment.id,input.organizationId,input.locationId).first<{amount:number}>();
   if(input.amount>payment.amount-(refunded?.amount||0))throw new ApiError(409,'Le montant dépasse le solde remboursable de ce reçu.');
+  const originShift=await db().prepare('SELECT shift_id FROM cash_shift_entries WHERE organization_id=? AND location_id=? AND payment_id=?').bind(input.organizationId,input.locationId,payment.id).first<{shift_id:string}>();
   const id=crypto.randomUUID(),now=new Date().toISOString();
   const results=await db().batch([
    db().prepare(`INSERT INTO payment_refunds(id,organization_id,location_id,payment_id,order_id,amount,reason,status,provider_reference,actor_user_id,created_at)
      SELECT ?,?,?,?,?,? ,?,'recorded',NULL,?,? WHERE EXISTS(SELECT 1 FROM payments p WHERE p.id=? AND p.organization_id=? AND p.location_id=? AND p.status='captured')`).bind(id,input.organizationId,input.locationId,payment.id,payment.order_id,input.amount,input.reason,user.id,now,payment.id,input.organizationId,input.locationId),
    db().prepare(`UPDATE orders SET paid_total=MAX(0,paid_total-?),payment_status=CASE WHEN status='completed' AND paid_total-?<=0 THEN 'refunded' WHEN status='completed' THEN 'partially_refunded' WHEN paid_total-?<=0 THEN 'due_at_pickup' ELSE 'partially_paid' END,updated_at=?,version=version+1
      WHERE id=? AND organization_id=? AND location_id=? AND paid_total>=? AND EXISTS(SELECT 1 FROM payment_refunds r WHERE r.id=? AND r.organization_id=? AND r.location_id=? AND r.order_id=?)`).bind(input.amount,input.amount,input.amount,now,payment.order_id,input.organizationId,input.locationId,input.amount,id,input.organizationId,input.locationId,payment.order_id),
+   db().prepare(`INSERT INTO cash_shift_adjustments(id,organization_id,location_id,shift_id,refund_id,amount,method,reason,created_at)
+     SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM payment_refunds r WHERE r.id=? AND r.organization_id=? AND r.location_id=?) ON CONFLICT(organization_id,location_id,refund_id) DO NOTHING`).bind(`${id}:cash-adjustment`,input.organizationId,input.locationId,originShift?.shift_id||null,id,-input.amount,payment.method,input.reason,now,id,input.organizationId,input.locationId),
    db().prepare(`INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,status,?,? ,? FROM orders WHERE id=? AND organization_id=? AND location_id=?`).bind(`${id}:event`,user.id,`Remboursement manuel enregistré : ${input.amount} centimes`,now,payment.order_id,input.organizationId,input.locationId),
   ]);
-  if(!results[0]?.meta.changes||!results[1]?.meta.changes)throw new ApiError(409,'La commande a changé. Actualisez avant de rembourser.');
+  if(!results[0]?.meta.changes||!results[1]?.meta.changes||!results[2]?.meta.changes)throw new ApiError(409,'La commande a changé. Actualisez avant de rembourser.');
   const updated=await db().prepare('SELECT status,payment_status,paid_total,total FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(payment.order_id,input.organizationId,input.locationId).first<{status:string;payment_status:string;paid_total:number;total:number}>();
   return json({refund:{id,orderId:payment.order_id,paymentId:payment.id,amount:input.amount,method:payment.method,status:'recorded',reason:input.reason},order:updated},201);
  }catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Vérifiez les informations.'},400);if(error instanceof ApiError)return json({error:error.message},error.status);return json({error:'Le remboursement n’a pas pu être enregistré.'},503);}
