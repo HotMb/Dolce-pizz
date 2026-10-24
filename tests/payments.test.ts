@@ -287,8 +287,10 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const healthResponse = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
   const healthText = await healthResponse.text();
   assert.equal(healthResponse.status,200,healthText);
-  const healthBody = JSON.parse(healthText) as {overall:string;checks:Array<{id:string;status:string;details:Record<string,number>}>};
+  const healthBody = JSON.parse(healthText) as {overall:string;decision:string;decisionReasons:string[];checks:Array<{id:string;status:string;details:Record<string,number>}>};
   assert.ok(['ok','attention'].includes(healthBody.overall));
+  assert.equal(healthBody.decision,'go_limited');
+  assert.ok(healthBody.decisionReasons.includes('payment_terminal'));
   assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','printing','delivery_integrations','payment_terminal']);
   const deliveryHealth = healthBody.checks.find(check => check.id === 'delivery_integrations');
   assert.equal(deliveryHealth?.status, 'attention');

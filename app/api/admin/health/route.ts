@@ -12,6 +12,7 @@ class HealthApiError extends Error { constructor(public status: number, message:
 
 type CheckStatus = 'ok' | 'attention' | 'blocked';
 type HealthCheck = {id: string; status: CheckStatus; details: Record<string, number | string | boolean>};
+type ReadinessDecision = 'go' | 'go_limited' | 'no_go';
 
 /** Read-only launch checks. No customer, order or phone data is returned. */
 export async function GET(request: Request) {
@@ -63,7 +64,9 @@ export async function GET(request: Request) {
       {id: 'payment_terminal', status: paymentTerminalStatus().configured ? 'ok' : 'attention', details: {configured: paymentTerminalStatus().configured, provider: paymentTerminalStatus().provider}},
     ];
     const overall: CheckStatus = checks.some(check => check.status === 'blocked') ? 'blocked' : checks.some(check => check.status === 'attention') ? 'attention' : 'ok';
-    return json({organizationId: parsed.organizationId, locationId: parsed.locationId || null, checkedAt: new Date().toISOString(), overall, checks});
+    const decisionReasons = checks.filter(check => check.status !== 'ok').map(check => check.id);
+    const decision: ReadinessDecision = checks.some(check => check.status === 'blocked') ? 'no_go' : decisionReasons.length ? 'go_limited' : 'go';
+    return json({organizationId: parsed.organizationId, locationId: parsed.locationId || null, checkedAt: new Date().toISOString(), overall, decision, decisionReasons, checks});
   } catch (error) {
     if (error instanceof z.ZodError) return json({error: error.issues[0]?.message || 'Paramètres invalides.'}, 400);
     if (error instanceof HealthApiError) return json({error: error.message}, error.status);
