@@ -1,6 +1,6 @@
 # Revue de sécurité — état du prototype
 
-Date de revue : 23 octobre 2026. Portée : revue statique indépendante des accès du personnel, des API de production, de notification et de paiement, de l’initialisation du propriétaire, du catalogue/configuration, puis de l’isolation des profils clients, consentements, points et campagnes. Les routes réelles et les migrations sont testées avec SQLite en mémoire. Cette revue ne constitue ni un test d’intrusion externe, ni une certification, ni une preuve que le SaaS complet est prêt pour la production.
+Date de revue : 24 octobre 2026. Portée : revue statique indépendante des accès du personnel, des API de production, de notification et de paiement, de l’initialisation du propriétaire, du catalogue/configuration, puis de l’isolation des profils clients, consentements, points et campagnes. Les routes réelles et les migrations sont testées avec SQLite en mémoire. Cette revue ne constitue ni un test d’intrusion externe, ni une certification, ni une preuve que le SaaS complet est prêt pour la production.
 
 ## Provenance du code et de l’hébergement
 

@@ -174,15 +174,14 @@ Après un build, `npm run db:backup` exporte la base D1 locale dans `backups/` (
 
 Pour valider un export avant restauration, utiliser `npm run db:verify-backup -- --file=backups/nom-du-fichier.sql`. Le fichier doit rester sous `backups/`; le contrôle restaure le SQL en mémoire, active les clés étrangères et échoue si une référence est invalide.
 
-## 7. Ce qui reste à livrer avant une installation de production
+## 7. Validation restante avant une installation de production
 
-- Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
-- TPE réel, annulations/remboursements, certification caisse et exports comptables.
-- POS mobile de salle et provisionnement des zones postales réelles pour le routage du centre d’appels.
-- Les routes d’équipe et d’administration exigent une session OTP récente de moins de 12 heures; enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.
-- Enrôlement des appareils et configuration multi-sites sans constantes pilote.
-- Caisse, TPE, paiement au retrait, clôture de shift, rapprochement des transactions et reçus.
-- Configuration et supervision de l’ordonnanceur SMS, essai fournisseur contrôlé et écran de réconciliation des résultats incertains; le consommateur est livré.
-- Connecteur Uber Eats et validation de ses webhooks; le propriétaire relie chaque magasin depuis `/equipe/integrations`, les statuts externes sont conservés séparément de l’état KDS et la supervision `/equipe/sante` signale les événements agrégateur en attente ou en échec; aucune livraison directe maison n’est prévue pour le pilote.
-- Outbox serveur d’impression tenant-scopée livrée; il reste à fournir l’adaptateur matériel concret (ESC/POS ou pilote constructeur), les procédures de sauvegarde/restauration et la supervision.
-- Revue sécurité, tests d’accès croisé, conformité caisse France et pilote avec les équipes.
+Les parcours logiciels principaux sont présents. L’ouverture d’un établissement reste conditionnée aux preuves de la checklist et aux validations suivantes :
+
+- configurer le domaine vérifié, l’onboarding, les utilisateurs, les appareils et les zones postales réelles du site ;
+- configurer le compte SMS, l’expéditeur et l’ordonnanceur, puis effectuer un essai contrôlé et rapprocher tout résultat incertain ;
+- relier le magasin Uber Eats officiel, tester ses webhooks en sandbox et rapprocher les statuts et montants ;
+- installer et éprouver le relais ESC/POS et l’imprimante réellement retenus, avec coupure réseau, reprise et réimpression ;
+- intégrer un TPE certifié, valider les remboursements, la conformité française de caisse et les exports comptables ;
+- appliquer le MDM aux bornes/tablettes, configurer les sauvegardes distantes et prouver une restauration isolée ;
+- réaliser la recette terrain Ronchin puis Tourcoing, avec les données exactes de l’établissement et les équipes formées.
