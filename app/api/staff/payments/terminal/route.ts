@@ -4,6 +4,7 @@ import {db, ensureSeed} from '@/lib/server';
 import {staffSessionUser} from '@/lib/auth';
 import {loadStaffScope, readBoundedRequestText, type StaffScopeKey} from '@/lib/staff-access';
 import {paymentTerminalAdapter} from '@/lib/payment-terminal';
+import {POST as recordCashierPayment} from '@/app/api/staff/payments/route';
 
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, {status, headers: {'Cache-Control': 'no-store'}});
@@ -39,8 +40,26 @@ export async function POST(request: Request) {
     if (order.status !== 'ready' || !['due_at_pickup', 'partially_paid'].includes(order.payment_status) || input.amount > order.total - order.paid_total) throw new ApiError(409, 'Le montant ne peut pas être présenté au terminal.');
     const result = await paymentTerminalAdapter().capture({organizationId: input.organizationId, locationId: input.locationId, orderId: input.orderId, paymentId: `terminal:${input.idempotencyKey}`, amount: input.amount, currency: 'EUR', idempotencyKey: input.idempotencyKey});
     if (result.status !== 'captured') return json({error: 'Aucun paiement n’a été confirmé par le terminal.', code: result.code || 'terminal_failed'}, 503);
-    // A provider adapter must be completed with an atomic payment ledger write before this endpoint can return success.
-    return json({error: 'Adaptateur terminal incomplet : aucun paiement n’a été enregistré.', code: 'terminal_adapter_incomplete'}, 503);
+    // Reuse the server-side cashier ledger with the same idempotency key. The
+    // provider reference is deliberately not accepted from the browser.
+    const ledgerRequest = new Request(new URL('/api/staff/payments', request.url), {
+      method: 'POST',
+      headers: new Headers({
+        origin: new URL(request.url).origin,
+        'content-type': 'application/json',
+        cookie: request.headers.get('cookie') || '',
+      }),
+      body: JSON.stringify({
+        organizationId: input.organizationId, locationId: input.locationId, orderId: input.orderId,
+        idempotencyKey: input.idempotencyKey, amount: input.amount, allocations: [], method: 'card',
+      }),
+    });
+    const ledgerResponse = await recordCashierPayment(ledgerRequest);
+    if (!ledgerResponse.ok) {
+      return json({error: 'Le terminal a confirmé la carte, mais le journal de caisse doit être rapproché.', code: 'terminal_capture_reconciliation_required'}, 503);
+    }
+    const ledger = await ledgerResponse.json().catch(() => null);
+    return json({...(ledger && typeof ledger === 'object' ? ledger : {}), terminal: {providerReference: result.providerReference || null}});
   } catch (error) {
     if (error instanceof z.ZodError) return json({error: error.issues[0]?.message || 'Vérifiez les informations.'}, 400);
     if (error instanceof ApiError) return json({error: error.message}, error.status);
