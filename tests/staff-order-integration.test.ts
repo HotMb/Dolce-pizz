@@ -251,6 +251,13 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const kioskOrder=await staffOrders.POST(new Request('http://localhost/api/staff/orders',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json',authorization:`Bearer ${kioskCredential}`},body:JSON.stringify({key:crypto.randomUUID(),...scope,channel:'kiosk',customerName:'Client borne',customerPhone:'',readySmsConfirmed:false,slot:new Date(Date.parse(input.slot)+3600000).toISOString(),note:'',items:[{id:product.id,size:'senior',quantity:1,option:''}]})}));
  assert.equal(kioskOrder.status,201,await kioskOrder.text());
  assert.equal(database.prepare("SELECT channel,status FROM orders WHERE channel='kiosk' ORDER BY created_at DESC LIMIT 1").get()?.channel,'kiosk');
+ const revisionProduct=database.prepare('SELECT id,version,available FROM products WHERE organization_id=? AND id=?').get('dolce-pizza',product.id) as {id:string;version:number;available:number};
+ const menuUpdate=await call<{product:{version:number;available:boolean}}>(web.PUT,`admin/products/${revisionProduct.id}`,'PUT',{available:!Boolean(revisionProduct.available),version:revisionProduct.version},ownerCookie);
+ assert.equal(menuUpdate.response.status,200,JSON.stringify(menuUpdate.body));
+ const menuHistory=await call<{revisions:{product_id:string;product_version:number;action:string;actor_id:string;snapshot:string}[]}>(web.GET,`admin/products/revisions?productId=${revisionProduct.id}`,'GET',undefined,ownerCookie);
+ assert.equal(menuHistory.response.status,200,JSON.stringify(menuHistory.body));
+ assert.ok(menuHistory.body.revisions.some(row=>row.product_version===menuUpdate.body.product.version&&row.action==='updated'&&row.actor_id===before.body.account.id));
+ assert.doesNotThrow(()=>JSON.parse(menuHistory.body.revisions[0].snapshot));
  const revoke=await call(staff.POST,'staff','POST',{action:'revoke',...scope,membershipId:grant.body.membershipId},ownerCookie);
  assert.equal(revoke.response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,workerCookie)).response.status,403);

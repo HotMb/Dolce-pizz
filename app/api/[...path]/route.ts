@@ -203,7 +203,7 @@ async function handler(request:Request){
    if(!result.meta.changes)result=await db().prepare('UPDATE config SET value=?,version=version+1 WHERE organization_id=? AND version=?').bind(JSON.stringify(s),PILOT_ORGANIZATION_ID,s.version).run();
    if(!result.meta.changes)fail(409,'Les réglages ont changé. Rechargez-les avant d’enregistrer.');return json({settings:await settings(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID)});
   }
-  if(path[1]==='products')return await products(request,path[2],path[3],method,body,PILOT_ORGANIZATION_ID);
+  if(path[1]==='products')return await products(request,path[2],path[3],method,body,PILOT_ORGANIZATION_ID,actor);
   if(path[1]==='ingredients'||path[1]==='origins')return await ingredients(path[1],path[2],method,body,PILOT_ORGANIZATION_ID);
   if(path[1]==='campaigns')return await campaigns(url,path[2],path[3],method,body,actor,local,PILOT_ORGANIZATION_ID);
   fail(404,'Cette action est introuvable.');
@@ -253,13 +253,20 @@ async function checkProduct(p:z.infer<typeof productFields>,organizationId=PILOT
  if(p.xxl!==null&&p.status==='published'&&p.ingredients.length<2)fail(400,'Ajoutez les ingrédients de la pizza avant de la publier.');
  return {...p,description:p.description||describe(p.ingredients,await ingredientList(organizationId))};
 }
-async function products(request:Request,id:string|undefined,sub:string|undefined,method:string,body:()=>Promise<unknown>,organizationId=PILOT_ORGANIZATION_ID){
+async function products(request:Request,id:string|undefined,sub:string|undefined,method:string,body:()=>Promise<unknown>,organizationId=PILOT_ORGANIZATION_ID,actor='system'){
  const now=new Date().toISOString();
+ if(id==='revisions'&&method==='GET'){
+  const productId=new URL(request.url).searchParams.get('productId');
+  const rows=await db().prepare(`SELECT id,product_id,product_version,action,snapshot,actor_id,changed_at FROM menu_product_revisions WHERE organization_id=?${productId?' AND product_id=?':''} ORDER BY changed_at DESC,id DESC LIMIT 500`).bind(...(productId?[organizationId,productId]:[organizationId])).all();
+  return json({revisions:rows.results});
+ }
  if(!id&&method==='POST'){
   const p=await checkProduct(productFields.parse(await body()),organizationId);
   const newId=await uniqueId('products',p.name,'article');
   const last=await db().prepare('SELECT COALESCE(MAX(sort),0) AS sort FROM products WHERE organization_id=?').bind(organizationId).first<{sort:number}>();
-  await insertProduct({...p,id:newId,photo:'none',sort:(last?.sort||0)+1},organizationId).run();
+  const inserted={...p,id:newId,photo:'none',sort:(last?.sort||0)+1};
+  const snapshot=toProduct({...inserted,available:inserted.available?1:0,offer:inserted.offer?1:0,allergens_checked:inserted.allergensChecked?1:0,spicy:inserted.spicy?1:0,options:JSON.stringify(inserted.options||[]),ingredients:JSON.stringify(inserted.ingredients||[]),allergens:JSON.stringify(inserted.allergens||[]),version:1,location_available:null,location_price:null,location_xxl:null});
+  await db().batch([insertProduct(inserted,organizationId),db().prepare('INSERT INTO menu_product_revisions(id,organization_id,product_id,product_version,action,snapshot,actor_id,changed_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),organizationId,newId,1,'created',JSON.stringify(snapshot),actor,now)]);
   return json({product:toProduct((await productRow(newId,organizationId))!)},201);
  }
  if(!id)fail(404,'Cette action est introuvable.');
@@ -270,16 +277,21 @@ async function products(request:Request,id:string|undefined,sub:string|undefined
   const merged={name:current.name,category:current.category,description:current.description,tagline:current.tagline||'',price:current.price,xxl:current.xxl,ingredients:current.ingredients||[],allergens:current.allergens||[],allergensChecked:!!current.allergensChecked,options:current.options||[],spicy:!!current.spicy,offer:!!current.offer,available:current.available,status:current.status||'published',...input};
   if((current.xxl===null)!==(merged.xxl===null))fail(400,'Conservez les tailles proposées pour cet article.');
   const p=await checkProduct(merged,organizationId);
-  const r=await db().prepare('UPDATE products SET name=?,category=?,description=?,tagline=?,price=?,xxl=?,ingredients=?,allergens=?,allergens_checked=?,options=?,spicy=?,offer=?,available=?,status=?,version=version+1,updated_at=? WHERE organization_id=? AND id=? AND version=?')
-   .bind(p.name,p.category,p.description,p.tagline,p.price,p.xxl,JSON.stringify(p.ingredients),JSON.stringify(p.allergens),p.allergensChecked?1:0,JSON.stringify(p.options),p.spicy?1:0,p.offer?1:0,p.available?1:0,p.status,now,organizationId,id,input.version).run();
-  if(!r.meta.changes)fail(409,'Cet article a été modifié sur un autre appareil. Rechargez-le avant d’enregistrer.');
+  const nextVersion=input.version+1;
+  const snapshot={...p,id,version:nextVersion};
+  const r=await db().batch([
+   db().prepare('UPDATE products SET name=?,category=?,description=?,tagline=?,price=?,xxl=?,ingredients=?,allergens=?,allergens_checked=?,options=?,spicy=?,offer=?,available=?,status=?,version=version+1,updated_at=? WHERE organization_id=? AND id=? AND version=?')
+    .bind(p.name,p.category,p.description,p.tagline,p.price,p.xxl,JSON.stringify(p.ingredients),JSON.stringify(p.allergens),p.allergensChecked?1:0,JSON.stringify(p.options),p.spicy?1:0,p.offer?1:0,p.available?1:0,p.status,now,organizationId,id,input.version),
+   db().prepare('INSERT INTO menu_product_revisions(id,organization_id,product_id,product_version,action,snapshot,actor_id,changed_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM products WHERE organization_id=? AND id=? AND version=?)').bind(crypto.randomUUID(),organizationId,id,nextVersion,p.status==='archived'?'archived':'updated',JSON.stringify(snapshot),actor,now,organizationId,id,nextVersion),
+  ]);
+  if(!r[0].meta.changes)fail(409,'Cet article a été modifié sur un autre appareil. Rechargez-le avant d’enregistrer.');
   return json({product:toProduct((await productRow(id,organizationId))!)});
  }
  if(method==='DELETE'){
   // A product already ordered stays in the database, hidden, so past orders and loyalty stay exact.
   const ordered=await db().prepare('SELECT 1 FROM orders WHERE organization_id=? AND instr(items,?) LIMIT 1').bind(organizationId,`"id":"${id}"`).first();
-  if(ordered){await db().prepare("UPDATE products SET status='archived',version=version+1,updated_at=? WHERE organization_id=? AND id=?").bind(now,organizationId,id).run();return json({archived:true});}
-  await db().batch([db().prepare('DELETE FROM products WHERE organization_id=? AND id=?').bind(organizationId,id),db().prepare('DELETE FROM product_photos WHERE organization_id=? AND product_id=?').bind(organizationId,id)]);
+  if(ordered){const nextVersion=(current.version||1)+1;await db().batch([db().prepare("UPDATE products SET status='archived',version=version+1,updated_at=? WHERE organization_id=? AND id=?").bind(now,organizationId,id),db().prepare('INSERT INTO menu_product_revisions(id,organization_id,product_id,product_version,action,snapshot,actor_id,changed_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),organizationId,id,nextVersion,'archived',JSON.stringify({...current,status:'archived',version:nextVersion}),actor,now)]);return json({archived:true});}
+  await db().batch([db().prepare('INSERT INTO menu_product_revisions(id,organization_id,product_id,product_version,action,snapshot,actor_id,changed_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),organizationId,id,current.version,'deleted',JSON.stringify(current),actor,now),db().prepare('DELETE FROM products WHERE organization_id=? AND id=?').bind(organizationId,id),db().prepare('DELETE FROM product_photos WHERE organization_id=? AND product_id=?').bind(organizationId,id)]);
   return json({archived:false});
  }
  fail(404,'Cette action est introuvable.');

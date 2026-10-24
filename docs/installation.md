@@ -145,6 +145,7 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 3. Avant `0007`, vérifier qu’aucune écriture de fidélité n’est orpheline et qu’aucune campagne ne référence un compte supprimé. La migration s’arrête sans supprimer de données si elle détecte ce cas.
 4. Mettre le pilote en maintenance pendant l’application de `0007`, `0008`, `0009` puis `0010` et la publication du nouveau Worker : l’ancien Worker écrit encore l’ancien schéma, qui est volontairement retiré par ces migrations.
 5. Vérifier accès tenant/site, zones postales et routage, enrôlement puis révocation d’un appareil, commande idempotente, profil/consentement, solde fidélité, campagne de test, prix, paiement à encaisser et impression.
+   Pour une modification de carte, vérifier aussi l’historique maître via `GET /api/admin/products/revisions?productId=<id>` avant toute restauration manuelle; les commandes historiques restent inchangées.
 6. Publier hors des heures de service et surveiller les commandes entrantes.
 7. Garder l’export de base et la procédure de retour arrière disponibles; une restauration de schéma nécessite aussi la restauration des données correspondantes. Après chaque restauration, exécuter `npm run db:verify` sur une copie de contrôle : cette commande vérifie les migrations et les références SQLite, mais ne remplace pas un test de restauration D1 distante.
 
