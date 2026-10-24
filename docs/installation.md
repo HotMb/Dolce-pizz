@@ -149,6 +149,10 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 6. Publier hors des heures de service et surveiller les commandes entrantes.
 7. Garder l’export de base et la procédure de retour arrière disponibles; une restauration de schéma nécessite aussi la restauration des données correspondantes. Après chaque restauration, exécuter `npm run db:verify` sur une copie de contrôle : cette commande vérifie les migrations et les références SQLite, mais ne remplace pas un test de restauration D1 distante.
 
+### Sauvegarde D1
+
+Après un build, `npm run db:backup` exporte la base D1 locale dans `backups/` (dossier ignoré par Git). Pour une base distante, utiliser explicitement `npm run db:backup -- --remote`; la commande exige l’authentification Wrangler et écrit un fichier horodaté. Ne pas envoyer ces fichiers dans le dépôt : ils peuvent contenir des commandes, des profils clients et des journaux opérationnels. Tester périodiquement une restauration de l’export sur une base isolée, puis exécuter `npm run db:verify` et un scénario de commande/KDS.
+
 ## 7. Ce qui reste à livrer avant une installation de production
 
 - Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
