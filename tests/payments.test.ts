@@ -232,6 +232,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(printer.response.status, 201, JSON.stringify(printer.body));
   const rotated = await deviceCall<{device:{id:string};credential:string}>({...deviceScope, action: 'rotate', deviceId: printer.body.device.id, expiresInDays: 30}, ownerCookie);
   assert.equal(rotated.response.status, 200, JSON.stringify(rotated.body));
+  const deviceListAfterRotation = await devices.GET(new Request('http://localhost/api/staff/devices?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:ownerCookie})}));
+  assert.equal(deviceListAfterRotation.status,200);
+  assert.ok((await deviceListAfterRotation.json() as {devices:Array<{id:string;expiresAt:number}>}).devices.find(device=>device.id===printer.body.device.id)?.expiresAt);
   const oldCredentialHeartbeat = await heartbeat.POST(new Request('http://localhost/api/device/heartbeat', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({token:printer.body.credential})}));
   assert.equal(oldCredentialHeartbeat.status,401);
   const newCredentialHeartbeat = await heartbeat.POST(new Request('http://localhost/api/device/heartbeat', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({token:rotated.body.credential})}));
