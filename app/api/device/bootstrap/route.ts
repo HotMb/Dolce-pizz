@@ -6,9 +6,11 @@ export const dynamic='force-dynamic';
 const tokenHash=async(token:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))),byte=>byte.toString(16).padStart(2,'0')).join('');
 
 export async function GET(request:Request){
-  await ensureSeed();
   const token=request.headers.get('authorization')?.match(/^Bearer ([0-9a-f]{64})$/)?.[1];
   if(!token)return NextResponse.json({error:'Appareil non autorisé ou jeton expiré.'},{status:401,headers:{'Cache-Control':'no-store'}});
+  // Do not seed or mutate the database before the bearer credential is proven.
+  // This keeps an unauthenticated bootstrap probe strictly fail-closed in production.
+  await ensureSeed();
   const hash=await tokenHash(token),now=Date.now();
   const row=await db().prepare(`SELECT c.device_id,c.expires_at,d.label,d.role,d.organization_id,d.location_id,
     o.name AS organization_name,l.name AS location_name
