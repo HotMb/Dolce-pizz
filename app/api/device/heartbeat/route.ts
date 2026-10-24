@@ -1,0 +1,12 @@
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
+import {db} from '@/lib/server';
+
+export const dynamic='force-dynamic';
+const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
+const input=z.object({token:z.string().regex(/^[0-9a-f]{64}$/),clientVersion:z.string().trim().max(40).optional()}).strict();
+const hash=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('');
+export async function POST(request:Request){
+  try{const length=Number(request.headers.get('content-length')||0);if(Number.isFinite(length)&&length>3000)return json({error:'La demande est trop volumineuse.'},413);const body=input.parse(await request.json());const now=Date.now();const tokenHash=await hash(body.token);const row=await db().prepare(`SELECT c.device_id,d.organization_id,d.location_id,d.label,d.role,d.status,c.expires_at FROM device_credentials c JOIN devices d ON d.id=c.device_id AND d.organization_id=c.organization_id AND d.location_id=c.location_id JOIN organizations o ON o.id=d.organization_id AND o.status='active' JOIN locations l ON l.organization_id=d.organization_id AND l.id=d.location_id AND l.status='active' WHERE c.token_hash=? AND c.revoked_at IS NULL AND c.expires_at>? AND d.status='active'`).bind(tokenHash,now).first<{device_id:string;organization_id:string;location_id:string;label:string;role:string;status:string;expires_at:number}>();if(!row)return json({error:'Identifiant appareil invalide ou expiré.'},401);await db().batch([db().prepare('UPDATE device_credentials SET last_seen_at=? WHERE token_hash=? AND revoked_at IS NULL').bind(new Date(now).toISOString(),tokenHash),db().prepare('UPDATE devices SET last_seen_at=? WHERE id=? AND organization_id=? AND location_id=? AND status=\'active\'').bind(new Date(now).toISOString(),row.device_id,row.organization_id,row.location_id)]);return json({device:{id:row.device_id,organizationId:row.organization_id,locationId:row.location_id,label:row.label,role:row.role,expiresAt:row.expires_at},clientVersion:body.clientVersion||null});}
+  catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Vérifiez le jeton appareil.'},400);console.error('Device heartbeat error',error);return json({error:'Le contrôle appareil est momentanément indisponible.'},503);}
+}

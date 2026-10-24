@@ -69,6 +69,8 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const api = await import('../app/api/staff/payments/route');
   const shifts = await import('../app/api/staff/shifts/route');
   const routing = await import('../app/api/staff/routing/route');
+  const devices = await import('../app/api/staff/devices/route');
+  const heartbeat = await import('../app/api/device/heartbeat/route');
   type Handler = (request: Request) => Promise<Response>;
   async function call<T = Record<string, unknown>>(handler: Handler, body: unknown, cookie = '') {
     const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
@@ -92,6 +94,12 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
     const headers = new Headers({origin: 'http://localhost'});
     if (cookie) headers.set('cookie', cookie);
     const response = await routing.GET(new Request(`http://localhost/api/staff/routing?organizationId=dolce-pizza&postalCode=${postalCode}`, {headers}));
+    return {response, body: await response.json() as T};
+  }
+  async function deviceCall<T = Record<string, unknown>>(body: unknown, cookie = '') {
+    const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
+    if (cookie) headers.set('cookie', cookie);
+    const response = await devices.POST(new Request('http://localhost/api/staff/devices', {method: 'POST', headers, body: JSON.stringify(body)}));
     return {response, body: await response.json() as T};
   }
   async function list<T = Record<string, unknown>>(cookie = '') {
@@ -150,4 +158,15 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const routed = await routingList<{candidates: {locationId: string; name: string}[]}>('59790', ownerCookie);
   assert.equal(routed.response.status, 200);
   assert.deepEqual(routed.body.candidates.map(candidate => candidate.locationId), ['ronchin']);
+  const deviceScope = {organizationId: 'dolce-pizza', locationId: 'ronchin'};
+  assert.equal((await deviceCall({...deviceScope, action: 'enroll', label: 'Tablette Make Line', role: 'make_line'}, workerCookie)).response.status, 403);
+  const enrolled = await deviceCall<{device: {id: string; role: string}; credential: string}>({...deviceScope, action: 'enroll', label: 'Tablette Make Line', role: 'make_line'}, ownerCookie);
+  assert.equal(enrolled.response.status, 201, JSON.stringify(enrolled.body));
+  assert.equal(enrolled.body.device.role, 'make_line');
+  const heartbeatResponse = await heartbeat.POST(new Request('http://localhost/api/device/heartbeat', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({token: enrolled.body.credential, clientVersion: '1.0.0'})}));
+  assert.equal(heartbeatResponse.status, 200);
+  assert.equal((await heartbeatResponse.json() as {device: {id: string}}).device.id, enrolled.body.device.id);
+  assert.equal((await deviceCall({...deviceScope, action: 'revoke', deviceId: enrolled.body.device.id}, ownerCookie)).response.status, 200);
+  const revokedHeartbeat = await heartbeat.POST(new Request('http://localhost/api/device/heartbeat', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({token: enrolled.body.credential})}));
+  assert.equal(revokedHeartbeat.status, 401);
 });

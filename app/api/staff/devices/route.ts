@@ -1,0 +1,29 @@
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
+import {db,ensureSeed} from '@/lib/server';
+import {sessionUser} from '@/lib/auth';
+import {loadStaffScope,readBoundedRequestText} from '@/lib/staff-access';
+
+export const dynamic='force-dynamic';
+const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
+class ApiError extends Error{constructor(public status:number,message:string){super(message);}}
+const scope=z.object({organizationId:z.string().min(1).max(128),locationId:z.string().min(1).max(128)}).strict();
+const input=z.object({action:z.enum(['enroll','revoke']),organizationId:z.string().min(1).max(128),locationId:z.string().min(1).max(128),deviceId:z.string().min(1).max(128).optional(),label:z.string().trim().min(1).max(80).optional(),role:z.enum(['make_line','four','expeditor','pos','kiosk','printer_gateway']).optional(),expiresInDays:z.number().int().min(1).max(365).default(90)}).strict();
+const hash=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('');
+const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
+
+async function actor(request:Request,scopeKey:{organizationId:string;locationId:string},write:boolean){
+  const url=new URL(request.url);const origin=request.headers.get('origin');if(write&&(!origin||origin!==url.origin))throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
+  const user=await sessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous pour gérer les appareils.');await ensureSeed();
+  const access=await loadStaffScope(db(),user.id,scopeKey);if(!access?.canManageStaff)throw new ApiError(403,'Seul le propriétaire peut gérer les appareils de cet établissement.');return user;
+}
+export async function GET(request:Request){
+  try{const query=Object.fromEntries(new URL(request.url).searchParams.entries());const parsed=scope.safeParse(query);if(!parsed.success)throw new ApiError(400,'Choisissez un établissement valide.');await actor(request,parsed.data,false);const rows=await db().prepare(`SELECT d.id,d.label,d.role,d.status,d.created_at,d.last_seen_at,MAX(c.last_seen_at) AS credential_last_seen FROM devices d LEFT JOIN device_credentials c ON c.organization_id=d.organization_id AND c.location_id=d.location_id AND c.device_id=d.id AND c.revoked_at IS NULL WHERE d.organization_id=? AND d.location_id=? GROUP BY d.id ORDER BY d.status,d.label,d.id LIMIT 200`).bind(parsed.data.organizationId,parsed.data.locationId).all<{id:string;label:string;role:string;status:string;created_at:string;last_seen_at:string|null;credential_last_seen:string|null}>();return json({devices:rows.results.map(row=>({id:row.id,label:row.label,role:row.role,status:row.status,createdAt:row.created_at,lastSeenAt:row.credential_last_seen||row.last_seen_at}))});}
+  catch(error){if(error instanceof ApiError)return json({error:error.message},error.status);console.error('Devices GET error',error);return json({error:'Les appareils sont momentanément indisponibles.'},503);}
+}
+export async function POST(request:Request){
+  try{const text=await readBoundedRequestText(request,8000);let raw:unknown;try{raw=JSON.parse(text);}catch{throw new ApiError(400,'La demande est illisible.');}const body=input.parse(raw);const user=await actor(request,{organizationId:body.organizationId,locationId:body.locationId},true);const now=new Date().toISOString();
+    if(body.action==='revoke'){if(!body.deviceId)throw new ApiError(400,'Indiquez l’appareil à révoquer.');const result=await db().prepare(`UPDATE devices SET status='revoked' WHERE id=? AND organization_id=? AND location_id=? AND status='active'`).bind(body.deviceId,body.organizationId,body.locationId).run();await db().prepare(`UPDATE device_credentials SET revoked_at=? WHERE organization_id=? AND location_id=? AND device_id=? AND revoked_at IS NULL`).bind(Date.now(),body.organizationId,body.locationId,body.deviceId).run();if(!result.meta.changes)throw new ApiError(404,'Cet appareil est introuvable ou déjà révoqué.');return json({ok:true,deviceId:body.deviceId});}
+    if(!body.label||!body.role)throw new ApiError(400,'Indiquez un libellé et un rôle d’appareil.');const deviceId=body.deviceId||crypto.randomUUID();const plain=token();const tokenHash=await hash(plain);const expiresAt=Date.now()+body.expiresInDays*86400000;const result=await db().batch([db().prepare(`INSERT INTO devices(id,organization_id,location_id,label,role,status,created_at,last_seen_at) SELECT ?,?,?,?,?,'active',?,NULL WHERE EXISTS(SELECT 1 FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active')`).bind(deviceId,body.organizationId,body.locationId,body.label,body.role,now,body.organizationId,body.locationId),db().prepare(`INSERT INTO device_credentials(token_hash,organization_id,location_id,device_id,expires_at,revoked_at,created_by,created_at,last_seen_at) SELECT ?,?,?,?, ?,NULL,?,?,NULL WHERE EXISTS(SELECT 1 FROM devices WHERE id=? AND organization_id=? AND location_id=? AND status='active')`).bind(tokenHash,body.organizationId,body.locationId,deviceId,expiresAt,user.id,now,deviceId,body.organizationId,body.locationId)]);if(!result[0]?.meta.changes||!result[1]?.meta.changes)throw new ApiError(409,'Cet appareil existe déjà ou ne peut pas être enrôlé.');return json({device:{id:deviceId,label:body.label,role:body.role,expiresAt},credential:plain},201);
+  }catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Vérifiez les informations.'},400);if(error instanceof ApiError)return json({error:error.message},error.status);console.error('Devices POST error',error);return json({error:'L’opération appareil a échoué.'},503);}
+}
