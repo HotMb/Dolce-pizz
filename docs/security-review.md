@@ -49,6 +49,7 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 - Une borne ne peut créer que des commandes `channel='kiosk'`; elle ne peut pas appeler les canaux comptoir ou téléphone ni choisir un autre site.
 - `/borne` n’utilise pas de session employé: le jeton est envoyé en Bearer à chaque appel, le panier est séparé par une clé de stockage dédiée et le bouton de verrouillage efface le jeton local.
 - Le stockage navigateur est adapté au prototype et à une borne verrouillée par MDM; en déploiement, le navigateur doit être en mode kiosque, le poste doit être dédié et un jeton compromis doit être révoqué puis remplacé.
+- Le propriétaire enrôle et révoque les appareils depuis `/equipe`; l’interface ne réaffiche jamais un ancien jeton et les listes ne renvoient que le statut, le rôle et le dernier heartbeat.
 - Le client est invité sans session partagée; les prix, allergènes, créneaux, capacité et snapshots de production restent calculés et validés côté serveur.
 
 ## Limites ouvertes avant une vraie exploitation

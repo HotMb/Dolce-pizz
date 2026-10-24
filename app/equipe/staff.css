@@ -65,6 +65,17 @@
 .staff-list-empty{padding:26px 0;color:var(--muted-foreground)}
 .staff-success{display:flex;align-items:center;gap:9px;padding:12px 0;font-size:14px}
 .staff-success svg{color:var(--accent)}
+.device-management{border-top:3px solid var(--primary)}
+.device-enroll-form{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(170px,.8fr) minmax(140px,.6fr) auto;align-items:start;gap:16px;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.device-enroll-form .field{margin:0;min-width:0}
+.device-enroll-form .btn{margin-top:28px;min-height:48px}
+.device-credential{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:14px;margin:0 0 20px;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.device-credential>svg{color:var(--accent);margin-top:3px}
+.device-credential strong{display:block;margin-bottom:4px}
+.device-credential p,.device-credential small{display:block;margin:0 0 8px;color:var(--muted-foreground);font-size:13px;line-height:1.45}
+.device-credential code{display:block;padding:10px;overflow-wrap:anywhere;border-radius:8px;background:var(--background);font-size:13px;letter-spacing:.04em}
+.device-credential .btn{min-height:44px}
+.device-list{margin-top:0}
 .staff-pagination{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:18px;font-size:14px}
 .staff-confirm{max-height:calc(100dvh - 32px);overflow-y:auto}
 .staff-confirm [data-slot=alert-dialog-description]{overflow-wrap:anywhere;line-height:1.6;color:var(--muted-foreground)}
@@ -77,6 +88,10 @@
  .staff-site-picker{width:100%;min-width:0}
  .staff-grant-form{grid-template-columns:minmax(0,1fr)}
  .staff-grant-submit{margin-top:0}
+ .device-enroll-form{grid-template-columns:minmax(0,1fr)}
+ .device-enroll-form .btn{margin-top:0}
+ .device-credential{grid-template-columns:auto minmax(0,1fr)}
+ .device-credential>.btn{grid-column:2;justify-self:start}
  .staff-management{padding:20px}
  .staff-members-head{align-items:flex-start;flex-direction:column;gap:4px}
  .staff-members-head p{margin:0}
