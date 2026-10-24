@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 import {env} from 'cloudflare:workers';
 import {z} from 'zod';
 import {db,ensureSeed,settings,productList,ingredientList,menu,balance,isAdmin,orderView,secret,marketingStopSecret,insertProduct,toProduct,toIngredient} from '@/lib/server';
-import {sessionUser,sendCode,verifyCode,sessionCookie,endSession,normalizePhone,localPhone,AuthError,underLimit,smsMode,sendSmsDetailed} from '@/lib/auth';
+import {sessionUser,staffSessionUser,sendCode,verifyCode,sessionCookie,endSession,normalizePhone,localPhone,AuthError,underLimit,smsMode,sendSmsDetailed} from '@/lib/auth';
 import {slots,allowedSlot,nextStatus,parisParts} from '@/lib/rules';
 import {priceCart} from '@/lib/pricing';
 import {categories,type Product} from '@/lib/catalog';
@@ -173,15 +173,16 @@ async function handler(request:Request){
    const events=await db().prepare('SELECT e.status,e.note,e.created_at FROM events e JOIN orders o ON o.id=e.order_id WHERE e.order_id=? AND o.organization_id=? AND o.customer_user_id=? ORDER BY e.created_at').bind(path[1],PILOT_ORGANIZATION_ID,actor).all();return json({order:orderView(order),events:events.results});
   }
   if(path[0]==='admin'&&path[1]==='claim'&&method==='POST'){
+   const staff=await staffSessionUser(cookie);if(!staff)fail(401,'Connectez-vous avec une session équipe avant le bootstrap.');
    const input=z.object({code:z.string().min(20).max(200)}).parse(await body());const required=secret();
    const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));const a=await digest(input.code),b=await digest(required);let difference=0;for(let i=0;i<a.length;i++)difference|=a[i]^b[i];
    if(!required||difference)fail(403,'Code d’installation incorrect.');
    const now=new Date().toISOString();
    const result=await db().batch([
-    db().prepare("INSERT INTO roles(user_id,role) SELECT ?,'admin' WHERE NOT EXISTS(SELECT 1 FROM roles WHERE role='admin')").bind(actor),
-    db().prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) SELECT ?,?,NULL,?,'owner','active',?,? WHERE EXISTS(SELECT 1 FROM roles WHERE user_id=? AND role='admin') AND EXISTS(SELECT 1 FROM organizations WHERE id=? AND status='active') AND NOT EXISTS(SELECT 1 FROM organization_memberships WHERE organization_id=? AND role='owner' AND location_id IS NULL)").bind(`bootstrap-owner:${PILOT_ORGANIZATION_ID}:${actor}`,PILOT_ORGANIZATION_ID,actor,now,now,actor,PILOT_ORGANIZATION_ID,PILOT_ORGANIZATION_ID),
+    db().prepare("INSERT INTO roles(user_id,role) SELECT ?,'admin' WHERE NOT EXISTS(SELECT 1 FROM roles WHERE role='admin')").bind(staff.id),
+    db().prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) SELECT ?,?,NULL,?,'owner','active',?,? WHERE EXISTS(SELECT 1 FROM roles WHERE user_id=? AND role='admin') AND EXISTS(SELECT 1 FROM organizations WHERE id=? AND status='active') AND NOT EXISTS(SELECT 1 FROM organization_memberships WHERE organization_id=? AND role='owner' AND location_id IS NULL)").bind(`bootstrap-owner:${PILOT_ORGANIZATION_ID}:${staff.id}`,PILOT_ORGANIZATION_ID,staff.id,now,now,staff.id,PILOT_ORGANIZATION_ID,PILOT_ORGANIZATION_ID),
    ]);
-   if(!result[0].meta.changes&&!(await isAdmin(actor)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
+   if(!result[0].meta.changes&&!(await isAdmin(staff.id)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
   }
   if(path[0]==='orders'&&path[1]&&method==='PATCH')return await updateOrder(path[1],actor,await body(),false,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);
   if(path[0]!=='admin')fail(404,'Page introuvable.');

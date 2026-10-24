@@ -79,7 +79,14 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  async function onboardingCall(cookie:string){
   return onboarding.POST(new Request('http://localhost/api/admin/onboarding',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json',cookie},body:JSON.stringify({installationCode:setup,organizationId:'second-pizza',name:'Seconde enseigne',slug:'second-pizza',locationId:'second-site',locationCode:'second',locationName:'Second site',addressLine1:'1 rue du Test',postalCode:'59000',locality:'Lille',phone:'0600000099'})}));
  }
+ async function loginCustomer(phone:string){
+  const code=await call<{devCode?:string}>(web.POST,'auth/code','POST',{phone});
+  assert.equal(code.response.status,200);const verified=await call(web.POST,'auth/verify','POST',{phone,code:code.body.devCode});
+  assert.equal(verified.response.status,200);return verified.response.headers.get('set-cookie')!.split(';')[0];
+ }
  const ownerCookie=await login('0600000001');
+ const customerCookie=await loginCustomer('0600000003');
+ assert.equal((await call(web.POST,'admin/claim','POST',{code:setup},customerCookie)).response.status,401);
  const publicCatalog=await call<{location:{id:string;locality:string;postalCode:string;phone:string}}>(web.GET,'catalog');
  assert.equal(publicCatalog.response.status,200);
  assert.deepEqual(publicCatalog.body.location,{id:'ronchin',name:'Dolce Pizz’ — Ronchin',addressLine1:'191 avenue Jean-Jaurès',postalCode:'59790',locality:'Ronchin',phone:'+33 3 20 40 09 01',countryCode:'FR',timezone:'Europe/Paris'});
