@@ -58,12 +58,17 @@ export async function GET(request: Request) {
         WHERE o.organization_id=? AND e.status='payment_reconciliation_required'${parsed.locationId ? ' AND o.location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number}>(),
     ]);
 
+    const vars = env as unknown as Record<string, string | undefined>;
+    const schedulerConfigured = vars.NOTIFICATION_SCHEDULER_CONFIGURED === '1';
+    const senderConfigured = /^[A-Za-z][A-Za-z0-9 ]{0,10}$/.test(String(vars.SMS_SENDER || 'DolcePizz'));
+    const providerConfigured = String(vars.BREVO_API_KEY || '').trim().length >= 20;
+    const dispatchSecretConfigured = String(vars.NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32;
     const checks: HealthCheck[] = [
       {id: 'locations', status: locations.results.every(row => row.status === 'active') ? 'ok' : 'blocked', details: {total: locations.results.length, active: locations.results.filter(row => row.status === 'active').length}},
       {id: 'location_configuration', status: locations.results.every(row => row.status === 'active' && row.configured === 1) ? 'ok' : 'attention', details: {configured: locations.results.filter(row => row.configured === 1).length, total: locations.results.length}},
       {id: 'devices', status: Number(devices?.stale || 0) === 0 && Number(devices?.expired || 0) === 0 && Number(devices?.expiringSoon || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), kds: Number(devices?.kds || 0), pos: Number(devices?.pos || 0), kiosks: Number(devices?.kiosks || 0), printerGateways: Number(devices?.printerGateways || 0), stale: Number(devices?.stale || 0), expired: Number(devices?.expired || 0), expiringSoon: Number(devices?.expiringSoon || 0), expiryWarningDays: 7, staleAfterMinutes: 5}},
       {id: 'notifications', status: Number(notifications?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(notifications?.open || 0), errors: Number(notifications?.errors || 0)}},
-      {id: 'sms_provider', status: String((env as unknown as Record<string, string | undefined>).BREVO_API_KEY || '').trim().length >= 20 && String((env as unknown as Record<string, string | undefined>).NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32 && /^[A-Za-z][A-Za-z0-9 ]{0,10}$/.test(String((env as unknown as Record<string, string | undefined>).SMS_SENDER || 'DolcePizz')) ? 'ok' : 'attention', details: {providerConfigured: String((env as unknown as Record<string, string | undefined>).BREVO_API_KEY || '').trim().length >= 20, schedulerConfigured: String((env as unknown as Record<string, string | undefined>).NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32, senderConfigured: /^[A-Za-z][A-Za-z0-9 ]{0,10}$/.test(String((env as unknown as Record<string, string | undefined>).SMS_SENDER || 'DolcePizz'))}},
+      {id: 'sms_provider', status: providerConfigured && dispatchSecretConfigured && schedulerConfigured && senderConfigured ? 'ok' : 'attention', details: {providerConfigured, schedulerConfigured, senderConfigured}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
       {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},
       {id: 'payment_reconciliation', status: Number(paymentReconciliation?.open || 0) === 0 ? 'ok' : 'attention', details: {open: Number(paymentReconciliation?.open || 0)}},

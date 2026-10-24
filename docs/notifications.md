@@ -19,6 +19,7 @@ Appliquer d'abord les migrations contenant les champs de contact de commande et 
 - `NOTIFICATION_DISPATCH_SECRET` : secret aléatoire de 32 à 256 caractères ASCII sans espace, distinct des autres secrets de l'application; une valeur aléatoire de 32 octets encodée en base64url convient.
 - `BREVO_API_KEY` : clé du compte Brevo autorisé et approvisionné pour les SMS transactionnels.
 - `SMS_SENDER` : identifiant alphanumérique accepté par le compte et les opérateurs, de 1 à 11 caractères, commençant par une lettre; valeur par défaut `DolcePizz`.
+- `NOTIFICATION_SCHEDULER_CONFIGURED=1` : déclaration explicite, posée seulement après avoir installé et testé le cron ou le job qui appelle le relais HTTPS. La présence du secret seule ne prouve pas qu’un ordonnanceur fonctionne.
 
 Le consommateur n'envoie rien sans clé fournisseur valide. Les options de simulation des campagnes marketing et le mode local ne simulent jamais un envoi réel de ce consommateur. Aucun secret ni aucune configuration de fournisseur n'est créé par le code ou par les tests.
 

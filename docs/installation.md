@@ -32,7 +32,8 @@ Ce guide couvre le prototype web, le KDS, la prise de commande du personnel, le 
    SMS_SENDER=DolcePizz
    ADMIN_SETUP_CODE=<secret de test long et unique>
    MARKETING_STOP_SECRET=<secret aléatoire long, différent du code admin>
-   NOTIFICATION_DISPATCH_SECRET=<secret aléatoire distinct, 32 caractères ou plus, facultatif sans ordonnanceur>
+   NOTIFICATION_DISPATCH_SECRET=<secret aléatoire distinct, 32 caractères ou plus>
+   NOTIFICATION_SCHEDULER_CONFIGURED=1
    ```
 
    Pour un déploiement multi-enseignes, ajouter aussi `TENANT_HOSTS_JSON` dans le coffre de secrets, par exemple `{"dolce.example.fr":{"organizationId":"dolce-pizza","locationId":"ronchin"}}`. Le domaine est la seule source de portée publique; les paramètres `organizationId` et `locationId` ne servent pas à changer de tenant. Chaque entrée doit pointer vers une organisation et un établissement actifs déjà provisionnés dans D1.
@@ -80,7 +81,7 @@ Avant de partager cette démo :
 
 Ce script n’est pas une procédure de mise en production. La procédure de production doit utiliser une base distincte, des secrets réels configurés dans Cloudflare, un environnement sans mode démo, une authentification d’équipe, des sauvegardes et une migration revue avant publication.
 
-Avant une publication de production, charger les variables du coffre dans l’environnement du déploiement puis exécuter `npm run preflight:production`. Le préflight lance d’abord le scan avec inspection des `.env*`, puis exige `ADMIN_SETUP_CODE`, `MARKETING_STOP_SECRET`, `NOTIFICATION_DISPATCH_SECRET`, `BREVO_API_KEY`, `SMS_SENDER` (1 à 11 caractères, commençant par une lettre), `CF_D1_DATABASE_ID`, `CF_WORKER_NAME`, un `PUBLIC_BASE_URL` HTTPS public et un `TENANT_HOSTS_JSON` valide; il refuse `SMS_DEMO` et `SMS_CAMPAIGNS_DEMO`. Il n’affiche aucune valeur secrète. En développement, `npm run security:scan` ignore les fichiers `.env*` locaux; `npm run security:scan:env` les inclut explicitement.
+Avant une publication de production, charger les variables du coffre dans l’environnement du déploiement puis exécuter `npm run preflight:production`. Le préflight lance d’abord le scan avec inspection des `.env*`, puis exige `ADMIN_SETUP_CODE`, `MARKETING_STOP_SECRET`, `NOTIFICATION_DISPATCH_SECRET`, `BREVO_API_KEY`, `SMS_SENDER` (1 à 11 caractères, commençant par une lettre), `CF_D1_DATABASE_ID`, `CF_WORKER_NAME`, un `PUBLIC_BASE_URL` HTTPS public et un `TENANT_HOSTS_JSON` valide; `NOTIFICATION_SCHEDULER_CONFIGURED=1` doit être défini après installation et test de l’ordonnanceur. Il refuse `SMS_DEMO` et `SMS_CAMPAIGNS_DEMO`. Il n’affiche aucune valeur secrète. En développement, `npm run security:scan` ignore les fichiers `.env*` locaux; `npm run security:scan:env` les inclut explicitement.
 
 Les réponses web ajoutent aussi des en-têtes de protection contre l’encodage MIME, l’intégration dans une iframe, la fuite de référent et l’accès aux capteurs. Après chaque publication, vérifier ces en-têtes sur le domaine public et tester les parcours borne, POS et KDS avant d’ajouter une politique CSP plus stricte.
 
