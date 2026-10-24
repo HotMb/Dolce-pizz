@@ -71,6 +71,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const sessionRevoke = await import('../app/api/staff/sessions/route');
   const calls = await import('../app/api/staff/calls/route');
   const health = await import('../app/api/admin/health/route');
+  const notifications = await import('../app/api/admin/notifications/route');
   const printing = await import('../app/api/admin/printing/route');
   const audit = await import('../app/api/admin/audit/route');
   const ownership = await import('../app/api/admin/ownership/route');
@@ -271,6 +272,13 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const deliveryNow = new Date().toISOString();
   database.prepare("INSERT INTO delivery_inbox(provider,event_id,external_order_id,organization_id,location_id,event_type,payload_hash,payload,status,received_at,error) VALUES('uber_eats',?,?,?,?,?,'hash','{}','failed',?,?)").run('health-event','health-order','dolce-pizza','ronchin','order.created',deliveryNow,'sandbox failure');
   database.prepare("UPDATE device_credentials SET expires_at=1 WHERE device_id=? AND revoked_at IS NULL").run(printer.body.device.id);
+  database.prepare("INSERT INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,updated_at) VALUES(?,?,?,?,?,'order_ready','{}','unknown',1,?,?,?)").run('notification-reconcile-test','notification-op-reconcile','dolce-pizza','ronchin','ready-order',now,now,now);
+  const reconcile = await notifications.POST(new Request('http://localhost/api/admin/notifications', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',notificationId:'notification-reconcile-test',resolution:'accepted'})}));
+  assert.equal(reconcile.status,200,await reconcile.text());
+  assert.equal(database.prepare('SELECT status,last_error_code,provider_message_id FROM notification_outbox WHERE id=?').get('notification-reconcile-test')?.status,'sent');
+  assert.match(String(database.prepare('SELECT provider_message_id FROM notification_outbox WHERE id=?').get('notification-reconcile-test')?.provider_message_id),/^manual:owner:/);
+  const reconcileAgain = await notifications.POST(new Request('http://localhost/api/admin/notifications', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',notificationId:'notification-reconcile-test',resolution:'retry'})}));
+  assert.equal(reconcileAgain.status,409);
   const healthResponse = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
   const healthText = await healthResponse.text();
   assert.equal(healthResponse.status,200,healthText);

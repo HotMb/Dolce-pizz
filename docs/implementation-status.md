@@ -48,7 +48,7 @@ La migration `0027_menu_product_revisions.sql` conserve chaque création, modifi
 
 Les routes `/me`, commandes client, audience, campagnes et STOP utilisent désormais le scope Dolce déterminé côté serveur. La fidélité gagnée dans une autre enseigne ne peut ni être affichée ni dépensée, une commande étrangère retourne 404, une campagne étrangère reste invisible, et un lien STOP signé pour une enseigne ne désabonne pas le même téléphone ailleurs. Le SMS transactionnel « commande prête » reste indépendant du consentement promotionnel.
 
-Les campagnes sont une capacité d’organisation réservée à un propriétaire explicite. Un responsable limité à un établissement peut gérer les commandes et le KDS sans obtenir la liste marketing de toute l’enseigne. La création concurrente est protégée par un index partiel; l’envoi réserve chaque destinataire une seule fois et conserve le reçu Brevo disponible. Un résultat réseau ambigu reste terminal pour éviter le doublon; une clé d’idempotence fournisseur et un webhook de statut restent nécessaires pour une réconciliation complète.
+Les campagnes sont une capacité d’organisation réservée à un propriétaire explicite. Un responsable limité à un établissement peut gérer les commandes et le KDS sans obtenir la liste marketing de toute l’enseigne. La création concurrente est protégée par un index partiel; l’envoi réserve chaque destinataire une seule fois et conserve le reçu Brevo disponible. Un résultat réseau ambigu reste terminal pour éviter le doublon; la supervision SMS permet maintenant au propriétaire de clôturer ou de remettre en file une notification transactionnelle `unknown`, avec audit et sans envoi automatique.
 
 ## Suite prioritaire
 
