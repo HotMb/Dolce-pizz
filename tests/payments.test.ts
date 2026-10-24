@@ -253,6 +253,8 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const printingList = await printing.GET(new Request('http://localhost/api/admin/printing?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:ownerCookie})}));
   assert.equal(printingList.status,200);
   assert.equal((await printingList.json() as {recent:Array<{id:string;status:string}>}).recent[0]?.status,'failed');
+  const printingForbidden = await printing.GET(new Request('http://localhost/api/admin/printing?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({cookie:workerCookie})}));
+  assert.equal(printingForbidden.status,403);
   const printingRetry = await printing.POST(new Request('http://localhost/api/admin/printing', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',jobId:'print-test'})}));
   assert.equal(printingRetry.status,200,await printingRetry.text());
   assert.equal(database.prepare('SELECT status,last_error FROM print_outbox WHERE id=?').get('print-test')?.status,'pending');
