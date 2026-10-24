@@ -231,6 +231,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(claimed.status, 200);
   const claimedBody = await claimed.json() as {jobs: {id: string; lease_token: string}[]};
   assert.equal(claimedBody.jobs.length, 1);
+  assert.equal((claimedBody.jobs[0] as {ticket?: {orderId?: string}}).ticket?.orderId, 'ready-order');
   const completed = await printJobs.POST(new Request('http://localhost/api/internal/print-jobs', {method: 'POST', headers: {'content-type': 'application/json', authorization: `Bearer ${printer.body.credential}`}, body: JSON.stringify({action: 'complete', id: claimedBody.jobs[0].id, leaseToken: claimedBody.jobs[0].lease_token, providerJobId: 'local-1'})}));
   assert.equal(completed.status, 200);
   assert.equal(database.prepare('SELECT status,provider_job_id FROM print_outbox WHERE id=?').get('print-test')?.status, 'printed');
