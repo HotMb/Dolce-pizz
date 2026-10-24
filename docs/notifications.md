@@ -36,7 +36,15 @@ Pour vérifier le parcours, créer une commande de test avec un mobile de test c
 
 ## Déclenchement en exploitation
 
-Configurer un ordonnanceur serveur de confiance pour appeler toutes les minutes la même route HTTPS, avec le secret stocké dans son coffre de secrets et le corps `{}` ou `{"dryRun":false}`. Ne jamais placer le secret dans l'URL, le code navigateur, un dépôt Git, un journal ou une capture d'écran. L'ordonnanceur ne doit pas enregistrer l'en-tête d'autorisation. Prévoir un délai d'appel supérieur à 75 secondes et éviter de relancer aveuglément une requête interrompue; l'appel suivant utilise les états persistés.
+Configurer un ordonnanceur serveur de confiance pour appeler toutes les minutes la même route HTTPS, avec le secret stocké dans son coffre de secrets et le corps `{}` ou `{"dryRun":false}`. Le relais fourni peut être utilisé par cron, systemd timer ou un job CI dédié :
+
+```powershell
+$env:PUBLIC_BASE_URL='https://restaurant.exemple.fr'
+$env:NOTIFICATION_DISPATCH_SECRET='<secret du coffre>'
+npm run notifications:dispatch
+```
+
+Pour une recette sans envoi, ajouter `--dry-run`. Ne jamais placer le secret dans l'URL, le code navigateur, un dépôt Git, un journal ou une capture d'écran. L'ordonnanceur ne doit pas enregistrer l'en-tête d'autorisation. Prévoir un délai d'appel supérieur à 75 secondes et éviter de relancer aveuglément une requête interrompue; l'appel suivant utilise les états persistés.
 
 Les méthodes autres que POST, les cookies de session seuls, les paramètres d'URL et tout champ autre que `dryRun` sont refusés. L'accès compare les condensats SHA-256 du secret attendu et du bearer par une boucle à longueur fixe. Le corps est limité à 128 octets.
 

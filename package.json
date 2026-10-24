@@ -11,6 +11,7 @@
     "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "printer:gateway": "node scripts/printer-gateway.mjs",
+    "notifications:dispatch": "node scripts/notification-dispatch.mjs",
     "lint": "eslint app components hooks lib scripts tests --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "node scripts/migrate-local.mjs",
