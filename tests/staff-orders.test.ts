@@ -70,6 +70,7 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
   context.after(() => {hook.deregister(); delete globals.__dolceStaffOrdersEnvironment; database.close();});
   const api = await import('../app/api/staff/orders/route');
   const customerLookupApi = await import('../app/api/staff/customers/route');
+  const notificationAdminApi = await import('../app/api/admin/notifications/route');
   const catalogApi = await import('../app/api/staff/catalog/route');
   const customerApi = await import('../app/api/[...path]/route');
   type Handler = (request: Request) => Promise<Response>;
@@ -123,6 +124,10 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
   assert.equal(foundCustomer.response.status, 200);
   assert.deepEqual(foundCustomer.body.customer, {name: 'Alice historique', phone: '+33611111111', orderCount: 0, lastOrderAt: null});
   assert.equal((await call(customerLookupApi.GET, 'GET', undefined, {path: 'staff/customers', query: 'organizationId=dolce-pizza&locationId=ronchin&phone=06%2011%2011%2011%2011', cookie: noRoleCookie})).response.status, 403);
+  const notificationStatus = await call<{counts:unknown[];recent:unknown[]}>(notificationAdminApi.GET, 'GET', undefined, {path: 'admin/notifications', query: 'organizationId=dolce-pizza', cookie: ownerCookie});
+  assert.equal(notificationStatus.response.status, 200);
+  assert.deepEqual(notificationStatus.body, {organizationId:'dolce-pizza',counts:[],recent:[]});
+  assert.equal((await call(notificationAdminApi.GET, 'GET', undefined, {path: 'admin/notifications', query: 'organizationId=dolce-pizza', cookie: noRoleCookie})).response.status, 403);
   const product = database.prepare("SELECT id,price FROM products WHERE available=1 AND status='published' AND offer=0 AND xxl IS NOT NULL LIMIT 1").get() as {id: string; price: number};
   assert.ok(product);
   const scope = {organizationId: 'dolce-pizza', locationId: 'ronchin'};
