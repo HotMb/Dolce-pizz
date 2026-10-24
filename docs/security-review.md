@@ -47,7 +47,7 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 
 ## Vérifications exécutées
 
-- `npm test` : 69 tests passés. La suite complète exécute aussi le paiement au retrait : montant exact, rôle autorisé, transition atomique, idempotence et impossibilité de modifier ou supprimer un reçu.
+- `npm test` : 69 tests passés. La suite complète exécute aussi le paiement au retrait et le shift : montant exact, rôle autorisé, transition atomique, idempotence, ouverture unique, clôture avec écart contrôlé et impossibilité de modifier ou supprimer un reçu.
 - Les tests d’intégration de `tests/staff-order-integration.test.ts` exécutent les handlers réels web, personnel, production, campagnes et notification contre SQLite en mémoire avec toutes les migrations. Ils vérifient qu’un même téléphone peut avoir des profils et soldes différents, qu’une commande ou campagne étrangère reste invisible et qu’un lien STOP est lié à son enseigne. Le SMS transactionnel « commande prête » reste indépendant du consentement promotionnel.
 - `npm run lint`, `npx tsc --noEmit --pretty false --incremental false` et `npm run build` : réussis sur le présent jalon. Vinext affiche des avertissements de source maps, de chargement de configuration et de classification statique de routes qui ne bloquent pas la compilation.
 - Vérification navigateur locale, en lecture seule : la page d’accueil s’identifie comme Dolce Pizz’; `/equipe` et `/production` affichent l’invitation à se connecter par SMS lorsqu’aucune session n’est authentifiée. Aucun parcours authentifié de gestion des accès ou de production n’a été vérifié par cette inspection visuelle.

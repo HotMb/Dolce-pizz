@@ -67,11 +67,18 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   });
   context.after(() => {hook.deregister(); delete globals.__dolcePaymentsEnvironment; database.close();});
   const api = await import('../app/api/staff/payments/route');
+  const shifts = await import('../app/api/staff/shifts/route');
   type Handler = (request: Request) => Promise<Response>;
   async function call<T = Record<string, unknown>>(handler: Handler, body: unknown, cookie = '') {
     const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
     if (cookie) headers.set('cookie', cookie);
     const response = await handler(new Request('http://localhost/api/staff/payments', {method: 'POST', headers, body: JSON.stringify(body)}));
+    return {response, body: await response.json() as T};
+  }
+  async function shiftCall<T = Record<string, unknown>>(body: unknown, cookie = '') {
+    const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
+    if (cookie) headers.set('cookie', cookie);
+    const response = await shifts.POST(new Request('http://localhost/api/staff/shifts', {method: 'POST', headers, body: JSON.stringify(body)}));
     return {response, body: await response.json() as T};
   }
   async function list<T = Record<string, unknown>>(cookie = '') {
@@ -115,4 +122,14 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal((replay.body as {payment: {id: string}}).payment.id, captured.body.payment.id);
   assert.throws(() => database.prepare('UPDATE payments SET amount=1 WHERE id=?').run(captured.body.payment.id));
   assert.throws(() => database.prepare('DELETE FROM payments WHERE id=?').run(captured.body.payment.id));
+  const shiftScope = {organizationId: 'dolce-pizza', locationId: 'ronchin'};
+  assert.equal((await shiftCall({...shiftScope, action: 'open', openingFloat: 500}, ownerCookie)).response.status, 409);
+  assert.equal((await shiftCall({...shiftScope, action: 'close', countedCash: 2200}, workerCookie)).response.status, 403);
+  assert.equal((await shiftCall({...shiftScope, action: 'close', countedCash: 2100}, ownerCookie)).response.status, 409);
+  const closed = await shiftCall<{shift: {status: string; expectedCash: number}; variance: number}>({...shiftScope, action: 'close', countedCash: 2200, version: 1}, ownerCookie);
+  assert.equal(closed.response.status, 200, JSON.stringify(closed.body));
+  assert.equal(closed.body.shift.status, 'closed');
+  assert.equal(closed.body.shift.expectedCash, 2200);
+  assert.equal(closed.body.variance, 0);
+  assert.equal((await call(api.POST, {...base, idempotencyKey: crypto.randomUUID()}, workerCookie)).response.status, 409);
 });

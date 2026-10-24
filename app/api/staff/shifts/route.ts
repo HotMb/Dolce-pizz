@@ -54,6 +54,7 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     if (input.action === 'open') {
       if (input.openingFloat === undefined) throw new ApiError(400, 'Indiquez le fond de caisse initial.');
+      if (await shift(input)) throw new ApiError(409, 'Un shift est déjà ouvert pour cet établissement.');
       const businessDate = input.businessDate || now.slice(0, 10); const id = crypto.randomUUID();
       const result = await db().prepare(`INSERT INTO cash_shifts(id,organization_id,location_id,business_date,status,opening_float,opened_by,opened_at,version) SELECT ?,?,?,?,'open',?,?,?,1 WHERE EXISTS(SELECT 1 FROM organizations o JOIN locations l ON l.organization_id=o.id AND l.id=? AND l.status='active' WHERE o.id=? AND o.status='active')`).bind(id, input.organizationId, input.locationId, businessDate, input.openingFloat, auth.user.id, now, input.locationId, input.organizationId).run();
       if (!result.meta.changes) throw new ApiError(409, 'Ce shift ne peut pas être ouvert pour cet établissement.');
