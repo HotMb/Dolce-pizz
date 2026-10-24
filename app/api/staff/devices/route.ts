@@ -8,7 +8,7 @@ export const dynamic='force-dynamic';
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 class ApiError extends Error{constructor(public status:number,message:string){super(message);}}
 const scope=z.object({organizationId:z.string().min(1).max(128),locationId:z.string().min(1).max(128)}).strict();
-const input=z.object({action:z.enum(['enroll','revoke','rotate']),organizationId:z.string().min(1).max(128),locationId:z.string().min(1).max(128),deviceId:z.string().min(1).max(128).optional(),label:z.string().trim().min(1).max(80).optional(),role:z.enum(['make_line','four','expeditor','pos','kiosk','printer_gateway']).optional(),expiresInDays:z.number().int().min(1).max(365).default(90)}).strict();
+const input=z.object({action:z.enum(['enroll','revoke','rotate']),organizationId:z.string().min(1).max(128),locationId:z.string().min(1).max(128),deviceId:z.string().min(1).max(128).optional(),label:z.string().trim().min(1).max(80).optional(),role:z.enum(['make_line','oven','expeditor','pos','kiosk','printer_gateway']).optional(),expiresInDays:z.number().int().min(1).max(365).default(90)}).strict();
 const hash=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('');
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
 

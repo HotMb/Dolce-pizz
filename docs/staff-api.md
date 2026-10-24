@@ -31,7 +31,7 @@ Des rôles se cumulent, sans traverser une organisation ou un établissement. Un
 }
 ```
 
-La liste `roles` contient tous les choix accordables (`manager`, `call_center`, `pos`, `make_line`, `oven`, `expeditor`, `viewer`). Une personne connectée sans attribution reçoit `scopes: []` et son propre identifiant; elle peut le communiquer au propriétaire sans exposer de numéro de téléphone. Cette route ne recherche pas de compte par téléphone et n’expose aucun téléphone.
+La liste `roles` contient tous les choix accordables (`manager`, `call_center`, `pos`, `make_line`, `oven`, `expeditor`, `viewer`). Une personne connectée sans attribution reçoit `scopes: []` et son propre identifiant; elle peut le communiquer au propriétaire sans exposer de numéro de téléphone. Cette route ne recherche pas de compte par téléphone et n’expose aucun téléphone. Les appareils utilisent aussi `oven` pour le poste Four; la migration `0029` convertit les anciens enregistrements identifiés `four`.
 
 `GET /api/staff?organizationId=dolce-pizza&locationId=ronchin&members=1` nécessite le rôle propriétaire actif de cette organisation et un établissement actif. La réponse ajoute `members: [{id, principalId, name, role, status, locationId}]`, avec les accès de cet établissement et les accès partagés `owner`/`call_center` de l’organisation (`locationId: null`). Ces derniers sont protégés et ne sont pas révocables par cette route. `truncated: true` signale une limite de 500 résultats. Les autres organisations et établissements sont exclus.
 

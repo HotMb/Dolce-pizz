@@ -62,7 +62,7 @@ export function StaffHome(){
 }
 
 type Device={id:string;label:string;role:string;status:'active'|'revoked';createdAt:string;lastSeenAt:string|null;expiresAt?:number};
-const deviceRoles=[{id:'make_line',label:'Make Line'},{id:'four',label:'Four'},{id:'expeditor',label:'Expeditor'},{id:'pos',label:'POS mobile'},{id:'kiosk',label:'Borne client'},{id:'printer_gateway',label:'Relais imprimante'}];
+const deviceRoles=[{id:'make_line',label:'Make Line'},{id:'oven',label:'Four'},{id:'expeditor',label:'Expeditor'},{id:'pos',label:'POS mobile'},{id:'kiosk',label:'Borne client'},{id:'printer_gateway',label:'Relais imprimante'}];
 const deviceRoleLabel=(role:string)=>deviceRoles.find(item=>item.id===role)?.label||role;
 const deviceDate=(value:string|null|undefined)=>value?new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value)): 'Jamais';
 const deviceExpiry=(value:number|undefined)=>value?new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium'}).format(new Date(value)):'Expiration inconnue';
