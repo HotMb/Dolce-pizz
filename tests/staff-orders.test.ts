@@ -69,6 +69,7 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
   });
   context.after(() => {hook.deregister(); delete globals.__dolceStaffOrdersEnvironment; database.close();});
   const api = await import('../app/api/staff/orders/route');
+  const customerLookupApi = await import('../app/api/staff/customers/route');
   const catalogApi = await import('../app/api/staff/catalog/route');
   const customerApi = await import('../app/api/[...path]/route');
   type Handler = (request: Request) => Promise<Response>;
@@ -102,6 +103,8 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
     INSERT INTO locations(id,organization_id,code,name,status,address_line1,postal_code,locality,phone,country_code,timezone,created_at,updated_at)
       VALUES('second-site','dolce-pizza','second','Second site','active','2 rue Test','59000','Lille','+33320000000','FR','Europe/Paris','${now}','${now}');
   `);
+  database.prepare("INSERT INTO users(id,phone,name,created_at) VALUES('known-customer','+33611111111','Compte client','2026-10-01T00:00:00.000Z')").run();
+  database.prepare("INSERT INTO customer_profiles(organization_id,user_id,name,marketing,marketing_at,marketing_source,created_at,updated_at) VALUES('dolce-pizza','known-customer','Alice historique',0,'','','2026-10-01','2026-10-01')").run();
 
   assert.equal((await call(api.POST, 'POST', {}, {origin: 'http://elsewhere', cookie: ownerCookie})).response.status, 403);
   assert.equal((await call(api.POST, 'POST', {}, {cookie: ''})).response.status, 401);
@@ -116,6 +119,10 @@ test('staff order API enforces channel scopes, prices server-side, stores pickup
   const secondSiteSlots = await call<{slots: {iso: string}[]}>(api.GET, 'GET', undefined, {query: 'organizationId=dolce-pizza&locationId=second-site', cookie: ownerCookie});
   assert.equal(secondSiteSlots.response.status, 200);assert.ok(secondSiteSlots.body.slots.length > 0);
   assert.equal((await call(api.GET, 'GET', undefined, {query: 'organizationId=dolce-pizza&locationId=ronchin', cookie: ownerCookie, origin: 'http://attacker.invalid'})).response.status, 403);
+  const foundCustomer = await call<{customer:{name:string;phone:string;orderCount:number}|null}>(customerLookupApi.GET, 'GET', undefined, {path: 'staff/customers', query: 'organizationId=dolce-pizza&locationId=ronchin&phone=06%2011%2011%2011%2011', cookie: callCenterCookie});
+  assert.equal(foundCustomer.response.status, 200);
+  assert.deepEqual(foundCustomer.body.customer, {name: 'Alice historique', phone: '+33611111111', orderCount: 0, lastOrderAt: null});
+  assert.equal((await call(customerLookupApi.GET, 'GET', undefined, {path: 'staff/customers', query: 'organizationId=dolce-pizza&locationId=ronchin&phone=06%2011%2011%2011%2011', cookie: noRoleCookie})).response.status, 403);
   const product = database.prepare("SELECT id,price FROM products WHERE available=1 AND status='published' AND offer=0 AND xxl IS NOT NULL LIMIT 1").get() as {id: string; price: number};
   assert.ok(product);
   const scope = {organizationId: 'dolce-pizza', locationId: 'ronchin'};

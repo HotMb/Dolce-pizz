@@ -20,6 +20,7 @@ type Channel='counter'|'phone';
 type Slot={iso:string;date:string;label:string;remaining:number};
 type LocationInfo={name:string;addressLine1:string|null;postalCode:string|null;locality:string|null;phone:string|null};
 type RoutingCandidate={locationId:string;code:string;name:string;addressLine1:string|null;pickupPostalCode:string|null;locality:string|null;phone:string|null;priority:number};
+type CustomerLookup={name:string;phone:string;orderCount:number;lastOrderAt:string|null};
 type Schedule={slots:Slot[];location:LocationInfo};
 type StaffCatalog={products:Product[];ingredients:Ingredient[];extraPrice:number};
 type CatalogState={scopeKey:string;data:StaffCatalog|null;error:string};
@@ -50,6 +51,9 @@ export function StaffOrderComposer(){
  const [postalCode,setPostalCode]=useState('');
  const [routingCandidates,setRoutingCandidates]=useState<RoutingCandidate[]>([]);
  const [routingLoading,setRoutingLoading]=useState(false);
+ const [customerLookup,setCustomerLookup]=useState<CustomerLookup|null>(null);
+ const [customerLookupLoading,setCustomerLookupLoading]=useState(false);
+ const [customerLookupMessage,setCustomerLookupMessage]=useState('');
  const [note,setNote]=useState('');
  const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
  const [pageError,setPageError]=useState('');
@@ -145,9 +149,17 @@ export function StaffOrderComposer(){
  const changeScope=(value:string)=>{
   if(!canEdit)return;
   if(value===selected)return;
-  setSelected(value);setSlot('');setCart([]);setDraft(null);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setPageError('');setFieldErrors({});
+  setSelected(value);setSlot('');setCart([]);setDraft(null);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setPageError('');setFieldErrors({});
   const target=selectable.find(item=>scopeQuery(item)===value);
   if(target)window.history.replaceState(null,'',`/equipe/commande?${scopeQuery(target)}&channel=${channel}`);
+ };
+ const lookupCustomer=async()=>{
+  setCustomerLookup(null);setCustomerLookupMessage('');
+  if(!scope||!localPhoneValid(customerPhone)){setCustomerLookupMessage('Saisissez d’abord un mobile français valide.');return;}
+  setCustomerLookupLoading(true);
+  try{const result=await api<{customer:CustomerLookup|null}>(`staff/customers?organizationId=${encodeURIComponent(scope.organizationId)}&locationId=${encodeURIComponent(scope.locationId)}&phone=${encodeURIComponent(customerPhone)}`,'GET');if(result.customer){setCustomerLookup(result.customer);if(!customerName.trim()&&result.customer.name)setCustomerName(result.customer.name);setCustomerLookupMessage('Client retrouvé dans cette enseigne. Vérifiez le nom avec l’appelant.');}else setCustomerLookupMessage('Aucun profil client trouvé dans cet établissement.');}
+  catch(error){setCustomerLookupMessage((error as Error).message||'Recherche impossible.');}
+  finally{setCustomerLookupLoading(false);}
  };
 
  const validate=()=>{
@@ -183,7 +195,7 @@ export function StaffOrderComposer(){
    const result=await api<{order:OrderReceipt}>('staff/orders','POST',attempt.payload);
    if(!result?.order||typeof result.order.id!=='string')throw new Error('La réponse du serveur ne confirme pas la commande. Réessayez avec la même tentative.');
    const created=result.order;
-   setReceipt(created);setConfirmOpen(false);setAttempt(null);setAttemptUncertain(false);setCart([]);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setSlot('');setFieldErrors({});
+   setReceipt(created);setConfirmOpen(false);setAttempt(null);setAttemptUncertain(false);setCart([]);setCustomerName('');setCustomerPhone('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setSlot('');setFieldErrors({});
   }catch(cause){
    const error=cause as Error&{status?:number};setAttemptError(error.message||'La commande n’a pas pu être confirmée.');
    const status=error.status||0;setAttemptUncertain(status===0||status>=500);
@@ -223,7 +235,8 @@ export function StaffOrderComposer(){
   </div>
   <form className="pos-layout" noValidate onSubmit={openConfirmation}>
    <div className="pos-main-column">
-    <section className="panel pos-customer"><div className="pos-section-title"><UserRound size={20}/><div><h2>Qui vient retirer ?</h2><p>Le client paiera sur place à la récupération.</p></div></div><div className="pos-customer-fields"><Field label="Nom à annoncer au retrait" id="pos-customerName" error={fieldErrors.customerName}><input id="pos-customerName" maxLength={80} autoComplete="off" value={customerName} onChange={event=>setCustomerName(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.customerName} aria-describedby={fieldErrors.customerName?'pos-customerName-error':undefined}/></Field><Field label="Mobile, facultatif" id="pos-customerPhone" hint="Conservez-le seulement si le client le souhaite." error={fieldErrors.customerPhone}><input id="pos-customerPhone" type="tel" inputMode="tel" autoComplete="off" maxLength={30} value={customerPhone} onChange={event=>{setCustomerPhone(event.target.value);if(!event.target.value)setReadySmsConfirmed(false);}} disabled={!canEdit} aria-invalid={!!fieldErrors.customerPhone} aria-describedby={`${fieldErrors.customerPhone?'pos-customerPhone-error ':''}pos-customerPhone-hint`}/></Field></div>
+    <section className="panel pos-customer"><div className="pos-section-title"><UserRound size={20}/><div><h2>Qui vient retirer ?</h2><p>Le client paiera sur place à la récupération.</p></div></div><div className="pos-customer-fields"><Field label="Nom à annoncer au retrait" id="pos-customerName" error={fieldErrors.customerName}><input id="pos-customerName" maxLength={80} autoComplete="off" value={customerName} onChange={event=>setCustomerName(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.customerName} aria-describedby={fieldErrors.customerName?'pos-customerName-error':undefined}/></Field><div className="pos-phone-lookup"><Field label="Mobile, facultatif" id="pos-customerPhone" hint="Conservez-le seulement si le client le souhaite." error={fieldErrors.customerPhone}><input id="pos-customerPhone" type="tel" inputMode="tel" autoComplete="off" maxLength={30} value={customerPhone} onChange={event=>{setCustomerPhone(event.target.value);setCustomerLookup(null);setCustomerLookupMessage('');if(!event.target.value)setReadySmsConfirmed(false);}} disabled={!canEdit} aria-invalid={!!fieldErrors.customerPhone} aria-describedby={`${fieldErrors.customerPhone?'pos-customerPhone-error ':''}pos-customerPhone-hint`}/></Field>{channel==='phone'&&<Button type="button" tone="outline" busy={customerLookupLoading} disabled={!canEdit||!customerPhone.trim()} onClick={()=>void lookupCustomer()}>Rechercher le client</Button>}</div></div>
+    {channel==='phone'&&customerLookupMessage&&<p className="pos-lookup-message" role="status">{customerLookupMessage}{customerLookup?.orderCount?` ${customerLookup.orderCount} commande${customerLookup.orderCount>1?'s':''} connue${customerLookup.orderCount>1?'s':''}.`:''}</p>}
     {channel==='phone'&&<><Field label="Code postal communiqué par le client" id="pos-postalCode" hint={routingLoading?'Recherche de l’établissement…':routingCandidates.length===1?`Établissement proposé : ${routingCandidates[0].name}`:'Le code postal sert à proposer le site de retrait; confirmez toujours l’adresse avec le client.'} error={fieldErrors.postalCode}><input id="pos-postalCode" inputMode="numeric" autoComplete="postal-code" maxLength={5} pattern="[0-9]{5}" value={postalCode} onChange={event=>setPostalCode(event.target.value.replace(/\D/g,'').slice(0,5))} disabled={!canEdit} aria-invalid={!!fieldErrors.postalCode} aria-describedby={`${fieldErrors.postalCode?'pos-postalCode-error ':''}pos-postalCode-hint`}/></Field>{routingCandidates.length>1&&<div className="pos-routing-options" role="group" aria-label="Établissements desservant ce code postal">{routingCandidates.map(candidate=><button type="button" key={candidate.locationId} className={`btn btn-outline ${scope?.locationId===candidate.locationId?'is-selected':''}`} onClick={()=>setSelected(`${scope?.organizationId}::${candidate.locationId}`)} disabled={!canEdit}>{candidate.name}{candidate.locality?` · ${candidate.locality}`:''}</button>)}</div>}</>}
     <label className={`pos-sms-choice ${!customerPhone.trim()?'is-disabled':''}`}><Checkbox checked={readySmsConfirmed} disabled={!canEdit||!customerPhone.trim()} onCheckedChange={value=>setReadySmsConfirmed(value===true)}/><span><b>Envoyer un SMS quand la commande sera prête</b><small>À cocher uniquement avec l’accord du client. Cette préférence ne l’inscrit pas aux promotions.</small></span></label>
     </section>
