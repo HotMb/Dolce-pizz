@@ -56,6 +56,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const staff=await import('../app/api/staff/route');
  const staffOrders=await import('../app/api/staff/orders/route');
  const devices=await import('../app/api/staff/devices/route');
+ const deviceBootstrap=await import('../app/api/device/bootstrap/route');
  const production=await import('../app/api/production/route');
  const productionStream=await import('../app/api/production/stream/route');
  const notifications=await import('../app/api/internal/notifications/route');
@@ -97,6 +98,9 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const ovenDeviceResponse=await devices.POST(new Request('http://localhost/api/staff/devices',{method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({...scope,action:'enroll',label:'Four KDS',role:'oven'})}));
  assert.equal(ovenDeviceResponse.status,201);
  const ovenDevice=await ovenDeviceResponse.json() as {credential:string;device:{id:string}};
+ const bootstrap=await deviceBootstrap.GET(new Request('http://localhost/api/device/bootstrap',{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));
+ assert.equal(bootstrap.status,200);
+ assert.equal((await bootstrap.json() as {scope:{locationId:string};device:{role:string}}).scope.locationId,'ronchin');
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,403);
  const deviceStream=await productionStream.GET(new Request(`http://localhost/api/production/stream?${query}&station=oven`,{headers:{authorization:`Bearer ${ovenDevice.credential}`}}));

@@ -1,6 +1,5 @@
 import type {Metadata} from 'next';
 import {currentUser} from '@/lib/auth';
-import {AuthGate,loginPath} from '../member-ui';
 import {ProductionKds} from './production-kds';
 import './production.css';
 import '../equipe/staff.css';
@@ -19,7 +18,7 @@ export default async function Page({searchParams}:{searchParams:Promise<{station
  if(params.locationId)query.set('locationId',params.locationId);
  if(params.station)query.set('station',params.station);
  const returnTo=`/production${query.size?`?${query}`:''}`;
- if(!user)return <AuthGate title="Postes de production." text="Connectez-vous à votre compte pour accéder aux postes qui vous sont attribués." href={loginPath(returnTo)}/>;
  const station=stations.includes(params.station as Station)?params.station as Station:undefined;
+ if(!user)return <ProductionKds key={returnTo} station={station} organizationId={params.organizationId} locationId={params.locationId} deviceMode/>;
  return <ProductionKds key={returnTo} station={station} organizationId={params.organizationId} locationId={params.locationId}/>;
 }

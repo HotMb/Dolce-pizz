@@ -19,6 +19,7 @@ type ProductionResponse={orders:ProductionTicket[]};
 type Command={orderId:string;action:'start'|'complete'|'ready';itemId?:string;station?:Station;expectedRevision:number};
 type QueuedCommand={id:string;command:Command;queuedAt:number};
 type StationInfo={name:string;shortName:string;description:string;icon:typeof ChefHat;actionPending:string;actionActive:string;doneLabel:string};
+type DeviceBootstrap={device:{id:string;label:string;role:Station;expiresAt:number};scope:StaffScope};
 const stationInfo:Record<Station,StationInfo>={
  make_line:{name:'Montage',shortName:'Make Line',description:'Préparez chaque article selon sa composition et ses modifications.',icon:ChefHat,actionPending:'Commencer le montage',actionActive:'Préparée · envoyer au four',doneLabel:'Montage confirmé'},
  oven:{name:'Four',shortName:'Cuisson',description:'Enfournez les pizzas puis confirmez manuellement leur sortie.',icon:Flame,actionPending:'Enfourner',actionActive:'Confirmer la sortie du four',doneLabel:'Cuisson confirmée'},
@@ -51,6 +52,14 @@ function elapsedSince(value:string|null,now:number){if(!value)return null;const 
 function commandError(error:unknown){const value=error as {message?:string;status?:number};return {message:value?.message||'L’action n’a pas été confirmée. Actualisez le ticket avant de réessayer.',conflict:value?.status===409};}
 function readQueuedCommands(key:string):QueuedCommand[]{if(typeof window==='undefined')return [];try{const raw=window.localStorage.getItem(key)||'';if(raw.length>60000)return [];const value=JSON.parse(raw);if(!Array.isArray(value))return [];return value.filter(item=>{const command=item?.command;return item&&typeof item.id==='string'&&command&&typeof command.orderId==='string'&&/^(start|complete|ready)$/.test(command.action)&&(!command.station||/^(make_line|oven|expeditor)$/.test(command.station))&&(!command.itemId||typeof command.itemId==='string')&&Number.isInteger(command.expectedRevision)&&command.expectedRevision>=0&&typeof item.queuedAt==='number'}).slice(0,50) as QueuedCommand[];}catch{return [];}}
 
+function useProductionDeviceAccess(enabled:boolean){
+ const[data,setData]=useState<DeviceBootstrap|null>(null),[error,setError]=useState(''),[checked,setChecked]=useState(!enabled),[refreshing,setRefreshing]=useState(false);
+ useEffect(()=>{if(!enabled)return;const raw=window.location.hash.match(/^#device=([0-9a-f]{64})$/)?.[1];if(raw){try{window.localStorage.setItem('dolce-production-device-token',raw);window.history.replaceState(null,'',window.location.pathname+window.location.search);}catch{}}},[enabled]);
+ const refresh=useCallback(async()=>{if(!enabled){setChecked(true);return;}setRefreshing(true);try{const token=window.localStorage.getItem('dolce-production-device-token')||'';if(!/^[0-9a-f]{64}$/.test(token))throw new Error('Aucun appareil de production n’est configuré.');const response=await fetch('/api/device/bootstrap',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});const payload=await response.json().catch(()=>null) as Partial<DeviceBootstrap>&{error?:string};if(!response.ok||!payload.scope||!payload.device)throw new Error(payload.error||'Le jeton de cet appareil est invalide ou expiré.');setData(payload as DeviceBootstrap);setError('');}catch(cause){setData(null);setError((cause as Error).message||'Impossible de vérifier cet appareil.');}finally{setChecked(true);setRefreshing(false);}},[enabled]);
+ useEffect(()=>{if(enabled){const first=window.setTimeout(()=>void refresh(),0);return()=>window.clearTimeout(first);}setChecked(true);},[enabled,refresh]);
+ return {data,error,checked,refreshing,refresh};
+}
+
 function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailure:()=>Promise<void>){
  const query=scopeQuery(scope),cacheKey=`dolce-production:${query}:${station}`;
  const cached=useMemo<ProductionResponse|null>(()=>{if(typeof window==='undefined')return null;try{const raw=sessionStorage.getItem(cacheKey);if(!raw)return null;return validResponse(JSON.parse(raw));}catch{return null;}},[cacheKey]);
@@ -79,15 +88,21 @@ function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailu
  return {data,error,loading,fetching,lastSync,online,refresh,retry,pauseForCommand,resumeAfterCommand,removeUnauthorized,enqueueCommand,queuedCount:queued.length,flushing};
 }
 
-export function ProductionKds({station:requestedStation,organizationId,locationId}:{station?:Station;organizationId?:string;locationId?:string}){
- const access=useStaffAccess(),router=useRouter();
- if(access.loading&&!access.data)return <main id="contenu" className="production-shell"><div className="production-loading" role="status"><LoaderCircle size={26} className="production-spin"/>Vérification de vos postes…</div></main>;
- const scopes=(access.data?.scopes||[]).filter(scope=>scope.stations.length>0);
+export function ProductionKds({station:requestedStation,organizationId,locationId,deviceMode=false}:{station?:Station;organizationId?:string;locationId?:string;deviceMode?:boolean}){
+ const staff=useStaffAccess(),device=useProductionDeviceAccess(deviceMode),router=useRouter();
+ const accessData=device.data?{account:{id:`device:${device.data.device.id}`,name:device.data.device.label},scopes:[device.data.scope],roles:[{id:device.data.device.role,label:device.data.device.role}]}:staff.data;
+ const accessLoading=deviceMode?!device.checked:staff.loading;
+ const accessError=deviceMode&&device.checked&&!device.data?device.error:staff.error;
+ const accessStatus=deviceMode&&device.checked&&!device.data?401:staff.status;
+ const accessRefreshing=deviceMode?device.refreshing:staff.refreshing;
+ const refreshAccess=deviceMode?device.refresh:staff.refresh;
+ if(accessLoading&&!accessData)return <main id="contenu" className="production-shell"><div className="production-loading" role="status"><LoaderCircle size={26} className="production-spin"/>{deviceMode?'Vérification de cet appareil…':'Vérification de vos postes…'}</div></main>;
+ const scopes=(accessData?.scopes||[]).filter(scope=>scope.stations.length>0);
  const explicit=!!organizationId||!!locationId;
  const scope=explicit?scopes.find(item=>item.organizationId===organizationId&&item.locationId===locationId):scopes[0];
  const station=requestedStation||scope?.stations[0];
- if(!scope||!station||!scope.stations.includes(station))return <main id="contenu" className="production-shell"><div className="production-first-error"><AlertTriangle size={32}/><h1>{access.error?'Vos accès ne sont pas disponibles.':'Ce poste ne vous est pas attribué.'}</h1><p>{access.error||'Choisissez un poste autorisé depuis l’espace équipe ou demandez au responsable de vérifier vos droits.'}</p><Link href={access.status===401?loginPath('/production'):'/equipe'} className="production-button production-button-primary">{access.status===401?'Se reconnecter':'Retrouver mes postes'}</Link><button type="button" className="production-button production-button-secondary" disabled={access.refreshing} onClick={()=>void access.refresh()}><RefreshCw size={18}/> Vérifier mes accès</button></div></main>;
- return <ProductionBoard key={`${scopeQuery(scope)}:${station}`} station={station} scope={scope} scopes={scopes} accessError={access.error} onAuthorizationFailure={access.refresh} onSelectScope={next=>{const nextStation=next.stations.includes(station)?station:next.stations[0];router.push(productionHref(next,nextStation));}}/>;
+ if(!scope||!station||!scope.stations.includes(station))return <main id="contenu" className="production-shell"><div className="production-first-error"><AlertTriangle size={32}/><h1>{accessError?'Accès indisponible.':'Ce poste ne vous est pas attribué.'}</h1><p>{accessError||(deviceMode?'Configurez un appareil enrôlé pour ouvrir ce poste.':'Choisissez un poste autorisé depuis l’espace équipe ou demandez au responsable de vérifier vos droits.')}</p><Link href={accessStatus===401?loginPath('/production'):'/equipe'} className="production-button production-button-primary">{accessStatus===401?(deviceMode?'Ouvrir l’espace équipe':'Se reconnecter'):'Retrouver mes postes'}</Link><button type="button" className="production-button production-button-secondary" disabled={accessRefreshing} onClick={()=>void refreshAccess()}><RefreshCw size={18}/> Vérifier l’accès</button></div></main>;
+ return <ProductionBoard key={`${scopeQuery(scope)}:${station}`} station={station} scope={scope} scopes={scopes} accessError={accessError} onAuthorizationFailure={refreshAccess} onSelectScope={next=>{const nextStation=next.stations.includes(station)?station:next.stations[0];router.push(productionHref(next,nextStation));}}/>;
 }
 
 function ProductionBoard({station,scope,scopes,accessError,onAuthorizationFailure,onSelectScope}:{station:Station;scope:StaffScope;scopes:StaffScope[];accessError:string;onAuthorizationFailure:()=>Promise<void>;onSelectScope:(scope:StaffScope)=>void}){

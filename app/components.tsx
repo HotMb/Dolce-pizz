@@ -26,7 +26,11 @@ function writeCart(cart:CartLine[],key=cartKey){const raw=JSON.stringify(cart);t
 export async function api<T=unknown>(path:string,method='GET',body?:unknown,signal?:AbortSignal):Promise<T>{
  const timeout=AbortSignal.timeout(20000);
  let r:Response;
- try{r=await fetch(`/api/${path}`,{method,headers:body!==undefined?{'Content-Type':'application/json'}:undefined,body:body!==undefined?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,timeout]):timeout});}
+ const headers:Record<string,string>={};
+ if(body!==undefined)headers['Content-Type']='application/json';
+ // Device credentials are scoped to production endpoints and never sent to other APIs.
+ if(typeof window!=='undefined'&&(/^(?:production)(?:\?|\/|$)/.test(path))){try{const token=window.localStorage.getItem('dolce-production-device-token')||'';if(/^[0-9a-f]{64}$/.test(token))headers.Authorization=`Bearer ${token}`;}catch{}}
+ try{r=await fetch(`/api/${path}`,{method,headers:Object.keys(headers).length?headers:undefined,body:body!==undefined?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,timeout]):timeout});}
  catch(e){if(signal?.aborted)throw e;throw new Error(timeout.aborted?'Le service met trop de temps à répondre. Réessayez : votre panier est conservé.':'Connexion interrompue. Vérifiez votre connexion puis réessayez.');}
  const data:unknown=await r.json().catch(()=>null);
  const details=data&&typeof data==='object'?data as {error?:string;fields?:unknown}:{};
