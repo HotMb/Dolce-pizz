@@ -50,17 +50,18 @@ function elapsedSince(value:string|null,now:number){if(!value)return null;const 
 function commandError(error:unknown){const value=error as {message?:string;status?:number};return {message:value?.message||'L’action n’a pas été confirmée. Actualisez le ticket avant de réessayer.',conflict:value?.status===409};}
 
 function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailure:()=>Promise<void>){
- const[data,setData]=useState<ProductionResponse|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[fetching,setFetching]=useState(false),[lastSync,setLastSync]=useState<number|null>(null),[online,setOnline]=useState(true);
- const serial=useRef(0),controller=useRef<AbortController|null>(null),busy=useRef(false),hasData=useRef(false),forbidden=useRef(false);
- const query=scopeQuery(scope);
+ const query=scopeQuery(scope),cacheKey=`dolce-production:${query}:${station}`;
+ const cached=useMemo<ProductionResponse|null>(()=>{if(typeof window==='undefined')return null;try{const raw=sessionStorage.getItem(cacheKey);if(!raw)return null;return validResponse(JSON.parse(raw));}catch{return null;}},[cacheKey]);
+ const[data,setData]=useState<ProductionResponse|null>(cached),[error,setError]=useState(''),[loading,setLoading]=useState(!cached),[fetching,setFetching]=useState(false),[lastSync,setLastSync]=useState<number|null>(null),[online,setOnline]=useState(()=>typeof navigator==='undefined'?true:navigator.onLine);
+ const serial=useRef(0),controller=useRef<AbortController|null>(null),busy=useRef(false),hasData=useRef(!!cached),forbidden=useRef(false);
  const refresh=useCallback(async()=>{
   if(busy.current||controller.current||forbidden.current)return;
   const request=new AbortController(),id=++serial.current;controller.current=request;
   if(!hasData.current)setLoading(true);else setFetching(true);
-  try{const result=await api<unknown>(`production?${query}&station=${station}`,'GET',undefined,request.signal);const parsed=validResponse(result);if(id===serial.current&&!request.signal.aborted){hasData.current=true;setData(parsed);setError('');setLastSync(Date.now());}}
+  try{const result=await api<unknown>(`production?${query}&station=${station}`,'GET',undefined,request.signal);const parsed=validResponse(result);if(id===serial.current&&!request.signal.aborted){hasData.current=true;setData(parsed);setError('');setLastSync(Date.now());try{sessionStorage.setItem(cacheKey,JSON.stringify(parsed));}catch{}}}
   catch(cause){if(id===serial.current&&!request.signal.aborted){setError((cause as Error).message||'Impossible de charger les tickets.');const status=(cause as {status?:number}).status;if(status===401||status===403){forbidden.current=true;hasData.current=false;setData(null);void onAuthorizationFailure();}}}
   finally{if(id===serial.current&&!request.signal.aborted){setLoading(false);setFetching(false);controller.current=null;}}
- },[station,query,onAuthorizationFailure]);
+ },[station,query,cacheKey,onAuthorizationFailure]);
  useEffect(()=>{const tick=window.setTimeout(()=>{setOnline(navigator.onLine);void refresh();},0);const poll=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},4000);const onOnline=()=>{setOnline(true);void refresh();};const onOffline=()=>setOnline(false);const onVisibility=()=>{if(!document.hidden&&navigator.onLine)void refresh();};window.addEventListener('online',onOnline);window.addEventListener('offline',onOffline);document.addEventListener('visibilitychange',onVisibility);return()=>{window.clearTimeout(tick);window.clearInterval(poll);controller.current?.abort();window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);document.removeEventListener('visibilitychange',onVisibility);};},[refresh]);
  const pauseForCommand=()=>{busy.current=true;serial.current++;controller.current?.abort();controller.current=null;setFetching(false);};
  const resumeAfterCommand=()=>{busy.current=false;};

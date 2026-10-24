@@ -82,7 +82,7 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
 - **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; `/api/staff/routing` permet de configurer les codes postaux par site et de proposer les établissements actifs, avec validation serveur avant création de la commande.
 - **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
-- **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les appareils se préparent dans `/api/staff/devices` avec un rôle et un jeton expirant; le heartbeat `/api/device/heartbeat` permet de vérifier leur identité sans stocker le jeton en clair.
+- **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les appareils se préparent dans `/api/staff/devices` avec un rôle et un jeton expirant; le heartbeat `/api/device/heartbeat` permet de vérifier leur identité sans stocker le jeton en clair. La dernière vue KDS est conservée dans la session du navigateur pour consultation hors connexion; aucune validation n’est acceptée sans retour serveur.
 
 Un appareil doit être enrôlé auprès d’un tenant et d’un établissement. Les identifiants d’équipe sont nominatifs; les changements d’établissement et les remboursements sont audités.
 
