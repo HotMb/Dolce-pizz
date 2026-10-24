@@ -87,6 +87,8 @@ Exemple de liaison de domaine après création :
 
 En production, cette valeur est injectée dans le secret ou la variable Worker `TENANT_HOSTS_JSON`. Un domaine absent de cette liste est refusé par l’API; aucun paramètre d’URL ne peut choisir une autre enseigne. La gestion graphique des domaines et l’auto-provisionnement DNS restent un jalon de back-office à livrer.
 
+Les réglages d’horaires, de capacité et de fidélité sont stockés par établissement dans `location_config` (migration `0014`). Une installation historique qui n’a pas encore activé ses réglages locaux utilise temporairement son modèle organisationnel; l’onboarding d’une nouvelle enseigne crée directement le réglage de son premier site.
+
 1. Installer un routeur professionnel; réserver un réseau/SSID aux appareils POS/KDS et empêcher les clients Wi-Fi d’accéder aux appareils métier.
 2. Raccorder le relais local et l’imprimante cuisine en Ethernet si possible; donner une alimentation protégée au relais, au routeur et à l’imprimante. Le relais utilise le rôle d’appareil `printer_gateway` et récupère les jobs sur `/api/internal/print-jobs` avec son jeton Bearer; le jeton n’est jamais imprimé dans les journaux.
 3. Installer des écrans tactiles lisibles depuis le poste de travail, avec supports fixes et alimentation sécurisée.

@@ -80,7 +80,7 @@ async function getSlots(request: Request, url: URL) {
   if (!location) fail(503, 'Cet établissement ne peut pas encore recevoir de commandes.');
 
   let currentSettings: Awaited<ReturnType<typeof settings>>;
-  try {currentSettings = await settings(query.data.organizationId);}
+  try {currentSettings = await settings(query.data.organizationId,query.data.locationId);}
   catch {fail(503, 'Les horaires et créneaux ne sont pas configurés pour cette enseigne.');}
   const now = new Date().toISOString();
   const countRows = await db().prepare(
@@ -121,7 +121,7 @@ async function postOrder(request: Request, url: URL) {
   if (previous) return json({order: orderResponse(previous)});
 
   let currentSettings: Awaited<ReturnType<typeof settings>>;
-  try {currentSettings = await settings(input.organizationId);}
+  try {currentSettings = await settings(input.organizationId,input.locationId);}
   catch {fail(503, 'Les horaires et créneaux ne sont pas configurés pour cette enseigne.');}
   const slot = new Date(Date.parse(input.slot)).toISOString();
   const slotMs = Date.parse(slot);
@@ -137,7 +137,7 @@ async function postOrder(request: Request, url: URL) {
   });
   if (priced.problem) fail(409, priced.problem);
   if (priced.count > 30) fail(400, 'Pour plus de 30 articles, appelez la pizzeria.');
-  const latestSettings = await settings(input.organizationId);
+  const latestSettings = await settings(input.organizationId,input.locationId);
   if (latestSettings.version !== currentSettings.version || !latestSettings.hoursConfirmed || !allowedSlot(slotMs, latestSettings)) {
     fail(409, 'La carte ou ce créneau vient de changer. Actualisez les disponibilités et réessayez.');
   }
@@ -159,7 +159,7 @@ async function postOrder(request: Request, url: URL) {
     )
     SELECT ?,?,?,?,?,'',?,?,?,?,?,0,?,0,0,'preparing','',?,?,?,'pickup','due_at_pickup',NULL,?,?,?,?,?,1
     WHERE ${sqlGuard}
-      AND (SELECT version FROM config WHERE organization_id=?)=?
+      AND COALESCE((SELECT version FROM location_config WHERE organization_id=? AND location_id=?),(SELECT version FROM config WHERE organization_id=?))=?
       AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled')) < ?
     ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING`,
   ).bind(
@@ -167,7 +167,7 @@ async function postOrder(request: Request, url: URL) {
     priced.subtotal, priced.offer, priced.total,
     input.organizationId, input.locationId, input.channel, notificationPhone, contactBasis, contactCapturedAt, now, now,
     input.organizationId, input.locationId, input.organizationId, actor.id, input.locationId,
-    input.organizationId, latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
+    input.organizationId, input.locationId, input.organizationId, latestSettings.version, input.organizationId, input.locationId, slot, latestSettings.capacity,
   );
   const event = db().prepare(
     `INSERT INTO events(id,order_id,status,actor,note,created_at)

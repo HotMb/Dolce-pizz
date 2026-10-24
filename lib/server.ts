@@ -20,7 +20,7 @@ export async function ensureSeed(){
  ]);
 }
 // Settings saved before a new field existed get its default value.
-export async function settings(organizationId=PILOT_ORGANIZATION_ID):Promise<Settings>{const r=await db().prepare('SELECT value,version FROM config WHERE organization_id=?').bind(organizationId).first<{value:string;version:number}>();if(!r)throw new Error('Settings unavailable for organization');return {...defaultSettings,...JSON.parse(r.value),version:r.version};}
+export async function settings(organizationId=PILOT_ORGANIZATION_ID,locationId?:string):Promise<Settings>{const r=locationId?await db().prepare('SELECT value,version FROM location_config WHERE organization_id=? AND location_id=?').bind(organizationId,locationId).first<{value:string;version:number}>():null;const fallback=r||await db().prepare('SELECT value,version FROM config WHERE organization_id=?').bind(organizationId).first<{value:string;version:number}>();if(!fallback)throw new Error('Settings unavailable for scope');return {...defaultSettings,...JSON.parse(fallback.value),version:fallback.version};}
 const categoryOrder=(id:string)=>{const i=categories.findIndex(c=>c.id===id);return i<0?categories.length:i;};
 export function toProduct(p:ProductRow):Product{
  // A photo dropped in assets-src/pizzas and exported by `npm run photos` shows up without touching the database.

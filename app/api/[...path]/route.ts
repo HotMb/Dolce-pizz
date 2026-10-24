@@ -92,12 +92,12 @@ async function handler(request:Request){
   }
   if(path[0]==='slots'&&method==='GET'){
    const active=await db().prepare("SELECT l.id FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first();
-   if(!active)return json({slots:[],settings:await settings()});
-   const s=await settings(PILOT_ORGANIZATION_ID);const r=await db().prepare("SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date().toISOString()).all<{slot:string;n:number}>();
+   if(!active)return json({slots:[],settings:await settings(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID)});
+   const s=await settings(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);const r=await db().prepare("SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date().toISOString()).all<{slot:string;n:number}>();
    return json({slots:slots(s,Object.fromEntries(r.results.map(v=>[v.slot,v.n]))),settings:s});
   }
   if(path[0]==='me'&&method==='GET'){
-   const s=await settings(PILOT_ORGANIZATION_ID);const loyalty={enabled:s.loyaltyEnabled,pointsPerEuro:s.pointsPerEuro,rewardPoints:s.rewardPoints};
+   const s=await settings(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);const loyalty={enabled:s.loyaltyEnabled,pointsPerEuro:s.pointsPerEuro,rewardPoints:s.rewardPoints};
    if(!user)return json({user:null,admin:false,balance:0,orders:[],loyalty});
    // Staff-entered orders share the employee's account id for attribution, but are not customer orders.
    const rows=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND customer_user_id=? AND channel='web' ORDER BY created_at DESC LIMIT 100").bind(PILOT_ORGANIZATION_ID,user.id).all();
@@ -131,7 +131,7 @@ async function handler(request:Request){
    const organizationId=PILOT_ORGANIZATION_ID,locationId=PILOT_LOCATION_ID;
    const location=await db().prepare("SELECT l.id FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.id=? AND l.organization_id=? AND l.status='active'").bind(locationId,organizationId).first();
    if(!location)fail(503,'La prise de commande pour le retrait à Ronchin est momentanément indisponible.');
-   const s=await settings(organizationId);
+   const s=await settings(organizationId,locationId);
    if(!s.hoursConfirmed)fail(409,'Les horaires de retrait doivent encore être confirmés par la pizzeria.');
    const slotMs=Date.parse(input.slot);
    if(!Number.isFinite(slotMs))fail(400,'Choisissez un créneau valide.');
@@ -148,7 +148,7 @@ async function handler(request:Request){
    const id=crypto.randomUUID();const now=new Date().toISOString();
    await db().prepare("INSERT INTO customer_profiles(organization_id,user_id,name,marketing,marketing_at,marketing_source,created_at,updated_at) SELECT ?,id,?,0,'','',?,? FROM users WHERE id=? ON CONFLICT(organization_id,user_id) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at").bind(organizationId,input.name,now,now,actor).run();
    const result=await db().batch([
-    db().prepare("INSERT INTO orders(id,user_id,customer_user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version) SELECT ?,?,?,?,? ,?,'',?,?,?,?,?,?,?,?,?,'pending',?,?,?,'pickup','due_at_pickup',NULL,?,'account_otp',?,?,?,1 WHERE EXISTS(SELECT 1 FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active') AND (SELECT version FROM config WHERE organization_id=?)=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled'))<? AND (SELECT COALESCE(SUM(delta),0) FROM ledger WHERE organization_id=? AND user_id=?)>=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND customer_user_id=? AND channel='web' AND status='pending')<5 ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING").bind(id,actor,actor,input.key,input.name,localPhone(user.phone),JSON.stringify(items),input.note,slot,priced.subtotal,priced.offer,priced.ticketDiscount,priced.total,redeemed,earned,organizationId,locationId,'web',user.phone,now,now,now,organizationId,locationId,organizationId,s.version,organizationId,locationId,slot,s.capacity,organizationId,actor,redeemed,organizationId,actor),
+    db().prepare("INSERT INTO orders(id,user_id,customer_user_id,idempotency,name,phone,email,items,note,slot,subtotal,offer_discount,discount,total,redeemed,earned,status,organization_id,location_id,channel,fulfillment,payment_status,payment_method,notification_phone,notification_phone_basis,notification_phone_captured_at,created_at,updated_at,version) SELECT ?,?,?,?,? ,?,'',?,?,?,?,?,?,?,?,?,'pending',?,?,?,'pickup','due_at_pickup',NULL,?,'account_otp',?,?,?,1 WHERE EXISTS(SELECT 1 FROM locations l JOIN organizations o ON o.id=l.organization_id AND o.status='active' WHERE l.organization_id=? AND l.id=? AND l.status='active') AND COALESCE((SELECT version FROM location_config WHERE organization_id=? AND location_id=?),(SELECT version FROM config WHERE organization_id=?))=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND location_id=? AND substr(slot,1,16)||':00.000Z'=? AND status NOT IN ('rejected','cancelled'))<? AND (SELECT COALESCE(SUM(delta),0) FROM ledger WHERE organization_id=? AND user_id=?)>=? AND (SELECT COUNT(*) FROM orders WHERE organization_id=? AND customer_user_id=? AND channel='web' AND status='pending')<5 ON CONFLICT(organization_id,location_id,user_id,idempotency) DO NOTHING").bind(id,actor,actor,input.key,input.name,localPhone(user.phone),JSON.stringify(items),input.note,slot,priced.subtotal,priced.offer,priced.ticketDiscount,priced.total,redeemed,earned,organizationId,locationId,'web',user.phone,now,now,now,organizationId,locationId,organizationId,locationId,organizationId,s.version,organizationId,locationId,slot,s.capacity,organizationId,actor,redeemed,organizationId,actor),
     db().prepare("INSERT OR IGNORE INTO ledger(id,organization_id,user_id,order_id,delta,kind,created_at) SELECT ?,organization_id,customer_user_id,id,-redeemed,'redemption',? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND customer_user_id IS NOT NULL AND redeemed>0").bind(`${id}:redemption`,now,id,organizationId,locationId),
     db().prepare("INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,'pending',?,'Commande envoyée',? FROM orders WHERE id=? AND organization_id=? AND location_id=?").bind(`${id}:1`,actor,now,id,organizationId,locationId)
    ]);
@@ -177,7 +177,7 @@ async function handler(request:Request){
    const orders=await db().prepare('SELECT * FROM orders WHERE organization_id=? AND location_id=? ORDER BY created_at DESC LIMIT 300').bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).all();
    const stats=await db().prepare("SELECT COUNT(*) AS count,COALESCE(SUM(total),0) AS revenue FROM orders WHERE organization_id=? AND location_id=? AND status='completed'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first();
    const audience=await db().prepare('SELECT COUNT(*) AS customers,COALESCE(SUM(marketing),0) AS subscribers FROM customer_profiles WHERE organization_id=?').bind(PILOT_ORGANIZATION_ID).first<{customers:number;subscribers:number}>();
-   return json({orders:orders.results.map(orderView),settings:await settings(PILOT_ORGANIZATION_ID),products:await productList(true,PILOT_ORGANIZATION_ID),ingredients:await ingredientList(PILOT_ORGANIZATION_ID),stats,audience,sms:smsMode(local),campaignsAllowed:await isCampaignOwner(actor,PILOT_ORGANIZATION_ID)});
+   return json({orders:orders.results.map(orderView),settings:await settings(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID),products:await productList(true,PILOT_ORGANIZATION_ID),ingredients:await ingredientList(PILOT_ORGANIZATION_ID),stats,audience,sms:smsMode(local),campaignsAllowed:await isCampaignOwner(actor,PILOT_ORGANIZATION_ID)});
   }
   if(path[1]==='kitchen'&&method==='GET'){
    const orders=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND location_id=? AND (status='preparing' OR (status='ready' AND updated_at>?)) ORDER BY slot LIMIT 100").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,new Date(Date.now()-2*3600000).toISOString()).all();
@@ -187,8 +187,9 @@ async function handler(request:Request){
   if(path[1]==='settings'&&method==='PUT'){
    const s=settingsInput.parse(await body());
    for(const h of s.hours){if(!h.closed&&h.close!=='00:00'&&h.open>=h.close)fail(400,'L’heure de fermeture doit suivre l’ouverture, ou être minuit.');}
-   const result=await db().prepare('UPDATE config SET value=?,version=version+1 WHERE organization_id=? AND version=?').bind(JSON.stringify(s),PILOT_ORGANIZATION_ID,s.version).run();
-   if(!result.meta.changes)fail(409,'Les réglages ont changé. Rechargez-les avant d’enregistrer.');return json({settings:await settings(PILOT_ORGANIZATION_ID)});
+   let result=await db().prepare('UPDATE location_config SET value=?,version=version+1 WHERE organization_id=? AND location_id=? AND version=?').bind(JSON.stringify(s),PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,s.version).run();
+   if(!result.meta.changes)result=await db().prepare('UPDATE config SET value=?,version=version+1 WHERE organization_id=? AND version=?').bind(JSON.stringify(s),PILOT_ORGANIZATION_ID,s.version).run();
+   if(!result.meta.changes)fail(409,'Les réglages ont changé. Rechargez-les avant d’enregistrer.');return json({settings:await settings(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID)});
   }
   if(path[1]==='products')return await products(request,path[2],path[3],method,body,PILOT_ORGANIZATION_ID);
   if(path[1]==='ingredients'||path[1]==='origins')return await ingredients(path[1],path[2],method,body,PILOT_ORGANIZATION_ID);
