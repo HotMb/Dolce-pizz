@@ -61,6 +61,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const productionStream=await import('../app/api/production/stream/route');
  const notifications=await import('../app/api/internal/notifications/route');
  const onboarding=await import('../app/api/admin/onboarding/route');
+ const reports=await import('../app/api/admin/reports/route');
  type Handler=(request:Request)=>Promise<Response>;
  async function call<T=Record<string,unknown>>(handler:Handler,path:string,method='GET',body?:unknown,cookie='',extraHeaders:Record<string,string>={}){
   const response=await handler(new Request(`http://localhost/api/${path}`,{method,
@@ -166,6 +167,10 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  const snapshot=database.prepare('SELECT notification_phone,notification_phone_basis,notification_phone_captured_at,payment_status FROM orders WHERE id=?').get(orderId)!;
  assert.equal(snapshot.notification_phone,'+33600000001');assert.equal(snapshot.notification_phone_basis,'account_otp');
  assert.ok(snapshot.notification_phone_captured_at);assert.equal(snapshot.payment_status,'due_at_pickup');
+ const report=await call<{totals:{orders:number};locations:Array<{locationId:string}>}>(reports.GET,'admin/reports?organizationId=dolce-pizza&from=2026-10-01&to=2026-10-31','GET',undefined,ownerCookie);
+ assert.equal(report.response.status,200);assert.ok(report.body.totals.orders>=1);assert.ok(report.body.locations.some(location=>location.locationId==='ronchin'));
+ assert.doesNotMatch(JSON.stringify(report.body),/\+33600000001|Client de test/);
+ assert.equal((await call(reports.GET,'admin/reports?organizationId=dolce-pizza&from=2026-10-01&to=2026-10-31','GET',undefined,workerCookie)).response.status,403);
  const accepted=await call(web.PATCH,`admin/orders/${orderId}`,'PATCH',{status:'preparing',version:created.body.order.version},ownerCookie);
  assert.equal(accepted.response.status,200,JSON.stringify(accepted.body));
  assert.deepEqual({...database.prepare('SELECT organization_id,location_id,order_id,job_type,status FROM print_outbox WHERE order_id=?').get(orderId)},{organization_id:'dolce-pizza',location_id:'ronchin',order_id:orderId,job_type:'kitchen_ticket',status:'pending'});
