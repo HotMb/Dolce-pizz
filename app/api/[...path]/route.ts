@@ -124,6 +124,16 @@ async function handler(request:Request){
    await db().batch(statements);
    return json({ok:true});
   }
+  if(path[0]==='me'&&method==='DELETE'){
+   const origin=request.headers.get('origin');if(!origin||origin!==url.origin)fail(403,'Cette demande doit être envoyée depuis le site.');
+   const now=new Date().toISOString();
+   await db().batch([
+    db().prepare("INSERT INTO marketing_consent_events(id,organization_id,user_id,marketing,source,actor,occurred_at) SELECT ?,organization_id,user_id,0,'compte','self_delete',? FROM customer_profiles WHERE organization_id=? AND user_id=? AND marketing=1").bind(crypto.randomUUID(),now,PILOT_ORGANIZATION_ID,actor),
+    db().prepare("UPDATE customer_profiles SET name='',marketing=0,marketing_at=?,marketing_source='compte',updated_at=? WHERE organization_id=? AND user_id=?").bind(now,now,PILOT_ORGANIZATION_ID,actor),
+    db().prepare("UPDATE orders SET name='Client anonymisé',phone='',email='',notification_phone='',notification_phone_basis='none',notification_phone_captured_at=NULL,updated_at=?,version=version+1 WHERE organization_id=? AND customer_user_id=? AND channel='web'").bind(now,PILOT_ORGANIZATION_ID,actor),
+   ]);
+   return json({ok:true,deleted:true});
+  }
   if(path[0]==='orders'&&method==='POST'&&!path[1]){
    const input=orderInput.parse(await body());
    const previous=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND location_id=? AND user_id=? AND idempotency=? AND channel='web'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID,actor,input.key).first();

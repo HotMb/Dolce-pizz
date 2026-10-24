@@ -102,6 +102,10 @@ La carte maître reste dans `products`. La migration `0017` ajoute `location_pro
 
 La page `/equipe/rapports` appelle `GET /api/admin/reports?organizationId=<id>&from=AAAA-MM-JJ&to=AAAA-MM-JJ` et fournit au propriétaire les totaux de commandes, chiffre d’affaires encaissé, annulations, détail par établissement, canal et moyen de paiement. La période est limitée à 31 jours; les requêtes sont toujours filtrées par l’organisation du propriétaire et aucune donnée client brute n’est renvoyée.
 
+### Demande d’effacement client
+
+Un client connecté peut demander l’effacement de ses données commerciales avec `DELETE /api/me`. L’opération est limitée à l’organisation du domaine courant : le profil, le consentement et les coordonnées des commandes web sont anonymisés, tandis que les montants et l’historique opérationnel nécessaires à la caisse restent conservés. Le navigateur doit envoyer l’origine du site et la session OTP; aucun effacement inter-enseigne n’est possible.
+
 1. Installer un routeur professionnel; réserver un réseau/SSID aux appareils POS/KDS et empêcher les clients Wi-Fi d’accéder aux appareils métier.
 2. Raccorder le relais local et l’imprimante cuisine en Ethernet si possible; donner une alimentation protégée au relais, au routeur et à l’imprimante. Le relais utilise le rôle d’appareil `printer_gateway` et récupère les jobs sur `/api/internal/print-jobs` avec son jeton Bearer; le jeton n’est jamais imprimé dans les journaux.
 3. Installer des écrans tactiles lisibles depuis le poste de travail, avec supports fixes et alimentation sécurisée.
