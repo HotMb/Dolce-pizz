@@ -27,6 +27,7 @@ import {
   projectProductionTicket,
 } from '@/lib/production-repository';
 import {compareProductionPriority, productionPriority} from '@/lib/production-priority';
+import {productionDeviceSession} from '@/lib/device-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +69,6 @@ type TicketRow = {
 
 async function requireOperator(request: Request) {
   const user = await staffSessionUser(request.headers.get('cookie'));
-  if (!user) throw new ApiError(401, 'Connectez-vous avec un compte autorisé.');
   const query = new URL(request.url).searchParams;
   if (query.getAll('organizationId').length > 1 || query.getAll('locationId').length > 1) {
     throw new ApiError(400, 'Choisissez un seul établissement.');
@@ -76,9 +76,12 @@ async function requireOperator(request: Request) {
   const scope = staffScopeSchema.parse(query.has('organizationId') || query.has('locationId')
     ? {organizationId: query.get('organizationId'), locationId: query.get('locationId')}
     : {organizationId: 'dolce-pizza', locationId: 'ronchin'});
-  const access = await loadStaffScope(db(), user.id, scope);
+  const device = !user ? await productionDeviceSession(db(), request) : null;
+  if (!user && !device) throw new ApiError(401, 'Connectez-vous avec un compte autorisé ou un appareil enrôlé.');
+  if (device && (device.scope.organizationId !== scope.organizationId || device.scope.locationId !== scope.locationId)) throw new ApiError(403, 'Cet appareil n’est pas rattaché à cet établissement.');
+  const access = device?.scope || await loadStaffScope(db(), user!.id, scope);
   if (!access) throw new ApiError(403, 'Votre compte n’a pas accès à cet établissement actif.');
-  return {user, scope, access};
+  return {user: user || {id: device!.principalId}, scope, access, device: !!device};
 }
 
 async function ensureTicket(order: OrderRow) {
@@ -160,7 +163,8 @@ export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
     const origin = request.headers.get('origin');
-    if (!origin || origin !== url.origin) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
+    const deviceRequest = /^Bearer [0-9a-f]{64}$/.test(request.headers.get('authorization') || '');
+    if (!deviceRequest && (!origin || origin !== url.origin)) throw new ApiError(403, 'Cette demande doit être envoyée depuis le site.');
     if (Number(request.headers.get('content-length') || 0) > 10000) throw new ApiError(413, 'La demande est trop volumineuse.');
     const {user, scope, access} = await requireOperator(request);
     const ORGANIZATION_ID = scope.organizationId;

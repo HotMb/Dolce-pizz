@@ -93,6 +93,11 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.equal((await call(web.GET,'admin/campaigns','GET',undefined,workerCookie)).response.status,403);
  assert.equal((await call(web.POST,'admin/campaigns','POST',{message:'Un responsable de site ne peut pas envoyer cette promotion.'},workerCookie)).response.status,403);
  assert.equal((await call(staff.POST,'staff','POST',{action:'revoke',...scope,membershipId:managerGrant.body.membershipId},ownerCookie)).response.status,200);
+ const ovenDeviceResponse=await devices.POST(new Request('http://localhost/api/staff/devices',{method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({...scope,action:'enroll',label:'Four KDS',role:'oven'})}));
+ assert.equal(ovenDeviceResponse.status,201);
+ const ovenDevice=await ovenDeviceResponse.json() as {credential:string;device:{id:string}};
+ assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,200);
+ assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,'',{authorization:`Bearer ${ovenDevice.credential}`,'origin':''})).response.status,403);
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,workerCookie)).response.status,200);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,workerCookie)).response.status,403);
  assert.equal((await call(staff.POST,'staff','POST',{action:'grant',...scope,principalId:worker.body.account.id,role:'manager'},workerCookie)).response.status,403);

@@ -1,6 +1,7 @@
 import {staffSessionUser} from '@/lib/auth';
 import {db,ensureSeed} from '@/lib/server';
 import {canOperateStation,loadStaffScope} from '@/lib/staff-access';
+import {productionDeviceSession} from '@/lib/device-access';
 import {z} from 'zod';
 
 export const dynamic='force-dynamic';
@@ -10,8 +11,8 @@ const encoder=new TextEncoder();
 export async function GET(request:Request){
  const parsed=querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams.entries()));
  if(!parsed.success)return new Response('invalid_scope',{status:400});
- const user=await staffSessionUser(request.headers.get('cookie'));if(!user)return new Response('unauthorized',{status:401});
- await ensureSeed();const scope=await loadStaffScope(db(),user.id,{organizationId:parsed.data.organizationId,locationId:parsed.data.locationId});
+ const user=await staffSessionUser(request.headers.get('cookie'));const device=!user?await productionDeviceSession(db(),request):null;if(!user&&!device)return new Response('unauthorized',{status:401});
+ await ensureSeed();const scope=device?.scope||await loadStaffScope(db(),user!.id,{organizationId:parsed.data.organizationId,locationId:parsed.data.locationId});
  if(!scope||!canOperateStation(scope,parsed.data.station,'read'))return new Response('forbidden',{status:403});
  let closed=false;let timer:number|undefined;let closeTimer:number|undefined;
  const stream=new ReadableStream<Uint8Array>({start(controller){
