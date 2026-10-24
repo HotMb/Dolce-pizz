@@ -35,6 +35,14 @@ Le manifeste local `.openai/hosting.json` et le projet Sites attaché portent le
 
 Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans ce jalon : les API client pouvaient exposer à un ancien équipier les commandes qu’il avait saisies; certaines représentations ISO historiques d’un même créneau pouvaient contourner la capacité; et l’écran POS calculait son canal avant de le déclarer. Les API client filtrent maintenant les commandes du canal web, et les compteurs web/personnel normalisent les formes historiques au même créneau de minute que le serveur. Des tests d’intégration couvrent les commandes staff après révocation et des créneaux historiques sans secondes ou avec des fractions de seconde excédentaires.
 
+### Outbox d’impression (migration 0012)
+
+- Les jobs sont liés à `(organization_id, location_id, order_id)` et ne peuvent pas être réclamés par un autre établissement.
+- Le relais doit présenter un jeton d’appareil `printer_gateway` actif, non révoqué et non expiré; une session employé ou un identifiant envoyé dans le JSON ne suffit pas.
+- La réservation est atomique (`pending` vers `printing`) avec un bail court. La confirmation et l’échec exigent le même bail; une reprise après crash passe un bail expiré à `unknown`.
+- Les jobs sont idempotents par `operation_id`; les tentatives sont limitées à cinq avant l’état `failed`.
+- Le payload ne contient pas de donnée bancaire. L’adaptateur matériel doit filtrer ses logs et ne jamais exposer le jeton.
+
 ## Limites ouvertes avant une vraie exploitation
 
 1. **Le produit multi-enseignes reste incomplet.** Les objets clients, équipe, catalogue, KDS, fidélité et campagnes sont maintenant scoppés en base. Le domaine public et le back-office utilisent encore les constantes Dolce/Ronchin; il manque un résolveur de tenant de confiance, l’onboarding d’une enseigne et des réglages propres à chaque établissement. Tourcoing n’est pas encore configuré.
@@ -55,7 +63,7 @@ Les contrôles indépendants ont aussi relevé puis corrigé trois défauts dans
 - `npm run lint`, `npx tsc --noEmit --pretty false --incremental false` et `npm run build` : réussis sur le présent jalon. Vinext affiche des avertissements de source maps, de chargement de configuration et de classification statique de routes qui ne bloquent pas la compilation.
 - Vérification navigateur locale, en lecture seule : la page d’accueil s’identifie comme Dolce Pizz’; `/equipe` et `/production` affichent l’invitation à se connecter par SMS lorsqu’aucune session n’est authentifiée. Aucun parcours authentifié de gestion des accès ou de production n’a été vérifié par cette inspection visuelle.
 - `npm audit --omit=dev` : réussi avec accès au registre npm, 0 avis faible, modéré, élevé ou critique sur 199 dépendances de production.
-- `npx drizzle-kit check` vérifie le schéma Drizzle contenant `0008`, `0009`, `0010` et `0011`.
-- Les migrations SQL jusqu’à `0011_device_credentials.sql` sont appliquées dans SQLite en mémoire par les tests; `PRAGMA foreign_key_check` doit rester vide. La suite tente aussi des écritures croisées de points, de destinataires de campagne, de paiements, d’entrées de shift, de zones postales et de credentials appareil, et attend leur rejet par la base.
+- `npx drizzle-kit check` vérifie le schéma Drizzle contenant `0008`, `0009`, `0010`, `0011` et `0012`.
+- Les migrations SQL jusqu’à `0012_print_outbox.sql` sont appliquées dans SQLite en mémoire par les tests; `PRAGMA foreign_key_check` doit rester vide. La suite tente aussi des écritures croisées de points, de destinataires de campagne, de paiements, d’entrées de shift, de zones postales, de credentials appareil et de jobs d’impression, et attend leur rejet par la base.
 - L’audit d’interface strict `frontend-design-premium/scripts/audit_project.py --mode strict` réussit avec 0 erreur et 0 avertissement. Le contrat UX documente maintenant le choix assumé des menus natifs et la feuille de style mobile expose aussi les propriétés de scrollbar standards.
 - `npm run db:migrate:local` : `0005_staff_and_notifications.sql` a été appliquée avec succès à la base D1 locale de développement. Cette preuve locale ne signifie ni migration D1 distante, ni déploiement sur le projet Sites ou sur la démo Dolce Pizz’.

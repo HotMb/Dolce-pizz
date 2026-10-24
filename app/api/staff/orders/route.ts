@@ -148,7 +148,13 @@ async function postOrder(request: Request, url: URL) {
      SELECT ?,id,'preparing',?,'Commande équipe enregistrée',? FROM orders
      WHERE id=? AND user_id=? AND idempotency=? AND organization_id=? AND location_id=? AND channel=?`,
   ).bind(`${id}:1`, user.id, now, id, user.id, input.key, input.organizationId, input.locationId, input.channel);
-  const result = await db().batch([insert, event]);
+  const printJob = db().prepare(
+    `INSERT OR IGNORE INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at)
+     SELECT ?,?,?,?,id,'kitchen_ticket',?,'pending',0,?,?,? FROM orders
+     WHERE id=? AND organization_id=? AND location_id=? AND status='preparing'`,
+  ).bind(`${id}:print:kitchen`, `${id}:print:kitchen`, input.organizationId, input.locationId,
+    JSON.stringify({orderId: id, format: 'ticket-v1'}), now, now, now, id, input.organizationId, input.locationId);
+  const result = await db().batch([insert, event, printJob]);
   if (!result[0]?.meta.changes) {
     const duplicate = await db().prepare(
       'SELECT id,total,status,slot,location_id,channel FROM orders WHERE user_id=? AND idempotency=? AND organization_id=? AND location_id=? AND channel=?',

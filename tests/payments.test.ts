@@ -71,6 +71,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const routing = await import('../app/api/staff/routing/route');
   const devices = await import('../app/api/staff/devices/route');
   const heartbeat = await import('../app/api/device/heartbeat/route');
+  const printJobs = await import('../app/api/internal/print-jobs/route');
   type Handler = (request: Request) => Promise<Response>;
   async function call<T = Record<string, unknown>>(handler: Handler, body: unknown, cookie = '') {
     const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
@@ -169,4 +170,15 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal((await deviceCall({...deviceScope, action: 'revoke', deviceId: enrolled.body.device.id}, ownerCookie)).response.status, 200);
   const revokedHeartbeat = await heartbeat.POST(new Request('http://localhost/api/device/heartbeat', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({token: enrolled.body.credential})}));
   assert.equal(revokedHeartbeat.status, 401);
+  const printer = await deviceCall<{device: {id: string; role: string}; credential: string}>({...deviceScope, action: 'enroll', label: 'Relais imprimante', role: 'printer_gateway'}, ownerCookie);
+  assert.equal(printer.response.status, 201, JSON.stringify(printer.body));
+  const printNow = new Date().toISOString();
+  database.prepare("INSERT INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at) VALUES(?,?,?,?,?,'kitchen_ticket',?,'pending',0,?,?,?)").run('print-test','print-test-op','dolce-pizza','ronchin','ready-order','{}',printNow,printNow,printNow);
+  const claimed = await printJobs.POST(new Request('http://localhost/api/internal/print-jobs', {method: 'POST', headers: {'content-type': 'application/json', authorization: `Bearer ${printer.body.credential}`}, body: JSON.stringify({action: 'claim', limit: 1})}));
+  assert.equal(claimed.status, 200);
+  const claimedBody = await claimed.json() as {jobs: {id: string; lease_token: string}[]};
+  assert.equal(claimedBody.jobs.length, 1);
+  const completed = await printJobs.POST(new Request('http://localhost/api/internal/print-jobs', {method: 'POST', headers: {'content-type': 'application/json', authorization: `Bearer ${printer.body.credential}`}, body: JSON.stringify({action: 'complete', id: claimedBody.jobs[0].id, leaseToken: claimedBody.jobs[0].lease_token, providerJobId: 'local-1'})}));
+  assert.equal(completed.status, 200);
+  assert.equal(database.prepare('SELECT status,provider_job_id FROM print_outbox WHERE id=?').get('print-test')?.status, 'printed');
 });

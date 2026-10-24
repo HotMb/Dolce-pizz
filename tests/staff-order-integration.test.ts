@@ -125,6 +125,7 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.ok(snapshot.notification_phone_captured_at);assert.equal(snapshot.payment_status,'due_at_pickup');
  const accepted=await call(web.PATCH,`admin/orders/${orderId}`,'PATCH',{status:'preparing',version:created.body.order.version},ownerCookie);
  assert.equal(accepted.response.status,200,JSON.stringify(accepted.body));
+ assert.deepEqual({...database.prepare('SELECT organization_id,location_id,order_id,job_type,status FROM print_outbox WHERE order_id=?').get(orderId)},{organization_id:'dolce-pizza',location_id:'ronchin',order_id:orderId,job_type:'kitchen_ticket',status:'pending'});
  // Separate active branches and tenants contain real competing tickets, not just forbidden empty scopes.
  database.exec("INSERT INTO organizations(id,name,slug,status,created_at,updated_at) VALUES('other-brand','Other','other','active','2026-10-22','2026-10-22'); INSERT INTO locations(id,organization_id,code,name,status,created_at,updated_at) VALUES('second-site','dolce-pizza','second','Deuxième site de test','active','2026-10-22','2026-10-22'),('other-site','other-brand','other','Autre enseigne','active','2026-10-22','2026-10-22');");
  database.prepare("INSERT INTO customer_profiles(organization_id,user_id,name,created_at,updated_at) VALUES('other-brand',?,'Client autre enseigne',?,?)").run(before.body.account.id,new Date().toISOString(),new Date().toISOString());

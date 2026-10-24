@@ -178,3 +178,6 @@ Le dépôt actuel ne contient pas de caisse certifiée. Jusqu’à ce que ce cha
 9. Piloter sur Ronchin et Tourcoing, puis ouvrir la configuration à d’autres tenants.
 
 Chaque étape doit avoir une migration testée sur une copie, des vérifications d’accès croisé, une procédure de retour arrière et une validation de l’établissement avant déploiement.
+### Impression locale fiable (migration 0012)
+
+Les transitions vers `preparing` créent un job `kitchen_ticket` dans une outbox liée au tenant, à l’établissement et à la commande. Un relais enrôlé avec le rôle `printer_gateway` réclame les jobs avec un bail court, puis confirme ou signale l’échec avec le même bail. La clé `operation_id` rend l’enqueue idempotente et protège les réimpressions contre les doublons.
