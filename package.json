@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "node scripts/migrate-local.mjs",
     "db:backup": "node scripts/backup-d1.mjs",
+    "db:verify-backup": "node scripts/verify-backup.mjs",
     "db:verify": "node scripts/verify-migrations.mjs",
     "photos": "node scripts/optimize-photos.mjs",
     "test": "node --import ./tests/ts-resolve.mjs --test \"tests/**/*.test.ts\""

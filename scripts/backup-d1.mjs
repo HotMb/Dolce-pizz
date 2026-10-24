@@ -3,8 +3,9 @@
 import {existsSync, mkdirSync} from 'node:fs';
 import {resolve, relative, dirname, join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const backupRoot = resolve(root, 'backups');
 const remote = process.argv.includes('--remote');
 const database = process.env.CF_D1_DATABASE_NAME || 'DB';

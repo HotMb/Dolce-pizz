@@ -153,6 +153,8 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 
 Après un build, `npm run db:backup` exporte la base D1 locale dans `backups/` (dossier ignoré par Git). Pour une base distante, utiliser explicitement `npm run db:backup -- --remote`; la commande exige l’authentification Wrangler et écrit un fichier horodaté. Ne pas envoyer ces fichiers dans le dépôt : ils peuvent contenir des commandes, des profils clients et des journaux opérationnels. Tester périodiquement une restauration de l’export sur une base isolée, puis exécuter `npm run db:verify` et un scénario de commande/KDS.
 
+Pour valider un export avant restauration, utiliser `npm run db:verify-backup -- --file=backups/nom-du-fichier.sql`. Le fichier doit rester sous `backups/`; le contrôle restaure le SQL en mémoire, active les clés étrangères et échoue si une référence est invalide.
+
 ## 7. Ce qui reste à livrer avant une installation de production
 
 - Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
