@@ -68,6 +68,30 @@ export async function GET(request: Request) {
       .safeParse({organizationId: url.searchParams.get('organizationId'), locationId: url.searchParams.get('locationId')});
     if (!scope.success) throw new ApiError(400, 'Choisissez un établissement valide.');
     await requireCashier(request, scope.data, false);
+    const requestedOrderId = url.searchParams.get('orderId')?.trim() || '';
+    if (requestedOrderId) {
+      if (requestedOrderId.length > 128) throw new ApiError(400, 'Cette commande est invalide.');
+      const order = await db().prepare(
+        `SELECT id,name,total,status,payment_status,service_mode,table_label,items
+         FROM orders WHERE id=? AND organization_id=? AND location_id=? AND fulfillment='pickup'`,
+      ).bind(requestedOrderId, scope.data.organizationId, scope.data.locationId).first<{
+        id:string; name:string; total:number; status:string; payment_status:string; service_mode:string; table_label:string; items:string;
+      }>();
+      if (!order) throw new ApiError(404, 'Commande introuvable dans cet établissement.');
+      let rawItems: unknown = [];
+      try {rawItems = JSON.parse(order.items);} catch {rawItems = [];}
+      const items = Array.isArray(rawItems) ? rawItems.slice(0, 60).map((item: any) => ({
+        name: typeof item?.name === 'string' ? item.name.slice(0, 120) : 'Article à vérifier',
+        quantity: Number.isInteger(item?.quantity) ? Math.max(1, Math.min(20, item.quantity)) : 1,
+        unitPrice: Number.isInteger(item?.unitPrice) ? Math.max(0, item.unitPrice) : 0,
+        total: Number.isInteger(item?.total) ? Math.max(0, item.total) : 0,
+        size: typeof item?.size === 'string' ? item.size.slice(0, 20) : '',
+        option: typeof item?.option === 'string' ? item.option.slice(0, 80) : '',
+        without: Array.isArray(item?.without) ? item.without.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
+        extra: Array.isArray(item?.extra) ? item.extra.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
+      })) : [];
+      return json({addition: {id: order.id, name: order.name, total: order.total, status: order.status, paymentStatus: order.payment_status, serviceMode: order.service_mode, tableLabel: order.table_label, items}, scope: scope.data});
+    }
     const shift = await db().prepare(
       `SELECT id,business_date,opening_float,opened_at FROM cash_shifts
        WHERE organization_id=? AND location_id=? AND status='open'`,
