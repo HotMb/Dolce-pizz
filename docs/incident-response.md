@@ -6,6 +6,8 @@ Ce runbook s’applique à une enseigne et à un établissement précis. Chaque 
 
 Si un jeton de tablette, de borne ou de relais est perdu, copié ou suspecté compromis : ouvrir **Espace équipe → Appareils**, révoquer l’appareil, puis faire tourner son jeton après remplacement. Le jeton n’est jamais récupérable depuis le serveur. Vérifier ensuite le dernier contact et l’absence d’action inattendue dans l’audit.
 
+Si un poste affiche « trop de tentatives » lors de son bootstrap, ne pas multiplier les rotations : le service limite les essais de jeton à 20 par heure et par adresse source. Attendre le délai `Retry-After`, vérifier que le poste utilise le bon réseau et que l’ancien jeton n’est pas réessayé par plusieurs onglets. Révoquer et recréer le credential uniquement si l’exposition est suspectée.
+
 ## Panne réseau ou écran KDS hors ligne
 
 1. Vérifier l’alimentation, le Wi-Fi métier et l’heure de l’appareil.
