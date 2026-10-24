@@ -222,6 +222,10 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.deepEqual(routed.body.candidates.map(candidate => candidate.locationId), ['ronchin']);
   const deviceScope = {organizationId: 'dolce-pizza', locationId: 'ronchin'};
   assert.equal((await deviceCall({...deviceScope, action: 'enroll', label: 'Tablette Make Line', role: 'make_line'}, workerCookie)).response.status, 403);
+  assert.equal((await deviceCall({...deviceScope, action: 'enroll', label: 'Ancien Four', role: 'four'}, ownerCookie)).response.status, 400);
+  const ovenDevice = await deviceCall<{device: {role: string}}>({...deviceScope, action: 'enroll', label: 'Tablette Four', role: 'oven'}, ownerCookie);
+  assert.equal(ovenDevice.response.status, 201, JSON.stringify(ovenDevice.body));
+  assert.equal(ovenDevice.body.device.role, 'oven');
   const enrolled = await deviceCall<{device: {id: string; role: string}; credential: string}>({...deviceScope, action: 'enroll', label: 'Tablette Make Line', role: 'make_line'}, ownerCookie);
   assert.equal(enrolled.response.status, 201, JSON.stringify(enrolled.body));
   assert.equal(enrolled.body.device.role, 'make_line');
