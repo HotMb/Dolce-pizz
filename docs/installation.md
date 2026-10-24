@@ -123,6 +123,8 @@ La carte maître reste dans `products`. La migration `0017` ajoute `location_pro
 
 ### Connecter Uber Eats
 
+Avant l’activation, suivre le [contrat d’intégration Uber Eats](./uber-eats-contract.md) et joindre ses preuves au dossier de recette.
+
 1. Depuis l’API propriétaire `GET/POST /api/admin/delivery-integrations`, créer une liaison pour chaque magasin avec le `provider` `uber_eats`, l’identifiant de magasin Uber et le couple organisation/établissement correspondant. Une désactivation conserve l’historique et empêche les nouveaux webhooks.
 2. Configurer `UBER_EATS_WEBHOOK_SECRET` dans le Worker et déclarer `/api/integrations/uber/webhook` auprès du partenaire.
 3. Le webhook doit envoyer `X-Uber-Signature` et un événement normalisé contenant `eventId`, `eventType`, `storeId`, `orderId`, `totalCents` et les articles avec leur SKU local.
