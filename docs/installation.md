@@ -1,6 +1,6 @@
 # Installation et exploitation — Dolce Pizz’
 
-Ce guide couvre le prototype web, le KDS, la prise de commande simple par le personnel et les accès nominatifs par établissement. Make Line, Four et Expeditor sont présents à `/production`; `/equipe` permet d’ouvrir les postes autorisés et de gérer leurs accès. L’écran `/equipe/commande` accepte les commandes comptoir et téléphone à retirer, recalcule les prix côté serveur et les envoie à la production. Le paiement reste à faire en personne et n’est pas encaissé par cet écran. Un consommateur SMS « commande prête » est livré, mais son fournisseur et son ordonnanceur doivent être configurés avant l’envoi réel. POS mobile de salle, bornes, caisse/TPE, routage automatique du centre d’appels, relais hors ligne et Uber Eats restent à intégrer.
+Ce guide couvre le prototype web, le KDS, la prise de commande simple par le personnel et les accès nominatifs par établissement. Make Line, Four et Expeditor sont présents à `/production`; `/equipe` permet d’ouvrir les postes autorisés et de gérer leurs accès. L’écran `/equipe/commande` accepte les commandes comptoir et téléphone à retirer, recalcule les prix côté serveur et les envoie à la production. Le paiement reste à faire en personne; l’API `POST /api/staff/payments` capture désormais le montant exact en cash ou carte sans donnée carte, mais l’écran de caisse et le raccordement TPE restent à intégrer. Un consommateur SMS « commande prête » est livré, mais son fournisseur et son ordonnanceur doivent être configurés avant l’envoi réel. POS mobile de salle, bornes, routage automatique du centre d’appels, relais hors ligne et Uber Eats restent à intégrer.
 
 ## 1. Prérequis
 
@@ -78,7 +78,7 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 
 ### Profils d’écran
 
-- **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; encaissement, caisse, TPE et clôture non livrés.
+- **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; l’API d’encaissement existe, mais l’écran, la caisse, le TPE et la clôture restent à livrer.
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
 - **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; le point de retrait se choisit manuellement, le routage à partir des zones postales n’est pas livré.
 - **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
@@ -97,7 +97,7 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 1. Sauvegarder/exporter la base concernée.
 2. Tester la nouvelle version et les migrations sur une copie.
 3. Avant `0007`, vérifier qu’aucune écriture de fidélité n’est orpheline et qu’aucune campagne ne référence un compte supprimé. La migration s’arrête sans supprimer de données si elle détecte ce cas.
-4. Mettre le pilote en maintenance pendant l’application de `0007` et la publication du nouveau Worker : l’ancien Worker écrit encore l’ancien schéma, qui est volontairement retiré par cette migration.
+4. Mettre le pilote en maintenance pendant l’application de `0007` puis `0008` et la publication du nouveau Worker : l’ancien Worker écrit encore l’ancien schéma, qui est volontairement retiré par ces migrations.
 5. Vérifier accès tenant/site, commande idempotente, profil/consentement, solde fidélité, campagne de test, prix, paiement à encaisser et impression.
 6. Publier hors des heures de service et surveiller les commandes entrantes.
 7. Garder l’export de base et la procédure de retour arrière disponibles; une restauration de schéma nécessite aussi la restauration des données correspondantes.
@@ -105,7 +105,7 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 ## 7. Ce qui reste à livrer avant une installation de production
 
 - Résolution du tenant depuis un domaine/configuration de confiance, onboarding de nouvelles enseignes et administration franchiseur; les principaux objets client et équipe sont déjà isolés en base.
-- Encaissement au retrait, TPE, caisse/clôture de shift et reçus.
+- Écran d’encaissement au retrait, TPE, caisse/clôture de shift et reçus opérateur.
 - POS mobile de salle, bornes client et routage du centre d’appels par zones postales vérifiées.
 - Renforcement des sessions d’équipe, enrôlement et révocation des appareils; les rôles KDS par organisation/établissement/poste existent déjà.
 - Enrôlement des appareils et configuration multi-sites sans constantes pilote.
