@@ -46,3 +46,8 @@ next-env.d.ts
 /work/
 backups/*.sql
 backups/*.sqlite
+# Local audit and assistant state; never publish these files.
+premium-audit.json
+tsconfig.tsbuildinfo
+.staff-premium-audit.json
+.claude/
