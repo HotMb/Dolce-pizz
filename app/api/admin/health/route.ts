@@ -30,6 +30,8 @@ export async function GET(request: Request) {
       WHERE l.organization_id=?${locationFilter} ORDER BY l.id`).bind(...locationParams).all<{id: string; status: string; configured: number}>();
     if (!locations.results.length) throw new HealthApiError(404, 'Établissement introuvable dans cette enseigne.');
     const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+    const nowMs = Date.now();
+    const expiryWarningMs = nowMs + 7 * 24 * 60 * 60 * 1000;
     const [devices, notifications, prints, delivery] = await Promise.all([
       db().prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN d.status='active' THEN 1 ELSE 0 END),0) AS active,
         COALESCE(SUM(CASE WHEN d.status='active' AND d.role IN ('make_line','oven','expeditor') THEN 1 ELSE 0 END),0) AS kds,
@@ -37,8 +39,9 @@ export async function GET(request: Request) {
         COALESCE(SUM(CASE WHEN d.status='active' AND d.role='kiosk' THEN 1 ELSE 0 END),0) AS kiosks,
         COALESCE(SUM(CASE WHEN d.status='active' AND d.role='printer_gateway' THEN 1 ELSE 0 END),0) AS printerGateways,
         COALESCE(SUM(CASE WHEN d.status='active' AND (d.last_seen_at IS NULL OR d.last_seen_at<?) THEN 1 ELSE 0 END),0) AS stale,
-        COALESCE(SUM(CASE WHEN d.status='active' AND NOT EXISTS(SELECT 1 FROM device_credentials c WHERE c.organization_id=d.organization_id AND c.location_id=d.location_id AND c.device_id=d.id AND c.revoked_at IS NULL AND c.expires_at>?) THEN 1 ELSE 0 END),0) AS expired
-        FROM devices d WHERE d.organization_id=?${parsed.locationId ? ' AND d.location_id=?' : ''}`).bind(...(parsed.locationId ? [cutoff, Date.now(), parsed.organizationId, parsed.locationId] : [cutoff, Date.now(), parsed.organizationId])).first<{total: number;active: number;kds: number;pos: number;kiosks: number;printerGateways: number;stale: number;expired: number}>(),
+        COALESCE(SUM(CASE WHEN d.status='active' AND NOT EXISTS(SELECT 1 FROM device_credentials c WHERE c.organization_id=d.organization_id AND c.location_id=d.location_id AND c.device_id=d.id AND c.revoked_at IS NULL AND c.expires_at>?) THEN 1 ELSE 0 END),0) AS expired,
+        COALESCE(SUM(CASE WHEN d.status='active' AND EXISTS(SELECT 1 FROM device_credentials c WHERE c.organization_id=d.organization_id AND c.location_id=d.location_id AND c.device_id=d.id AND c.revoked_at IS NULL AND c.expires_at>? AND c.expires_at<=?) THEN 1 ELSE 0 END),0) AS expiringSoon
+        FROM devices d WHERE d.organization_id=?${parsed.locationId ? ' AND d.location_id=?' : ''}`).bind(...(parsed.locationId ? [cutoff, nowMs, nowMs, expiryWarningMs, parsed.organizationId, parsed.locationId] : [cutoff, nowMs, nowMs, expiryWarningMs, parsed.organizationId])).first<{total: number;active: number;kds: number;pos: number;kiosks: number;printerGateways: number;stale: number;expired: number;expiringSoon: number}>(),
       db().prepare(`SELECT COALESCE(SUM(CASE WHEN status IN ('pending','sending') THEN 1 ELSE 0 END),0) AS open,
         COALESCE(SUM(CASE WHEN status IN ('unknown','failed') THEN 1 ELSE 0 END),0) AS errors
         FROM notification_outbox WHERE organization_id=?${parsed.locationId ? ' AND location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number;errors: number}>(),
@@ -53,7 +56,7 @@ export async function GET(request: Request) {
     const checks: HealthCheck[] = [
       {id: 'locations', status: locations.results.every(row => row.status === 'active') ? 'ok' : 'blocked', details: {total: locations.results.length, active: locations.results.filter(row => row.status === 'active').length}},
       {id: 'location_configuration', status: locations.results.every(row => row.status === 'active' && row.configured === 1) ? 'ok' : 'attention', details: {configured: locations.results.filter(row => row.configured === 1).length, total: locations.results.length}},
-      {id: 'devices', status: Number(devices?.stale || 0) === 0 && Number(devices?.expired || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), kds: Number(devices?.kds || 0), pos: Number(devices?.pos || 0), kiosks: Number(devices?.kiosks || 0), printerGateways: Number(devices?.printerGateways || 0), stale: Number(devices?.stale || 0), expired: Number(devices?.expired || 0), staleAfterMinutes: 5}},
+      {id: 'devices', status: Number(devices?.stale || 0) === 0 && Number(devices?.expired || 0) === 0 && Number(devices?.expiringSoon || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), kds: Number(devices?.kds || 0), pos: Number(devices?.pos || 0), kiosks: Number(devices?.kiosks || 0), printerGateways: Number(devices?.printerGateways || 0), stale: Number(devices?.stale || 0), expired: Number(devices?.expired || 0), expiringSoon: Number(devices?.expiringSoon || 0), expiryWarningDays: 7, staleAfterMinutes: 5}},
       {id: 'notifications', status: Number(notifications?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(notifications?.open || 0), errors: Number(notifications?.errors || 0)}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
       {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},
