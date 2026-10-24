@@ -80,7 +80,7 @@ Ce script n’est pas une procédure de mise en production. La procédure de pro
 
 - **POS comptoir** : saisie d’une commande et transmission au KDS livrées à `/equipe/commande`; `/equipe/caisse` impose un shift ouvert, capture le paiement au retrait et permet la clôture avec comptage espèces. Le TPE automatique et la certification restent à intégrer.
 - **POS mobile** : cible pour les commandes en salle et les alertes; non livré.
-- **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; le point de retrait se choisit manuellement, le routage à partir des zones postales n’est pas livré.
+- **Centre d’appels** : saisie de commande téléphone livrée dans le même écran; `/api/staff/routing` permet de configurer les codes postaux par site et de proposer les établissements actifs, avec validation serveur avant création de la commande.
 - **Borne** : cible pour la commande et le ticket; paiement prévu au retrait; non livré.
 - **Make Line, Four, Expeditor** : disponibles via `/production`; D1 journalise l’avancement avec l’identité nominative. Les accès se gèrent par site/poste dans `/equipe`; les sessions mobiles existantes restent à renforcer avant exploitation avec appareils partagés.
 
@@ -97,8 +97,8 @@ Pour Dolce Pizz’, Ronchin est renseigné dans la démo à l’adresse 191 aven
 1. Sauvegarder/exporter la base concernée.
 2. Tester la nouvelle version et les migrations sur une copie.
 3. Avant `0007`, vérifier qu’aucune écriture de fidélité n’est orpheline et qu’aucune campagne ne référence un compte supprimé. La migration s’arrête sans supprimer de données si elle détecte ce cas.
-4. Mettre le pilote en maintenance pendant l’application de `0007`, `0008` puis `0009` et la publication du nouveau Worker : l’ancien Worker écrit encore l’ancien schéma, qui est volontairement retiré par ces migrations.
-5. Vérifier accès tenant/site, commande idempotente, profil/consentement, solde fidélité, campagne de test, prix, paiement à encaisser et impression.
+4. Mettre le pilote en maintenance pendant l’application de `0007`, `0008`, `0009` puis `0010` et la publication du nouveau Worker : l’ancien Worker écrit encore l’ancien schéma, qui est volontairement retiré par ces migrations.
+5. Vérifier accès tenant/site, zones postales et routage, commande idempotente, profil/consentement, solde fidélité, campagne de test, prix, paiement à encaisser et impression.
 6. Publier hors des heures de service et surveiller les commandes entrantes.
 7. Garder l’export de base et la procédure de retour arrière disponibles; une restauration de schéma nécessite aussi la restauration des données correspondantes.
 
