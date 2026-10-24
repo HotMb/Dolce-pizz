@@ -160,7 +160,7 @@ Replace the filename with the pending migration and `DB` with your D1 binding na
 - `npm run db:backup`: export the local D1 database to an ignored, timestamped file; add `-- --remote` only for an authenticated remote export
 - `npm run db:verify-backup -- --file=backups/export.sql`: restore an export in memory and check foreign keys before use
 - `npm run preflight:production`: refuse a production build with demo SMS flags, missing secrets, D1 binding or tenant domains
-- `npm run security:scan`: scan source files for private keys, live provider keys and hard-coded production secret assignments before publication
+- `npm run security:scan`: scan source files for private keys, live provider keys and hard-coded production secret assignments; `npm run security:scan:env` includes ignored `.env*` files
 
 When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
 
