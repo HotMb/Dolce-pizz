@@ -157,6 +157,7 @@ Replace the filename with the pending migration and `DB` with your D1 binding na
 - `npm run db:verify`: verify all migrations on a fresh SQLite database and run foreign-key checks
 - `npm run db:backup`: export the local D1 database to an ignored, timestamped file; add `-- --remote` only for an authenticated remote export
 - `npm run db:verify-backup -- --file=backups/export.sql`: restore an export in memory and check foreign keys before use
+- `npm run preflight:production`: refuse a production build with demo SMS flags, missing secrets, D1 binding or tenant domains
 
 When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
 
