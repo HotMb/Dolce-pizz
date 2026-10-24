@@ -6,7 +6,7 @@ Cette feuille de route définit les phases de mise en service pour Dolce Pizz’
 
 | Phase | État | Preuve actuelle | Condition de sortie restante |
 |---|---|---|---|
-| 0 — Socle et isolation | **Passée côté logiciel** | 82 tests, 31 migrations, contrôles tenant/site/rôle/appareil et scans de sécurité | Rejouer la recette sur le déploiement D1 réel |
+| 0 — Socle et isolation | **Passée côté logiciel** | 83 tests, 31 migrations, contrôles tenant/site/rôle/appareil et scans de sécurité | Rejouer la recette sur le déploiement D1 réel |
 | 1 — Pilote Ronchin | **Go limité** | Parcours web, téléphone, POS, borne, Make Line, Four, Expeditor et caisse simulés dans SQLite | Données terrain, appareils enrôlés, TPE certifié et coupure réseau réelle |
 | 2 — Notifications et impression | **Logiciel prêt, exploitation non validée** | Outbox SMS/impression, leases, réconciliation et relais HTTPS documentés | Brevo, ordonnanceur, imprimante et essais réels |
 | 3 — Centre d’appels et second site | **Infrastructure prête, site incomplet** | Routage postal et isolation multi-site testés | Coordonnées et zones réelles de Tourcoing, puis recette indépendante |

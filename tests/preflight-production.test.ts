@@ -34,3 +34,9 @@ test('production preflight rejects an undeclared scheduler',()=>{
  assert.notEqual(result.status,0);
  assert.match(`${result.stdout}${result.stderr}`,/NOTIFICATION_SCHEDULER_CONFIGURED/);
 });
+
+test('production preflight rejects a dispatch secret with spaces',()=>{
+ const result=run({NOTIFICATION_DISPATCH_SECRET:'a'.repeat(31)+' secret'});
+ assert.notEqual(result.status,0);
+ assert.match(`${result.stdout}${result.stderr}`,/NOTIFICATION_DISPATCH_SECRET/);
+});
