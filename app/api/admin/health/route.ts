@@ -31,8 +31,9 @@ export async function GET(request: Request) {
     const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
     const [devices, notifications, prints, delivery] = await Promise.all([
       db().prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN d.status='active' THEN 1 ELSE 0 END),0) AS active,
-        COALESCE(SUM(CASE WHEN d.status='active' AND (d.last_seen_at IS NULL OR d.last_seen_at<?) THEN 1 ELSE 0 END),0) AS stale
-        FROM devices d WHERE d.organization_id=?${parsed.locationId ? ' AND d.location_id=?' : ''}`).bind(...(parsed.locationId ? [cutoff, parsed.organizationId, parsed.locationId] : [cutoff, parsed.organizationId])).first<{total: number;active: number;stale: number}>(),
+        COALESCE(SUM(CASE WHEN d.status='active' AND (d.last_seen_at IS NULL OR d.last_seen_at<?) THEN 1 ELSE 0 END),0) AS stale,
+        COALESCE(SUM(CASE WHEN d.status='active' AND NOT EXISTS(SELECT 1 FROM device_credentials c WHERE c.organization_id=d.organization_id AND c.location_id=d.location_id AND c.device_id=d.id AND c.revoked_at IS NULL AND c.expires_at>?) THEN 1 ELSE 0 END),0) AS expired
+        FROM devices d WHERE d.organization_id=?${parsed.locationId ? ' AND d.location_id=?' : ''}`).bind(...(parsed.locationId ? [cutoff, Date.now(), parsed.organizationId, parsed.locationId] : [cutoff, Date.now(), parsed.organizationId])).first<{total: number;active: number;stale: number;expired: number}>(),
       db().prepare(`SELECT COALESCE(SUM(CASE WHEN status IN ('pending','sending') THEN 1 ELSE 0 END),0) AS open,
         COALESCE(SUM(CASE WHEN status IN ('unknown','failed') THEN 1 ELSE 0 END),0) AS errors
         FROM notification_outbox WHERE organization_id=?${parsed.locationId ? ' AND location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number;errors: number}>(),
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
     const checks: HealthCheck[] = [
       {id: 'locations', status: locations.results.every(row => row.status === 'active') ? 'ok' : 'blocked', details: {total: locations.results.length, active: locations.results.filter(row => row.status === 'active').length}},
       {id: 'location_configuration', status: locations.results.every(row => row.status === 'active' && row.configured === 1) ? 'ok' : 'attention', details: {configured: locations.results.filter(row => row.configured === 1).length, total: locations.results.length}},
-      {id: 'devices', status: Number(devices?.stale || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), stale: Number(devices?.stale || 0), staleAfterMinutes: 5}},
+      {id: 'devices', status: Number(devices?.stale || 0) === 0 && Number(devices?.expired || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), stale: Number(devices?.stale || 0), expired: Number(devices?.expired || 0), staleAfterMinutes: 5}},
       {id: 'notifications', status: Number(notifications?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(notifications?.open || 0), errors: Number(notifications?.errors || 0)}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
       {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},

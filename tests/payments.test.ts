@@ -266,6 +266,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal((await callHistory.json() as {interactions:Array<{outcome:string}>}).interactions[0].outcome,'callback_requested');
   const deliveryNow = new Date().toISOString();
   database.prepare("INSERT INTO delivery_inbox(provider,event_id,external_order_id,organization_id,location_id,event_type,payload_hash,payload,status,received_at,error) VALUES('uber_eats',?,?,?,?,?,'hash','{}','failed',?,?)").run('health-event','health-order','dolce-pizza','ronchin','order.created',deliveryNow,'sandbox failure');
+  database.prepare("UPDATE device_credentials SET expires_at=1 WHERE device_id=? AND revoked_at IS NULL").run(printer.body.device.id);
   const healthResponse = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
   const healthText = await healthResponse.text();
   assert.equal(healthResponse.status,200,healthText);
@@ -275,6 +276,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const deliveryHealth = healthBody.checks.find(check => check.id === 'delivery_integrations');
   assert.equal(deliveryHealth?.status, 'attention');
   assert.equal(deliveryHealth?.details.errors, 1);
+  const deviceHealth = healthBody.checks.find(check => check.id === 'devices');
+  assert.equal(deviceHealth?.status, 'attention');
+  assert.ok(Number(deviceHealth?.details.expired) >= 1);
   const revokeResponse = await sessionRevoke.POST(new Request('http://localhost/api/staff/sessions', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId: 'dolce-pizza', locationId: 'ronchin', principalId: 'worker'})}));
   assert.equal(revokeResponse.status, 200);
   assert.equal((await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers: new Headers({origin: 'http://localhost', cookie: workerCookie})}))).status, 401);
