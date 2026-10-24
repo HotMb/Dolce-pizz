@@ -4,33 +4,38 @@ import {db} from './server';
 export type Member={id:string;phone:string;name:string};
 export type SessionAudience='customer'|'staff';
 export class AuthError extends Error{constructor(public status:number,message:string){super(message);}}
-const COOKIE='dolce_session',SESSION_DAYS=90,STAFF_SESSION_HOURS=12,CODE_MINUTES=10,MAX_ATTEMPTS=5,RESEND_MS=60000,HOUR=3600000;
+const COOKIE='dolce_session',STAFF_COOKIE='dolce_staff_session',SESSION_DAYS=90,STAFF_SESSION_HOURS=12,CODE_MINUTES=10,MAX_ATTEMPTS=5,RESEND_MS=60000,HOUR=3600000;
 const vars=env as unknown as Record<string,string|undefined>;
 const hex=(bytes:Uint8Array)=>Array.from(bytes,v=>v.toString(16).padStart(2,'0')).join('');
 const sha256=async(s:string)=>hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));
 // Only French mobiles (06/07): SMS codes are billed, this also blocks premium-rate and foreign SMS pumping.
 export function normalizePhone(raw:string){const m=/^(?:\+33|0033|0)([67]\d{8})$/.exec(raw.replace(/[\s.\-()]/g,''));return m?`+33${m[1]}`:null;}
 export const localPhone=(phone:string)=>`0${phone.slice(3)}`.replace(/(\d{2})(?=\d)/g,'$1 ');
-const readCookie=(header:string|null)=>header?.split(/;\s*/).find(v=>v.startsWith(`${COOKIE}=`))?.slice(COOKIE.length+1)||'';
+const readCookie=(header:string|null,name=COOKIE)=>header?.split(/;\s*/).find(v=>v.startsWith(`${name}=`))?.slice(name.length+1)||'';
 export async function sessionUser(cookieHeader:string|null):Promise<Member|null>{
- const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ // Staff devices may also create counter/POS orders. Prefer the customer
+ // session when both exist, while keeping staff sessions usable for internal
+ // order entry without merging the two cookies.
+ const token=readCookie(cookieHeader,COOKIE)||readCookie(cookieHeader,STAFF_COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
  return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>?').bind(await sha256(token),Date.now()).first<Member>();
 }
 /** Staff and administration routes require a recent OTP session on shared devices. */
 export async function staffSessionUser(cookieHeader:string|null):Promise<Member|null>{
- const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ // Keep accepting the legacy cookie so existing local sessions do not all fail
+ // at once; new staff logins use their own cookie and cannot overwrite a client session.
+ const token=readCookie(cookieHeader,STAFF_COOKIE)||readCookie(cookieHeader,COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
  const cutoff=new Date(Date.now()-STAFF_SESSION_HOURS*HOUR).toISOString();
  return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 /** Sensitive organisation changes require a fresh OTP session, not merely a still-valid staff session. */
 export async function recentStaffSessionUser(cookieHeader:string|null,maxAgeMinutes=15):Promise<Member|null>{
- const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ const token=readCookie(cookieHeader,STAFF_COOKIE)||readCookie(cookieHeader,COOKIE);if(!/^[0-9a-f]{64}$/.test(token))return null;
  const cutoff=new Date(Date.now()-maxAgeMinutes*60000).toISOString();
  return await db().prepare("SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.audience='staff' AND s.expires_at>? AND s.created_at>=?").bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
-export const sessionCookie=(token:string,secure:boolean,audience:SessionAudience='customer')=>`${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?(audience==='staff'?STAFF_SESSION_HOURS*3600:SESSION_DAYS*86400):0}${secure?'; Secure':''}`;
-export async function endSession(cookieHeader:string|null){const token=readCookie(cookieHeader);if(token)await db().prepare('DELETE FROM sessions WHERE id=?').bind(await sha256(token)).run();}
+export const sessionCookie=(token:string,secure:boolean,audience:SessionAudience='customer')=>`${audience==='staff'?STAFF_COOKIE:COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?(audience==='staff'?STAFF_SESSION_HOURS*3600:SESSION_DAYS*86400):0}${secure?'; Secure':''}`;
+export async function endSession(cookieHeader:string|null){const tokens=[readCookie(cookieHeader,COOKIE),readCookie(cookieHeader,STAFF_COOKIE)].filter((token,index,array)=>/^[0-9a-f]{64}$/.test(token)&&array.indexOf(token)===index);if(tokens.length)await db().batch(await Promise.all(tokens.map(async token=>db().prepare('DELETE FROM sessions WHERE id=?').bind(await sha256(token)))));}
 export async function underLimit(key:string,limit:number){
  const now=Date.now();
  const r=await db().prepare('INSERT INTO rate_limits(key,count,window_start) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN window_start<? THEN 1 ELSE count+1 END,window_start=CASE WHEN window_start<? THEN excluded.window_start ELSE window_start END RETURNING count').bind(key,now,now-HOUR,now-HOUR).first<{count:number}>();

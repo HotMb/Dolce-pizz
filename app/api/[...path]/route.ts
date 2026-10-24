@@ -12,7 +12,7 @@ import {createMarketingStopProof,matchesMarketingStopProof} from '@/lib/marketin
 import {loadStaffScope} from '@/lib/staff-access';
 import {resolveTenant} from '@/lib/tenant';
 export const dynamic='force-dynamic';
-const json=(data:unknown,status=200,cookie?:string)=>{const r=NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});if(cookie)r.headers.append('Set-Cookie',cookie);return r;};
+const json=(data:unknown,status=200,cookie?:string|string[])=>{const r=NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});const values=!cookie?[]:Array.isArray(cookie)?cookie:[cookie];for(const value of values)if(value)r.headers.append('Set-Cookie',value);return r;};
 class HttpError extends Error{constructor(public status:number,message:string){super(message);}}
 function fail(status:number,message:string):never{throw new HttpError(status,message);}
 const clean=z.string().trim();
@@ -65,13 +65,13 @@ async function handler(request:Request){
   await ensureSeed();
   const activeTenant=await db().prepare("SELECT 1 AS ok FROM organizations o JOIN locations l ON l.organization_id=o.id WHERE o.id=? AND l.id=? AND o.status='active' AND l.status='active'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first<{ok:number}>();
   if(!activeTenant)fail(404,'Cette enseigne ou cet établissement n’est pas actif.');
-  const cookie=request.headers.get('cookie');const user=await sessionUser(cookie);const secure=url.protocol==='https:';
+  const cookie=request.headers.get('cookie');let user=await sessionUser(cookie);if(!user&&path[0]==='admin')user=await staffSessionUser(cookie);const secure=url.protocol==='https:';
   const local=['localhost','127.0.0.1','[::1]'].includes(url.hostname);const ip=request.headers.get('cf-connecting-ip')||'local';
   const body=async()=>{const text=await request.text();if(text.length>35000)fail(413,'La demande est trop volumineuse.');try{return JSON.parse(text);}catch{fail(400,'Vérifiez les informations envoyées.');}};
   if(path[0]==='auth'&&method==='POST'){
    if(path[1]==='code'){const phone=mobile(z.object({phone:clean.max(30)}).parse(await body()).phone);return json({phone:localPhone(phone),...await sendCode(phone,ip,local)});}
    if(path[1]==='verify'){const input=z.object({phone:clean.max(30),code:clean.regex(/^\d{6}$/,'Saisissez les 6 chiffres reçus par SMS.'),audience:z.enum(['customer','staff']).default('customer')}).strict().parse(await body());const{user:member,token}=await verifyCode(mobile(input.phone),input.code,input.audience);const profile=await customerProfile(PILOT_ORGANIZATION_ID,member.id);return json({user:{name:profile?.name||'',phone:localPhone(member.phone)}},200,sessionCookie(token,secure,input.audience));}
-   if(path[1]==='logout'){await endSession(cookie);return json({ok:true},200,sessionCookie('',secure));}
+   if(path[1]==='logout'){await endSession(cookie);return json({ok:true},200,[sessionCookie('',secure,'customer'),sessionCookie('',secure,'staff')]);}
   }
   if(path[0]==='catalog'&&method==='GET'){const m=await menu(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);return json(m);}
   // The SMS link carries a signed, opaque proof; this short-lived cookie lets the existing form confirm the recipient's phone.
@@ -108,6 +108,21 @@ async function handler(request:Request){
    const rows=await db().prepare("SELECT * FROM orders WHERE organization_id=? AND customer_user_id=? AND channel='web' ORDER BY created_at DESC LIMIT 100").bind(PILOT_ORGANIZATION_ID,user.id).all();
    const profile=await customerProfile(PILOT_ORGANIZATION_ID,user.id);
    return json({user:{name:profile?.name||'',phone:localPhone(user.phone),marketing:!!profile?.marketing},admin:await canManagePilot(user.id,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID),campaignAdmin:await isCampaignOwner(user.id,PILOT_ORGANIZATION_ID),balance:await balance(PILOT_ORGANIZATION_ID,user.id),orders:rows.results.map(orderView),loyalty});
+  }
+  // Bootstrap is the only staff-only route handled by this public API router.
+  // It must run before the customer-session gate because staff sessions use a
+  // separate cookie and must never be treated as customer sessions.
+  if(path[0]==='admin'&&path[1]==='claim'&&method==='POST'){
+   const staff=await staffSessionUser(cookie);if(!staff)fail(401,'Connectez-vous avec une session équipe avant le bootstrap.');
+   const input=z.object({code:z.string().min(20).max(200)}).parse(await body());const required=secret();
+   const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));const a=await digest(input.code),b=await digest(required);let difference=0;for(let i=0;i<a.length;i++)difference|=a[i]^b[i];
+   if(!required||difference)fail(403,'Code d’installation incorrect.');
+   const now=new Date().toISOString();
+   const result=await db().batch([
+    db().prepare("INSERT INTO roles(user_id,role) SELECT ?,'admin' WHERE NOT EXISTS(SELECT 1 FROM roles WHERE role='admin')").bind(staff.id),
+    db().prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) SELECT ?,?,NULL,?,'owner','active',?,? WHERE EXISTS(SELECT 1 FROM roles WHERE user_id=? AND role='admin') AND EXISTS(SELECT 1 FROM organizations WHERE id=? AND status='active') AND NOT EXISTS(SELECT 1 FROM organization_memberships WHERE organization_id=? AND role='owner' AND location_id IS NULL)").bind(`bootstrap-owner:${PILOT_ORGANIZATION_ID}:${staff.id}`,PILOT_ORGANIZATION_ID,staff.id,now,now,staff.id,PILOT_ORGANIZATION_ID,PILOT_ORGANIZATION_ID),
+   ]);
+   if(!result[0].meta.changes&&!(await isAdmin(staff.id)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
   }
   if(!user)fail(401,'Connectez-vous pour continuer.');
   const actor=user.id;
@@ -173,18 +188,6 @@ async function handler(request:Request){
   if(path[0]==='orders'&&path[1]&&method==='GET'){
    const order=await db().prepare("SELECT * FROM orders WHERE id=? AND organization_id=? AND customer_user_id=? AND channel='web'").bind(path[1],PILOT_ORGANIZATION_ID,actor).first();if(!order)fail(404,'Commande introuvable.');
    const events=await db().prepare('SELECT e.status,e.note,e.created_at FROM events e JOIN orders o ON o.id=e.order_id WHERE e.order_id=? AND o.organization_id=? AND o.customer_user_id=? ORDER BY e.created_at').bind(path[1],PILOT_ORGANIZATION_ID,actor).all();return json({order:orderView(order),events:events.results});
-  }
-  if(path[0]==='admin'&&path[1]==='claim'&&method==='POST'){
-   const staff=await staffSessionUser(cookie);if(!staff)fail(401,'Connectez-vous avec une session équipe avant le bootstrap.');
-   const input=z.object({code:z.string().min(20).max(200)}).parse(await body());const required=secret();
-   const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));const a=await digest(input.code),b=await digest(required);let difference=0;for(let i=0;i<a.length;i++)difference|=a[i]^b[i];
-   if(!required||difference)fail(403,'Code d’installation incorrect.');
-   const now=new Date().toISOString();
-   const result=await db().batch([
-    db().prepare("INSERT INTO roles(user_id,role) SELECT ?,'admin' WHERE NOT EXISTS(SELECT 1 FROM roles WHERE role='admin')").bind(staff.id),
-    db().prepare("INSERT INTO organization_memberships(id,organization_id,location_id,principal_id,role,status,created_at,updated_at) SELECT ?,?,NULL,?,'owner','active',?,? WHERE EXISTS(SELECT 1 FROM roles WHERE user_id=? AND role='admin') AND EXISTS(SELECT 1 FROM organizations WHERE id=? AND status='active') AND NOT EXISTS(SELECT 1 FROM organization_memberships WHERE organization_id=? AND role='owner' AND location_id IS NULL)").bind(`bootstrap-owner:${PILOT_ORGANIZATION_ID}:${staff.id}`,PILOT_ORGANIZATION_ID,staff.id,now,now,staff.id,PILOT_ORGANIZATION_ID,PILOT_ORGANIZATION_ID),
-   ]);
-   if(!result[0].meta.changes&&!(await isAdmin(staff.id)))fail(403,'L’administration est déjà attribuée.');return json({ok:true});
   }
   if(path[0]==='orders'&&path[1]&&method==='PATCH')return await updateOrder(path[1],actor,await body(),false,PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);
   if(path[0]!=='admin')fail(404,'Page introuvable.');
