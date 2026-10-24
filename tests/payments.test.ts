@@ -198,6 +198,11 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const locationList = await locations.GET(new Request('http://localhost/api/admin/locations?organizationId=dolce-pizza', {headers: new Headers({origin:'http://localhost', cookie: ownerCookie})}));
   assert.equal(locationList.status, 200);
   assert.deepEqual((await locationList.json() as {locations:Array<{id:string}>}).locations.map(location => location.id).sort(), ['ronchin', 'tourcoing']);
+  const routingTourcoing = await routing.POST(new Request('http://localhost/api/staff/routing', {method:'POST', headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}), body:JSON.stringify({organizationId:'dolce-pizza',locationId:'tourcoing',postalCodes:['59200'],priority:2})}));
+  assert.equal(routingTourcoing.status, 200);
+  const routingTourcoingList = await routing.GET(new Request('http://localhost/api/staff/routing?organizationId=dolce-pizza&locationId=tourcoing', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
+  assert.equal(routingTourcoingList.status, 200);
+  assert.deepEqual((await routingTourcoingList.json() as {postalCodes:string[]}).postalCodes, ['59200']);
   const routed = await routingList<{candidates: {locationId: string; name: string}[]}>('59790', ownerCookie);
   assert.equal(routed.response.status, 200);
   assert.deepEqual(routed.body.candidates.map(candidate => candidate.locationId), ['ronchin']);
