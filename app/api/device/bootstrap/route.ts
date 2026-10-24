@@ -1,5 +1,6 @@
 import {NextResponse} from 'next/server';
 import {db,ensureSeed} from '@/lib/server';
+import {underLimit} from '@/lib/auth';
 
 export const dynamic='force-dynamic';
 
@@ -11,6 +12,8 @@ export async function GET(request:Request){
   // Do not seed or mutate the database before the bearer credential is proven.
   // This keeps an unauthenticated bootstrap probe strictly fail-closed in production.
   await ensureSeed();
+  const ip=request.headers.get('cf-connecting-ip')||'local';
+  if(!await underLimit(`device-bootstrap:${ip}`,20))return NextResponse.json({error:'Trop de tentatives. Réessayez plus tard.'},{status:429,headers:{'Cache-Control':'no-store','Retry-After':'3600'}});
   const hash=await tokenHash(token),now=Date.now();
   const row=await db().prepare(`SELECT c.device_id,c.expires_at,d.label,d.role,d.organization_id,d.location_id,
     o.name AS organization_name,l.name AS location_name
