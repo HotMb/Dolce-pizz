@@ -42,7 +42,7 @@ Cette checklist doit être remplie pour **chaque enseigne et chaque établisseme
 
 - [ ] `npm run security:scan` et `npm run db:verify` sont verts.
 - [ ] `npm run preflight:production` est exécuté dans un checkout propre avec les secrets du coffre.
-- [ ] `npm run security:http -- --url=https://<domaine>` confirme les en-têtes HTTP sur le domaine public.
+- [ ] `npm run security:http -- --url=https://<domaine>` confirme les en-têtes HTTP sur le domaine public; un résultat négatif signifie que le Worker servi n’est pas synchronisé avec la branche et doit être republié avant toute ouverture.
 - [ ] Les procédures de perte de jeton, panne SMS, panne imprimante, panne TPE et indisponibilité D1 ont été répétées.
 - [ ] Le responsable sait clôturer un shift, exporter les agrégats et ouvrir un incident sans copier de PII ou de secret.
 - [ ] Les objectifs de reprise, la fréquence des sauvegardes et le contact d’astreinte sont écrits et acceptés.
