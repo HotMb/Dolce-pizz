@@ -104,6 +104,8 @@ La carte maître reste dans `products`. La migration `0017` ajoute `location_pro
 
 La page `/equipe/rapports` appelle `GET /api/admin/reports?organizationId=<id>&from=AAAA-MM-JJ&to=AAAA-MM-JJ` et fournit au propriétaire les totaux de commandes, chiffre d’affaires encaissé, annulations, détail par établissement, canal et moyen de paiement. La période est limitée à 31 jours; les requêtes sont toujours filtrées par l’organisation du propriétaire et aucune donnée client brute n’est renvoyée.
 
+Le bouton **Exporter CSV** utilise le même contrôle propriétaire et la même période. Le fichier contient uniquement les agrégats par établissement, canal et paiement, avec séparateur `;` et encodage adapté à Excel français; aucun nom, téléphone, e-mail ou détail de commande n’est exporté.
+
 ### Demande d’effacement client
 
 Un client connecté peut demander l’effacement de ses données commerciales avec `DELETE /api/me`. L’opération est limitée à l’organisation du domaine courant : le profil, le consentement et les coordonnées des commandes web sont anonymisés, tandis que les montants et l’historique opérationnel nécessaires à la caisse restent conservés. Le navigateur doit envoyer l’origine du site et la session OTP; aucun effacement inter-enseigne n’est possible.
