@@ -34,6 +34,9 @@ jobs:
       - name: Vérifier les dépendances de production
         run: npm audit --omit=dev
 
+      - name: Scanner les secrets du dépôt
+        run: npm run security:scan
+
       - name: Exécuter les tests
         run: npm test
 
@@ -45,6 +48,9 @@ jobs:
 
       - name: Vérifier le schéma de base de données
         run: npx drizzle-kit check
+
+      - name: Vérifier les migrations et les clés étrangères
+        run: npm run db:verify
 
       - name: Compiler la version de production
         run: npm run build
