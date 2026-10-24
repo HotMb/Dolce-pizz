@@ -67,6 +67,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   });
   context.after(() => {hook.deregister(); delete globals.__dolcePaymentsEnvironment; database.close();});
   const api = await import('../app/api/staff/payments/route');
+  const refunds = await import('../app/api/staff/refunds/route');
   const shifts = await import('../app/api/staff/shifts/route');
   const routing = await import('../app/api/staff/routing/route');
   const devices = await import('../app/api/staff/devices/route');
@@ -107,6 +108,12 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
     const headers = new Headers({origin: 'http://localhost'});
     if (cookie) headers.set('cookie', cookie);
     const response = await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers}));
+    return {response, body: await response.json() as T};
+  }
+  async function refundCall<T = Record<string, unknown>>(body: unknown, cookie = '') {
+    const headers = new Headers({'content-type': 'application/json', origin: 'http://localhost'});
+    if (cookie) headers.set('cookie', cookie);
+    const response = await refunds.POST(new Request('http://localhost/api/staff/refunds', {method: 'POST', headers, body: JSON.stringify(body)}));
     return {response, body: await response.json() as T};
   }
   async function session(userId: string, token: string) {
@@ -173,6 +180,14 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(closed.body.shift.status, 'closed');
   assert.equal(closed.body.shift.expectedCash, 2200);
   assert.equal(closed.body.variance, 0);
+  const refund = await refundCall<{refund:{amount:number;status:string};order:{payment_status:string;paid_total:number}}>({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:100,reason:'Client remboursé après correction'},ownerCookie);
+  assert.equal(refund.response.status,201,JSON.stringify(refund.body));
+  assert.equal(refund.body.refund.status,'recorded');
+  assert.equal(refund.body.refund.amount,100);
+  assert.equal(refund.body.order.payment_status,'partially_refunded');
+  assert.equal(refund.body.order.paid_total,1100);
+  assert.equal((await refundCall({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:50,reason:'Tentative équipe'},workerCookie)).response.status,403);
+  assert.equal((await refundCall({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:101,reason:'Dépassement solde remboursable'},ownerCookie)).response.status,409);
   assert.equal((await call(api.POST, {...base, idempotencyKey: crypto.randomUUID()}, workerCookie)).response.status, 409);
   assert.equal((await routingCall({organizationId: 'dolce-pizza', locationId: 'ronchin', postalCodes: ['59790']}, workerCookie)).response.status, 403);
   assert.equal((await routingCall({organizationId: 'dolce-pizza', locationId: 'ronchin', postalCodes: ['59790']}, ownerCookie)).response.status, 200);
