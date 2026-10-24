@@ -18,6 +18,31 @@ Ce guide couvre le prototype web, le KDS, la prise de commande du personnel, le 
 - Une clé SMS Brevo pour les SMS réels; ne jamais utiliser de vraies clés dans Git.
 - Pour une caisse réelle : un TPE et un prestataire de paiement validés, plus le processus de conformité applicable au logiciel de caisse.
 
+### Erreur fréquente sous Windows : Node trop ancien
+
+Si `npm ci` affiche `EBADENGINE`, puis qu’une commande échoue avec `node: bad option: --import`, la version active est trop ancienne. Le projet ne fonctionne pas avec Node 18.16 ou une version antérieure.
+
+Avec **nvm-windows** :
+
+```powershell
+nvm list
+nvm install 24.5.0
+nvm use 24.5.0
+node -v
+npm -v
+```
+
+`node -v` doit afficher `v22.13.0` ou une version supérieure. Fermer et rouvrir PowerShell si `nvm use` ne change pas la version active. Ensuite, depuis le dossier du projet :
+
+```powershell
+Remove-Item -Recurse -Force node_modules
+npm ci
+npm run db:migrate:local
+npm run db:verify
+```
+
+Le script Windows `lancer-site.cmd` sélectionne automatiquement Node 24.5.0 lorsqu’il est installé dans nvm-windows. Ne lance pas les migrations avec l’ancien `node.exe` resté dans le PATH.
+
 ## 2. Installer et lancer en local
 
 1. Récupérer le dépôt depuis le dépôt Git fourni par l’équipe.
