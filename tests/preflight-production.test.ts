@@ -7,7 +7,7 @@ const script=path.resolve('scripts/preflight-production.mjs');
 const valid={
   NODE_ENV:'production',
   ADMIN_SETUP_CODE:'a'.repeat(24),MARKETING_STOP_SECRET:'b'.repeat(40),NOTIFICATION_DISPATCH_SECRET:'c'.repeat(40),BREVO_API_KEY:'d'.repeat(24),SMS_SENDER:'DolcePizz',
-  CF_D1_DATABASE_ID:'db-prod',CF_WORKER_NAME:'dolce-pizz',PUBLIC_BASE_URL:'https://pos.example.fr',TENANT_HOSTS_JSON:JSON.stringify({'pos.example.fr':{organizationId:'dolce-pizza',locationId:'ronchin'}}),
+  CF_D1_DATABASE_ID:'db-prod',CF_WORKER_NAME:'dolce-pizz',PUBLIC_BASE_URL:'https://pos.example.fr',NOTIFICATION_SCHEDULER_CONFIGURED:'1',TENANT_HOSTS_JSON:JSON.stringify({'pos.example.fr':{organizationId:'dolce-pizza',locationId:'ronchin'}}),
 };
 const run=(extra:Record<string,string|undefined>={})=>spawnSync(process.execPath,[script],{encoding:'utf8',env:{PATH:process.env.PATH||'',...valid,...extra} as NodeJS.ProcessEnv});
 
@@ -27,4 +27,10 @@ test('production preflight rejects an invalid SMS sender',()=>{
  const result=run({SMS_SENDER:'<script>'});
  assert.notEqual(result.status,0);
  assert.match(`${result.stdout}${result.stderr}`,/SMS_SENDER/);
+});
+
+test('production preflight rejects an undeclared scheduler',()=>{
+ const result=run({NOTIFICATION_SCHEDULER_CONFIGURED:undefined});
+ assert.notEqual(result.status,0);
+ assert.match(`${result.stdout}${result.stderr}`,/NOTIFICATION_SCHEDULER_CONFIGURED/);
 });

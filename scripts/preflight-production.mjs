@@ -12,6 +12,7 @@ required('MARKETING_STOP_SECRET', 32);
 required('NOTIFICATION_DISPATCH_SECRET', 32);
 required('BREVO_API_KEY', 20);
 required('SMS_SENDER', 1);
+if (process.env.NOTIFICATION_SCHEDULER_CONFIGURED !== '1') failures.push('NOTIFICATION_SCHEDULER_CONFIGURED doit valoir 1 après le test de l’ordonnanceur');
 if (!/^[A-Za-z][A-Za-z0-9 ]{0,10}$/.test(process.env.SMS_SENDER?.trim() || '')) failures.push('SMS_SENDER doit commencer par une lettre et contenir au plus 11 caractères alphanumériques ou espaces');
 if (process.env.SMS_CAMPAIGNS_DEMO === '1' || process.env.SMS_DEMO === '1') failures.push('les modes SMS de démonstration doivent être désactivés');
 if (!process.env.CF_D1_DATABASE_ID?.trim()) failures.push('CF_D1_DATABASE_ID absent');
