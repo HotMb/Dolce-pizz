@@ -13,7 +13,7 @@ Le produit se découpe en cinq couches. Cette séparation permet de vendre les m
 | Couche | Responsabilité | Exemples |
 |---|---|---|
 | Présentation | Écrans adaptés au rôle, à l’appareil et à l’établissement | site client, borne, POS comptoir/mobile, centre d’appels, Make Line, Four, Expeditor, back-office |
-| Communication | Transport des commandes et notifications | API HTTPS, événements temps réel, WebSocket/SSE, file persistante, webhooks signés, SMS |
+| Communication | Transport des commandes et notifications | API HTTPS, événements temps réel, WebSocket/SSE, file persistante, webhooks signés, SMS; `proxy.ts` applique les en-têtes de sécurité à toutes les réponses |
 | Métier | Règles communes à tous les canaux | prix, créneaux, routage, préparation, paiement, fidélité, annulation, promotions |
 | Données | Stockage et traçabilité | tenants, sites, menu versionné, commandes, tâches, paiements, shifts, événements, journaux d’audit |
 | Intégrations | Traduction avec les systèmes externes | Uber Eats, prestataire de SMS, terminal de paiement, imprimantes, comptabilité et livraison |
