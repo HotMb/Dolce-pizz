@@ -50,7 +50,9 @@ const MAX_PHOTO=1900000;
 async function handler(request:Request){
  try{
   const url=new URL(request.url);const path=url.pathname.slice(5).split('/'); const method=request.method;
-  const tenant=resolveTenant(request,(env as unknown as Record<string,string|undefined>).TENANT_HOSTS_JSON||'');if(!tenant)fail(404,'Cette enseigne n’est pas configurée pour ce domaine.');
+  let tenant=resolveTenant(request,(env as unknown as Record<string,string|undefined>).TENANT_HOSTS_JSON||'');
+  if(!tenant){const host=url.hostname.toLowerCase();const row=await db().prepare("SELECT organization_id,location_id FROM tenant_domains WHERE host=? AND status='verified'").bind(host).first<{organization_id:string;location_id:string}>();if(row)tenant={organizationId:row.organization_id,locationId:row.location_id,host};}
+  if(!tenant)fail(404,'Cette enseigne n’est pas configurée pour ce domaine.');
   const PILOT_ORGANIZATION_ID=tenant.organizationId,PILOT_LOCATION_ID=tenant.locationId;
   if(path[0]==='photos'&&method==='GET')return await photo(request,path[1],path[2],Number(path[3]),PILOT_ORGANIZATION_ID);
   // Photos arrive already cut out and compressed by the tablet: 3 WebP files, under 2 MB each.

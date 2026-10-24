@@ -85,7 +85,7 @@ Exemple de liaison de domaine après création :
 }
 ```
 
-En production, cette valeur est injectée dans le secret ou la variable Worker `TENANT_HOSTS_JSON`. Un domaine absent de cette liste est refusé par l’API; aucun paramètre d’URL ne peut choisir une autre enseigne. La gestion graphique des domaines et l’auto-provisionnement DNS restent un jalon de back-office à livrer.
+En production, cette valeur reste disponible pour les installations historiques, mais les nouveaux domaines peuvent être enregistrés dans D1 depuis `GET/POST /api/admin/domains`. Le propriétaire crée un domaine en état `pending`, publie le TXT `_dolce-verify.<domaine>` renvoyé une seule fois, puis demande la vérification. Le Worker interroge DNS-over-HTTPS et n’active le domaine qu’après correspondance exacte. Un domaine absent de `TENANT_HOSTS_JSON` et non vérifié en base est refusé par l’API; aucun paramètre d’URL ne peut choisir une autre enseigne.
 
 Les réglages d’horaires, de capacité et de fidélité sont stockés par établissement dans `location_config` (migration `0014`). Une installation historique qui n’a pas encore activé ses réglages locaux utilise temporairement son modèle organisationnel; l’onboarding d’une nouvelle enseigne crée directement le réglage de son premier site.
 
