@@ -13,3 +13,7 @@
 .cashier-line-amount{display:block;width:125px;margin-top:7px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--foreground)}
 .cashier-partial-label{display:grid;gap:5px;color:#bdb7b8;font-size:12px}.cashier-partial-label .native-input{width:100%;font-size:16px}
 @media(max-width:640px){.cashier-context{align-items:stretch;flex-direction:column}.cashier-context .native-select{min-width:0;width:100%}.cashier-shift{align-items:stretch;flex-direction:column}.cashier-shift-actions{align-items:stretch;flex-direction:column}.cashier-shift-actions .native-input{width:100%}.cashier-heading{align-items:start;flex-direction:column}.cashier-card{padding:20px}.cashier-actions{flex-direction:column}.cashier-actions .btn{width:100%}}
+
+/* Neutral caisse palette for the internal tablet. */
+.cashier-shell{font-family:Arial,Helvetica,sans-serif}
+body:has(.cashier-shell) .header,body:has(.cashier-shell) .footer,body:has(.cashier-shell) .skip{display:none} body:has(.cashier-shell) .page-shell{padding-top:20px;background:#f3f5f7}
