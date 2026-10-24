@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
     const nowMs = Date.now();
     const expiryWarningMs = nowMs + 7 * 24 * 60 * 60 * 1000;
-    const [devices, notifications, prints, delivery] = await Promise.all([
+    const [devices, notifications, prints, delivery, paymentReconciliation] = await Promise.all([
       db().prepare(`SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN d.status='active' THEN 1 ELSE 0 END),0) AS active,
         COALESCE(SUM(CASE WHEN d.status='active' AND d.role IN ('make_line','oven','expeditor') THEN 1 ELSE 0 END),0) AS kds,
         COALESCE(SUM(CASE WHEN d.status='active' AND d.role='pos' THEN 1 ELSE 0 END),0) AS pos,
@@ -53,6 +53,9 @@ export async function GET(request: Request) {
       db().prepare(`SELECT COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS open,
         COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS errors
         FROM delivery_inbox WHERE organization_id=?${parsed.locationId ? ' AND location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number;errors: number}>(),
+      db().prepare(`SELECT COUNT(*) AS open
+        FROM events e JOIN orders o ON o.id=e.order_id
+        WHERE o.organization_id=? AND e.status='payment_reconciliation_required'${parsed.locationId ? ' AND o.location_id=?' : ''}`).bind(...(parsed.locationId ? [parsed.organizationId, parsed.locationId] : [parsed.organizationId])).first<{open: number}>(),
     ]);
 
     const checks: HealthCheck[] = [
@@ -63,6 +66,7 @@ export async function GET(request: Request) {
       {id: 'sms_provider', status: String((env as unknown as Record<string, string | undefined>).BREVO_API_KEY || '').trim().length >= 20 && String((env as unknown as Record<string, string | undefined>).NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32 && /^[A-Za-z][A-Za-z0-9 ]{0,10}$/.test(String((env as unknown as Record<string, string | undefined>).SMS_SENDER || 'DolcePizz')) ? 'ok' : 'attention', details: {providerConfigured: String((env as unknown as Record<string, string | undefined>).BREVO_API_KEY || '').trim().length >= 20, schedulerConfigured: String((env as unknown as Record<string, string | undefined>).NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32, senderConfigured: /^[A-Za-z][A-Za-z0-9 ]{0,10}$/.test(String((env as unknown as Record<string, string | undefined>).SMS_SENDER || 'DolcePizz'))}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
       {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},
+      {id: 'payment_reconciliation', status: Number(paymentReconciliation?.open || 0) === 0 ? 'ok' : 'attention', details: {open: Number(paymentReconciliation?.open || 0)}},
       {id: 'payment_terminal', status: paymentTerminalStatus().configured ? 'ok' : 'attention', details: {configured: paymentTerminalStatus().configured, provider: paymentTerminalStatus().provider}},
     ];
     const overall: CheckStatus = checks.some(check => check.status === 'blocked') ? 'blocked' : checks.some(check => check.status === 'attention') ? 'attention' : 'ok';

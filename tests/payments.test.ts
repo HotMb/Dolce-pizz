@@ -296,6 +296,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.match(String(database.prepare('SELECT provider_message_id FROM notification_outbox WHERE id=?').get('notification-reconcile-test')?.provider_message_id),/^manual:owner:/);
   const reconcileAgain = await notifications.POST(new Request('http://localhost/api/admin/notifications', {method:'POST',headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}),body:JSON.stringify({organizationId:'dolce-pizza',notificationId:'notification-reconcile-test',resolution:'retry'})}));
   assert.equal(reconcileAgain.status,409);
+  database.prepare("INSERT OR IGNORE INTO events(id,order_id,status,actor,note,created_at) VALUES(?,?,?,?,?,?)").run('ready-order:terminal-reconciliation:test','ready-order','payment_reconciliation_required','owner','Le terminal a confirmé la carte mais le journal de caisse doit être rapproché.',now);
   const healthResponse = await health.GET(new Request('http://localhost/api/admin/health?organizationId=dolce-pizza&locationId=ronchin', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
   const healthText = await healthResponse.text();
   assert.equal(healthResponse.status,200,healthText);
@@ -303,7 +304,8 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.ok(['ok','attention'].includes(healthBody.overall));
   assert.equal(healthBody.decision,'go_limited');
   assert.ok(healthBody.decisionReasons.includes('payment_terminal'));
-  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','sms_provider','printing','delivery_integrations','payment_terminal']);
+  assert.ok(healthBody.decisionReasons.includes('payment_reconciliation'));
+  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','sms_provider','printing','delivery_integrations','payment_reconciliation','payment_terminal']);
   const deliveryHealth = healthBody.checks.find(check => check.id === 'delivery_integrations');
   assert.equal(deliveryHealth?.status, 'attention');
   assert.equal(deliveryHealth?.details.errors, 1);
@@ -318,6 +320,9 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const terminalHealth = healthBody.checks.find(check => check.id === 'payment_terminal');
   assert.equal(terminalHealth?.status, 'attention');
   assert.equal(terminalHealth?.details.configured, false);
+  const reconciliationHealth = healthBody.checks.find(check => check.id === 'payment_reconciliation');
+  assert.equal(reconciliationHealth?.status, 'attention');
+  assert.equal(reconciliationHealth?.details.open, 1);
   const auditResponse = await audit.GET(new Request('http://localhost/api/admin/audit?organizationId=dolce-pizza', {headers:new Headers({cookie:ownerCookie})}));
   assert.equal(auditResponse.status,200);
   assert.ok(Array.isArray((await auditResponse.json() as {entries:Array<{action:string}>}).entries));
