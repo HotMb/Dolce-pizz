@@ -12,7 +12,7 @@ Le nom commercial du produit reste à choisir. Dolce Pizz’ sert de premier sit
 |---|---|---|
 | Commande web à emporter | Menu, personnalisation, créneau, suivi et fidélité | Prototype présent pour Ronchin |
 | POS comptoir et mobile | Saisie de commandes, encaissement, remise et clôture | À construire; la démo permet à l’équipe de valider les commandes web |
-| Centre d’appels | Commande assistée, code postal de suggestion, choix explicite du site de retrait, créneau et envoi en production | Recherche client et historique d’appel restent à ajouter; les zones postales doivent être provisionnées par enseigne |
+| Centre d’appels | Commande assistée, code postal de suggestion, choix explicite du site de retrait, créneau, historique d’appel tenant-scopé et envoi en production | Les zones postales doivent être provisionnées par enseigne |
 | Bornes | Commande autonome avec le menu publié du site | À construire |
 | KDS Make Line / Four / Expeditor | Routage par article, avancement de cuisson, regroupement et contrôle de complétude | KDS persisté avec comptes nominatifs et permissions par organisation/site/poste; Ronchin configuré, exploitation commerciale et appareils à finaliser |
 | Menu et recettes | Publication contrôlée des prix, disponibilité, suppléments et allergènes | Administration de carte, ingrédients et origines déjà dans la démo; versions par site à faire |

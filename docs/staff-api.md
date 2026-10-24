@@ -84,3 +84,7 @@ La session SMS actuelle reste une session de compte. `POST /api/staff/sessions` 
 ## Établissements
 
 `GET /api/admin/locations?organizationId=…` liste les sites de l’enseigne du propriétaire connecté. `POST /api/admin/locations` ajoute un site actif avec `organizationId`, `locationId`, `locationCode`, nom, adresse, code postal français, localité et téléphone français. La route crée aussi la configuration locale par défaut; elle ne crée pas de nouveau tenant et ne rend pas automatiquement une zone de livraison éligible. `GET /api/staff/routing?organizationId=…&locationId=…` lit les zones du site ciblé; `POST /api/staff/routing` remplace atomiquement sa liste de codes postaux et sa priorité. Les codes sont donc configurés séparément, avec la même portée organisation/site.
+
+## Historique centre d’appels
+
+`POST /api/staff/calls` enregistre un échange pour un établissement (`phone`, `outcome`, note facultative, client ou commande facultatifs). `GET /api/staff/calls` relit les 50 derniers échanges du même mobile. Seuls le propriétaire et le centre d’appels peuvent utiliser ces routes. Le numéro n’est jamais conservé en clair : la base stocke un condensat lié à l’organisation; la réponse ne renvoie pas le téléphone.

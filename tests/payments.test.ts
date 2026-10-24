@@ -69,6 +69,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const api = await import('../app/api/staff/payments/route');
   const refunds = await import('../app/api/staff/refunds/route');
   const sessionRevoke = await import('../app/api/staff/sessions/route');
+  const calls = await import('../app/api/staff/calls/route');
   const shifts = await import('../app/api/staff/shifts/route');
   const routing = await import('../app/api/staff/routing/route');
   const locations = await import('../app/api/admin/locations/route');
@@ -182,7 +183,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(closed.body.shift.status, 'closed');
   assert.equal(closed.body.shift.expectedCash, 2200);
   assert.equal(closed.body.variance, 0);
-  const refund = await refundCall<{refund:{amount:number;status:string};order:{payment_status:string;paid_total:number}}>({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:100,reason:'Client remboursé après correction'},ownerCookie);
+  const refund = await refundCall<{refund:{id:string;amount:number;status:string};order:{payment_status:string;paid_total:number}}>({organizationId:'dolce-pizza',locationId:'ronchin',paymentId:captured.body.payment.id,amount:100,reason:'Client remboursé après correction'},ownerCookie);
   assert.equal(refund.response.status,201,JSON.stringify(refund.body));
   assert.equal(refund.body.refund.status,'recorded');
   assert.equal(refund.body.refund.amount,100);
@@ -232,6 +233,11 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   const completed = await printJobs.POST(new Request('http://localhost/api/internal/print-jobs', {method: 'POST', headers: {'content-type': 'application/json', authorization: `Bearer ${printer.body.credential}`}, body: JSON.stringify({action: 'complete', id: claimedBody.jobs[0].id, leaseToken: claimedBody.jobs[0].lease_token, providerJobId: 'local-1'})}));
   assert.equal(completed.status, 200);
   assert.equal(database.prepare('SELECT status,provider_job_id FROM print_outbox WHERE id=?').get('print-test')?.status, 'printed');
+  const callLog = await calls.POST(new Request('http://localhost/api/staff/calls', {method:'POST', headers:new Headers({'content-type':'application/json',origin:'http://localhost',cookie:ownerCookie}), body:JSON.stringify({organizationId:'dolce-pizza',locationId:'ronchin',phone:'06 12 34 56 78',outcome:'callback_requested',note:'Rappeler pour confirmer le créneau'})}));
+  assert.equal(callLog.status,201,await callLog.text());
+  const callHistory = await calls.GET(new Request('http://localhost/api/staff/calls?organizationId=dolce-pizza&locationId=ronchin&phone=0612345678', {headers:new Headers({origin:'http://localhost',cookie:ownerCookie})}));
+  assert.equal(callHistory.status,200);
+  assert.equal((await callHistory.json() as {interactions:Array<{outcome:string}>}).interactions[0].outcome,'callback_requested');
   const revokeResponse = await sessionRevoke.POST(new Request('http://localhost/api/staff/sessions', {method: 'POST', headers: new Headers({'content-type': 'application/json', origin: 'http://localhost', cookie: ownerCookie}), body: JSON.stringify({organizationId: 'dolce-pizza', locationId: 'ronchin', principalId: 'worker'})}));
   assert.equal(revokeResponse.status, 200);
   assert.equal((await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin', {headers: new Headers({origin: 'http://localhost', cookie: workerCookie})}))).status, 401);
