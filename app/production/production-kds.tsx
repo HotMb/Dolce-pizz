@@ -66,6 +66,7 @@ function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailu
   finally{if(id===serial.current&&!request.signal.aborted){setLoading(false);setFetching(false);controller.current=null;}}
  },[station,query,cacheKey,onAuthorizationFailure]);
  useEffect(()=>{const tick=window.setTimeout(()=>{setOnline(navigator.onLine);void refresh();},0);const poll=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},4000);const onOnline=()=>{setOnline(true);void refresh();};const onOffline=()=>setOnline(false);const onVisibility=()=>{if(!document.hidden&&navigator.onLine)void refresh();};window.addEventListener('online',onOnline);window.addEventListener('offline',onOffline);document.addEventListener('visibilitychange',onVisibility);return()=>{window.clearTimeout(tick);window.clearInterval(poll);controller.current?.abort();window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);document.removeEventListener('visibilitychange',onVisibility);};},[refresh]);
+ useEffect(()=>{if(typeof window==='undefined'||typeof window.EventSource==='undefined'||!online)return;const source=new EventSource(`/api/production/stream?${query}&station=${station}`);const wake=()=>{if(!document.hidden&&!busy.current)void refresh();};source.addEventListener('tickets',wake);return()=>source.close();},[online,query,station,refresh]);
  const pauseForCommand=()=>{busy.current=true;serial.current++;controller.current?.abort();controller.current=null;setFetching(false);};
  const resumeAfterCommand=()=>{busy.current=false;};
  const persistQueue=useCallback((next:QueuedCommand[])=>{setQueued(next);try{if(next.length)window.localStorage.setItem(`${cacheKey}:commands`,JSON.stringify(next));else window.localStorage.removeItem(`${cacheKey}:commands`);}catch{}},[cacheKey]);
@@ -129,7 +130,7 @@ function ProductionBoard({station,scope,scopes,accessError,onAuthorizationFailur
   {!tickets.length?<section className="production-empty" aria-live="polite"><div className="production-empty-mark"><Icon size={34}/></div><h2>Aucun ticket en attente au poste {info.name.toLocaleLowerCase('fr')}.</h2><p>Les nouveaux articles s’afficheront ici dès leur transmission à la production.</p><button type="button" className="production-button production-button-secondary" onClick={retry} disabled={resource.fetching}><RefreshCw size={19}/> Actualiser les tickets</button></section>:<section className="production-ticket-grid" aria-label={`Tickets du poste ${info.name}`}>
    {tickets.map(order=><ProductionTicketCard key={order.id} order={order} station={station} now={now} busyKey={busyKey} canWrite={scope.writeStations.includes(station)} canMarkReady={scope.canMarkReady} onCommand={runCommand}/>)
    }</section>}
-  <footer className="production-footer"><span><span className="production-live-dot"/>Actualisation automatique toutes les 4 secondes</span><span>Horaires affichés · Europe/Paris</span></footer>
+  <footer className="production-footer"><span><span className="production-live-dot"/>Mise à jour temps réel · secours automatique toutes les 4 secondes</span><span>Horaires affichés · Europe/Paris</span></footer>
  </main>;
 }
 
