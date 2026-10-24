@@ -21,6 +21,11 @@ export async function POST(request:Request){
  try{
   const url=new URL(request.url);const origin=request.headers.get('origin');if(!origin||origin!==url.origin)throw new ApiError(403,'Cette demande doit être envoyée depuis le site.');
   const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous avant de créer une enseigne.');
+  const existingOrganizations=await db().prepare('SELECT COUNT(*) AS count FROM organizations').first<{count:number}>();
+  if((existingOrganizations?.count||0)>0){
+   const owner=await db().prepare("SELECT 1 AS ok FROM organization_memberships WHERE principal_id=? AND role='owner' AND status='active' LIMIT 1").bind(user.id).first<{ok:number}>();
+   if(!owner)throw new ApiError(403,'Seul un propriétaire actif peut créer une nouvelle enseigne.');
+  }
   const ip=request.headers.get('cf-connecting-ip')||'local';if(!await underLimit(`onboarding:${ip}`,5))throw new ApiError(429,'Trop de tentatives. Réessayez plus tard.');
   const length=Number(request.headers.get('content-length')||0);if(Number.isFinite(length)&&length>12000)throw new ApiError(413,'La demande est trop volumineuse.');
   const raw=await request.text();if(raw.length>12000)throw new ApiError(413,'La demande est trop volumineuse.');

@@ -98,7 +98,7 @@ Le script n’affiche pas le contenu de la réponse et refuse les redirections a
 
 ### Créer une nouvelle enseigne
 
-Le premier déploiement d’une enseigne est volontairement contrôlé. Un propriétaire déjà connecté appelle `POST /api/admin/onboarding` avec `installationCode`, les identifiants de l’organisation et du site, puis l’adresse française du point de retrait. Le code d’installation reste un secret Cloudflare (`ADMIN_SETUP_CODE`) et n’est jamais envoyé au navigateur ni enregistré en base. La route vérifie l’origine, la session, le format strict, le quota d’essais et crée dans un seul lot D1 l’organisation active, le site, les réglages, le propriétaire et le catalogue initial.
+Le premier déploiement d’une enseigne est volontairement contrôlé. Un propriétaire déjà connecté appelle `POST /api/admin/onboarding` avec `installationCode`, les identifiants de l’organisation et du site, puis l’adresse française du point de retrait. Le code d’installation reste un secret Cloudflare (`ADMIN_SETUP_CODE`) et n’est jamais envoyé au navigateur ni enregistré en base. La route vérifie l’origine, la session `staff`, le rôle propriétaire lorsque la base contient déjà une enseigne, le format strict et le quota d’essais, puis crée dans un seul lot D1 l’organisation active, le site, les réglages, le propriétaire et le catalogue initial. Une base totalement vide conserve le bootstrap initial au moyen du secret d’installation.
 
 Exemple de liaison de domaine après création :
 
