@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {staffSessionUser} from '@/lib/auth';
 import {db, ensureSeed} from '@/lib/server';
 import {paymentTerminalStatus} from '@/lib/payment-terminal';
+import {env} from 'cloudflare:workers';
 
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, {status, headers: {'Cache-Control': 'no-store'}});
@@ -59,6 +60,7 @@ export async function GET(request: Request) {
       {id: 'location_configuration', status: locations.results.every(row => row.status === 'active' && row.configured === 1) ? 'ok' : 'attention', details: {configured: locations.results.filter(row => row.configured === 1).length, total: locations.results.length}},
       {id: 'devices', status: Number(devices?.stale || 0) === 0 && Number(devices?.expired || 0) === 0 && Number(devices?.expiringSoon || 0) === 0 ? 'ok' : 'attention', details: {total: Number(devices?.total || 0), active: Number(devices?.active || 0), kds: Number(devices?.kds || 0), pos: Number(devices?.pos || 0), kiosks: Number(devices?.kiosks || 0), printerGateways: Number(devices?.printerGateways || 0), stale: Number(devices?.stale || 0), expired: Number(devices?.expired || 0), expiringSoon: Number(devices?.expiringSoon || 0), expiryWarningDays: 7, staleAfterMinutes: 5}},
       {id: 'notifications', status: Number(notifications?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(notifications?.open || 0), errors: Number(notifications?.errors || 0)}},
+      {id: 'sms_provider', status: String((env as unknown as Record<string, string | undefined>).BREVO_API_KEY || '').trim().length >= 20 && String((env as unknown as Record<string, string | undefined>).NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32 ? 'ok' : 'attention', details: {providerConfigured: String((env as unknown as Record<string, string | undefined>).BREVO_API_KEY || '').trim().length >= 20, schedulerConfigured: String((env as unknown as Record<string, string | undefined>).NOTIFICATION_DISPATCH_SECRET || '').trim().length >= 32}},
       {id: 'printing', status: Number(prints?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(prints?.open || 0), errors: Number(prints?.errors || 0)}},
       {id: 'delivery_integrations', status: Number(delivery?.errors || 0) === 0 ? 'ok' : 'attention', details: {open: Number(delivery?.open || 0), errors: Number(delivery?.errors || 0)}},
       {id: 'payment_terminal', status: paymentTerminalStatus().configured ? 'ok' : 'attention', details: {configured: paymentTerminalStatus().configured, provider: paymentTerminalStatus().provider}},

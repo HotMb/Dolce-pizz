@@ -291,7 +291,7 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.ok(['ok','attention'].includes(healthBody.overall));
   assert.equal(healthBody.decision,'go_limited');
   assert.ok(healthBody.decisionReasons.includes('payment_terminal'));
-  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','printing','delivery_integrations','payment_terminal']);
+  assert.deepEqual(healthBody.checks.map(check => check.id), ['locations','location_configuration','devices','notifications','sms_provider','printing','delivery_integrations','payment_terminal']);
   const deliveryHealth = healthBody.checks.find(check => check.id === 'delivery_integrations');
   assert.equal(deliveryHealth?.status, 'attention');
   assert.equal(deliveryHealth?.details.errors, 1);
