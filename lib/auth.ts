@@ -21,6 +21,12 @@ export async function staffSessionUser(cookieHeader:string|null):Promise<Member|
  const cutoff=new Date(Date.now()-STAFF_SESSION_HOURS*HOUR).toISOString();
  return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? AND s.created_at>=?').bind(await sha256(token),Date.now(),cutoff).first<Member>();
 }
+/** Sensitive organisation changes require a fresh OTP session, not merely a still-valid staff session. */
+export async function recentStaffSessionUser(cookieHeader:string|null,maxAgeMinutes=15):Promise<Member|null>{
+ const token=readCookie(cookieHeader);if(!/^[0-9a-f]{64}$/.test(token))return null;
+ const cutoff=new Date(Date.now()-maxAgeMinutes*60000).toISOString();
+ return await db().prepare('SELECT u.id,u.phone,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? AND s.created_at>=?').bind(await sha256(token),Date.now(),cutoff).first<Member>();
+}
 export async function currentUser(){return sessionUser((await headers()).get('cookie'));}
 export const sessionCookie=(token:string,secure:boolean)=>`${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${token?SESSION_DAYS*86400:0}${secure?'; Secure':''}`;
 export async function endSession(cookieHeader:string|null){const token=readCookie(cookieHeader);if(token)await db().prepare('DELETE FROM sessions WHERE id=?').bind(await sha256(token)).run();}

@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
-import {staffSessionUser} from '@/lib/auth';
+import {recentStaffSessionUser} from '@/lib/auth';
 import {db,ensureSeed} from '@/lib/server';
 
 export const dynamic='force-dynamic';
@@ -12,7 +12,7 @@ class OwnershipError extends Error{constructor(public status:number,message:stri
 export async function POST(request:Request){
  try{
   const url=new URL(request.url);if(request.headers.get('origin')!==url.origin)throw new OwnershipError(403,'Cette demande doit être envoyée depuis le site.');
-  const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new OwnershipError(401,'Connectez-vous pour transférer la propriété.');
+  const user=await recentStaffSessionUser(request.headers.get('cookie'),15);if(!user)throw new OwnershipError(401,'Reconnectez-vous par SMS avant de transférer la propriété.');
   const body=input.parse(await request.json());await ensureSeed();if(body.targetPrincipalId===user.id)throw new OwnershipError(400,'Choisissez un autre compte pour le transfert.');
   const organization=await db().prepare("SELECT id FROM organizations WHERE id=? AND status='active'").bind(body.organizationId).first();if(!organization)throw new OwnershipError(404,'Cette enseigne est introuvable ou inactive.');
   const current=await db().prepare("SELECT id FROM organization_memberships WHERE organization_id=? AND principal_id=? AND role='owner' AND location_id IS NULL AND status='active'").bind(body.organizationId,user.id).first<{id:string}>();if(!current)throw new OwnershipError(403,'Seul le propriétaire actuel peut transférer cette enseigne.');
