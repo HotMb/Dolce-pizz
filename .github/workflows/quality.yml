@@ -34,6 +34,9 @@ jobs:
       - name: Vérifier les dépendances de production
         run: npm audit --omit=dev
 
+      - name: Vérifier toute la chaîne de dépendances
+        run: npm audit --audit-level=high
+
       - name: Scanner les secrets du dépôt
         run: npm run security:scan:env
 
