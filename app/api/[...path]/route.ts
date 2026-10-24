@@ -63,6 +63,8 @@ async function handler(request:Request){
    if(Number(request.headers.get('content-length')||0)>(upload?3*MAX_PHOTO+20000:35000))fail(413,'La demande est trop volumineuse.');
   }
   await ensureSeed();
+  const activeTenant=await db().prepare("SELECT 1 AS ok FROM organizations o JOIN locations l ON l.organization_id=o.id WHERE o.id=? AND l.id=? AND o.status='active' AND l.status='active'").bind(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID).first<{ok:number}>();
+  if(!activeTenant)fail(404,'Cette enseigne ou cet établissement n’est pas actif.');
   const cookie=request.headers.get('cookie');const user=await sessionUser(cookie);const secure=url.protocol==='https:';
   const local=['localhost','127.0.0.1','[::1]'].includes(url.hostname);const ip=request.headers.get('cf-connecting-ip')||'local';
   const body=async()=>{const text=await request.text();if(text.length>35000)fail(413,'La demande est trop volumineuse.');try{return JSON.parse(text);}catch{fail(400,'Vérifiez les informations envoyées.');}};

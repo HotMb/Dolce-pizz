@@ -323,8 +323,8 @@ test('real API flow binds OTP contact, grants scoped staff, completes all statio
  assert.equal((await call(production.GET,`production?${query}&station=oven`,'GET',undefined,workerCookie)).response.status,403);
  assert.ok(Number(database.prepare('SELECT COUNT(*) AS n FROM staff_audit').get()?.n)>=3);
  database.exec("UPDATE organizations SET status='suspended' WHERE id='dolce-pizza'");
- assert.deepEqual((await call<{slots:unknown[]}>(web.GET,'slots')).body.slots,[]);
- assert.equal((await call(web.POST,'orders','POST',{...input,key:crypto.randomUUID()},ownerCookie)).response.status,503);
+ assert.equal((await call(web.GET,'slots')).response.status,404);
+ assert.equal((await call(web.POST,'orders','POST',{...input,key:crypto.randomUUID()},ownerCookie)).response.status,404);
  assert.equal((await call(production.GET,`production?${query}&station=make_line`,'GET',undefined,ownerCookie)).response.status,403);
  assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(),[]);
 });
