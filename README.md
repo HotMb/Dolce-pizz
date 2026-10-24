@@ -155,6 +155,7 @@ Replace the filename with the pending migration and `DB` with your D1 binding na
 - `npm run start`: preview the built Worker locally with D1/R2 support
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 - `npm run db:verify`: verify all migrations on a fresh SQLite database and run foreign-key checks
+- `npm run db:backup`: export the local D1 database to an ignored, timestamped file; add `-- --remote` only for an authenticated remote export
 
 When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
 
