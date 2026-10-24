@@ -73,13 +73,13 @@ export async function GET(request: Request) {
        WHERE organization_id=? AND location_id=? AND status='open'`,
     ).bind(scope.data.organizationId, scope.data.locationId).first<ShiftRow>();
     const rows = await db().prepare(
-      `SELECT id,name,total,slot,channel,updated_at,created_at
+      `SELECT id,name,total,slot,channel,service_mode,table_label,updated_at,created_at
        FROM orders
        WHERE organization_id=? AND location_id=? AND fulfillment='pickup' AND status='ready' AND payment_status='due_at_pickup'
        ORDER BY slot,created_at
        LIMIT 150`,
     ).bind(scope.data.organizationId, scope.data.locationId).all<{
-      id: string; name: string; total: number; slot: string; channel: string; updated_at: string; created_at: string;
+      id: string; name: string; total: number; slot: string; channel: string; service_mode: string; table_label: string; updated_at: string; created_at: string;
     }>();
     const totals = shift ? await db().prepare(
       `SELECT COALESCE(SUM(CASE WHEN e.method='cash' THEN e.amount ELSE 0 END),0) AS cash_sales,
@@ -94,6 +94,8 @@ export async function GET(request: Request) {
       total: row.total,
       slot: row.slot,
       channel: row.channel,
+      serviceMode: row.service_mode,
+      tableLabel: row.table_label,
       readyAt: row.updated_at,
       createdAt: row.created_at,
     })), scope: scope.data});
