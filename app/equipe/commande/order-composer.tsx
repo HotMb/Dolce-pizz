@@ -2,7 +2,7 @@
 
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import Link from 'next/link';
-import {ArrowLeft,ArrowUpRight,Check,CheckCircle2,Clock,MapPin,Minus,Plus,ReceiptText,ShoppingBasket,Trash2,UserRound,Utensils,PhoneCall} from 'lucide-react';
+import {ArrowLeft,ArrowUpRight,Check,CheckCircle2,Clock,LockKeyhole,MapPin,Minus,Plus,ReceiptText,ShoppingBasket,Trash2,UserRound,Utensils,PhoneCall} from 'lucide-react';
 import {AlertDialog,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {Dialog,DialogContent,DialogDescription,DialogTitle} from '@/components/ui/dialog';
 import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
@@ -241,7 +241,7 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
  if(!scope)return <main id="contenu" className="page-shell staff-shell"><header className="staff-heading"><div><Link href="/equipe" className="staff-back"><ArrowLeft size={18}/> Espace équipe</Link><p className="staff-eyebrow"><ShoppingBasket size={17}/> PRISE DE COMMANDE</p><h1>Accès caisse<span>.</span></h1></div></header><section className="panel staff-empty"><UserRound size={34}/><h2>Aucun accès de prise de commande.</h2><p>Le propriétaire doit attribuer le rôle Comptoir ou Centre d’appels pour un établissement actif.</p><Link href="/equipe" className="btn btn-outline">Voir mon espace équipe</Link></section></main>;
 
  return <main id="contenu" className="page-shell staff-shell pos-shell">
-  <header className="staff-heading pos-heading"><div><Link href={`/equipe?${scopeQuery(scope)}`} className="staff-back"><ArrowLeft size={18}/> Espace équipe</Link><p className="staff-eyebrow"><ReceiptText size={17}/> DOLCE PIZZ’ · CAISSE</p><h1>Nouvelle commande<span>.</span></h1><p>Saisissez la commande, vérifiez le retrait et envoyez-la en cuisine. Le paiement reste dû au comptoir.</p></div><div className="pos-heading-site"><MapPin size={19}/><span>{scope.locationName}</span></div></header>
+  <header className="staff-heading pos-heading"><div><Link href={deviceMode?'/equipe/commande?device=1':`/equipe?${scopeQuery(scope)}`} className="staff-back"><ArrowLeft size={18}/> {deviceMode?'Configuration POS':'Espace équipe'}</Link><p className="staff-eyebrow"><ReceiptText size={17}/> DOLCE PIZZ’ · CAISSE</p><h1>Nouvelle commande<span>.</span></h1><p>Saisissez la commande, vérifiez le retrait et envoyez-la en cuisine. Le paiement reste dû au comptoir.</p></div><div className="pos-heading-site"><MapPin size={19}/><span>{scope.locationName}</span>{deviceMode&&<Button tone="quiet" onClick={()=>{localStorage.removeItem('dolce-pos-token');window.location.reload();}}><LockKeyhole size={16}/> Verrouiller</Button>}</div></header>
   {access.error&&<ErrorBox message={`${access.error} Les commandes restent bloquées tant que les accès ne sont pas vérifiés.`} retry={()=>void access.refresh()}/>}
   {receipt&&<section className="panel pos-receipt-success" role="status"><CheckCircle2 size={26}/><div><h2>Commande envoyée en cuisine.</h2><p>{receipt.channel==='phone'?'Commande prise par téléphone':'Commande du comptoir'} · {scope.locationName} · {money(receipt.total)} à régler au retrait.</p></div><Button tone="outline" onClick={()=>setReceipt(null)}>Prendre une autre commande</Button></section>}
   <div className="pos-context panel">
