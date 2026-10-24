@@ -199,6 +199,43 @@ async function postOrder(request: Request, url: URL) {
   return json({order: {id, total: priced.total, status: 'preparing', slot, locationId: input.locationId, channel: input.channel}}, 201);
 }
 
+async function patchOrder(request: Request, url: URL) {
+  const actor = await authenticatedRequest(request, url, true);
+  if (actor.deviceRole) fail(403, 'Le transfert de table nécessite une session équipe.');
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > 4000) fail(413, 'La demande est trop volumineuse.');
+  let text: string;
+  try {text = await readBoundedRequestText(request, 4000);} catch (error) {if (error instanceof RangeError) fail(413, 'La demande est trop volumineuse.'); throw error;}
+  const parsed = z.object({
+    organizationId: z.string().min(1).max(128), locationId: z.string().min(1).max(128),
+    orderId: z.string().min(1).max(128), tableLabel: z.string().trim().min(1).max(30), version: z.number().int().nonnegative(),
+  }).strict().safeParse(parseJson(text));
+  if (!parsed.success) fail(400, 'Indiquez une table et une version valides.');
+  const input = parsed.data;
+  if (!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 .#-]{0,29}$/.test(input.tableLabel)) fail(400, 'Indiquez une table valide.');
+  const scope = await loadAuthorizedScope(input.organizationId, input.locationId, actor);
+  if (!scope || !scope.roles.some(role => ['owner', 'manager', 'pos'].includes(role))) fail(403, 'Votre rôle ne permet pas de transférer une table.');
+  const now = new Date().toISOString();
+  const update = db().prepare(
+    `UPDATE orders SET table_label=?,version=version+1,updated_at=?
+     WHERE id=? AND organization_id=? AND location_id=? AND service_mode='dine_in'
+       AND status IN ('preparing','ready') AND version=? AND table_label<>?`,
+  ).bind(input.tableLabel, now, input.orderId, input.organizationId, input.locationId, input.version, input.tableLabel);
+  const event = db().prepare(
+    `INSERT INTO events(id,order_id,status,actor,note,created_at)
+     SELECT ?,id,status,?,? ,? FROM orders
+     WHERE id=? AND organization_id=? AND location_id=? AND version=? AND table_label=?`,
+  ).bind(`${input.orderId}:table:${input.version + 1}`, actor.id, `Commande transférée vers la table ${input.tableLabel}`, now, input.orderId, input.organizationId, input.locationId, input.version + 1, input.tableLabel);
+  const result = await db().batch([update, event]);
+  if (!result[0]?.meta.changes) {
+    const current = await db().prepare('SELECT status,service_mode,table_label,version FROM orders WHERE id=? AND organization_id=? AND location_id=?').bind(input.orderId, input.organizationId, input.locationId).first<{status:string;service_mode:string;table_label:string;version:number}>();
+    if (!current) fail(404, 'Commande introuvable dans cet établissement.');
+    if (current.service_mode !== 'dine_in' || !['preparing','ready'].includes(current.status)) fail(409, 'Cette commande ne peut plus être transférée.');
+    fail(409, 'La commande a changé. Rechargez-la avant de transférer la table.');
+  }
+  return json({order: {id: input.orderId, serviceMode: 'dine_in', tableLabel: input.tableLabel, version: input.version + 1}});
+}
+
 function orderResponse(order: {id: string; total: number; status: string; slot: string; location_id: string; channel: string}) {
   return {id: order.id, total: order.total, status: order.status, slot: order.slot, locationId: order.location_id, channel: order.channel};
 }
@@ -208,6 +245,7 @@ async function handler(request: Request) {
     const url = new URL(request.url);
     if (request.method === 'GET') return await getSlots(request, url);
     if (request.method === 'POST') return await postOrder(request, url);
+    if (request.method === 'PATCH') return await patchOrder(request, url);
     return json({error: 'Méthode non autorisée.'}, 405);
   } catch (error) {
     if (error instanceof HttpError) return json({error: error.message}, error.status);
@@ -219,3 +257,4 @@ async function handler(request: Request) {
 
 export const GET = handler;
 export const POST = handler;
+export const PATCH = handler;
