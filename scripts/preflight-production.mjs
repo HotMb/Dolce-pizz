@@ -10,7 +10,7 @@ const required = (name, minimum) => {
 required('ADMIN_SETUP_CODE', 20);
 required('MARKETING_STOP_SECRET', 32);
 required('NOTIFICATION_DISPATCH_SECRET', 32);
-if (!/^[\x21-\x7E]{32,256}$/.test(process.env.NOTIFICATION_DISPATCH_SECRET?.trim() || '')) failures.push('NOTIFICATION_DISPATCH_SECRET doit contenir 32 à 256 caractères ASCII sans espace');
+if (!/^[\x21-\x7E]{32,256}$/.test(process.env.NOTIFICATION_DISPATCH_SECRET || '')) failures.push('NOTIFICATION_DISPATCH_SECRET doit contenir 32 à 256 caractères ASCII sans espace');
 required('BREVO_API_KEY', 20);
 required('SMS_SENDER', 1);
 if (process.env.NOTIFICATION_SCHEDULER_CONFIGURED !== '1') failures.push('NOTIFICATION_SCHEDULER_CONFIGURED doit valoir 1 après le test de l’ordonnanceur');

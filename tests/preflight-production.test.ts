@@ -40,3 +40,9 @@ test('production preflight rejects a dispatch secret with spaces',()=>{
  assert.notEqual(result.status,0);
  assert.match(`${result.stdout}${result.stderr}`,/NOTIFICATION_DISPATCH_SECRET/);
 });
+
+test('production preflight rejects a dispatch secret with surrounding whitespace',()=>{
+ const result=run({NOTIFICATION_DISPATCH_SECRET:' '+ 'a'.repeat(40)});
+ assert.notEqual(result.status,0);
+ assert.match(`${result.stdout}${result.stderr}`,/NOTIFICATION_DISPATCH_SECRET/);
+});
