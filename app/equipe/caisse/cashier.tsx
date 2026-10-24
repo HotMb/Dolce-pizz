@@ -23,7 +23,7 @@ const timeLabel=(iso:string)=>{const date=new Date(iso);return Number.isNaN(date
 export function Cashier(){
  const access=useStaffAccess();
  const[scopeId,setScopeId]=useState(''),[orders,setOrders]=useState<ReadyOrder[]>([]),[shift,setShift]=useState<Shift|null>(null),[openingFloat,setOpeningFloat]=useState('0'),[countedCash,setCountedCash]=useState(''),[closeNote,setCloseNote]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(''),[notice,setNotice]=useState(''),[cardConfirmation,setCardConfirmation]=useState<ReadyOrder|null>(null),[addition,setAddition]=useState<Addition|null>(null),[additionLoading,setAdditionLoading]=useState(''),[amountDraft,setAmountDraft]=useState<Record<string,string>>({}),[allocationDraft,setAllocationDraft]=useState<Record<string,{lineIndex:number;amount:number}[]>>({}),[selectedLines,setSelectedLines]=useState<number[]>([]),[lineAmounts,setLineAmounts]=useState<Record<number,string>>({});
- const request=useRef<AbortController|null>(null);
+ const request=useRef<AbortController|null>(null),readySnapshot=useRef<Set<string>|null>(null);
  const scopes=access.data?.scopes;
  const cashierScopes=useMemo(()=> (scopes||[]).filter(item=>item.roles.some(role=>['owner','manager','pos'].includes(role))),[scopes]);
  const scope=cashierScopes.find(item=>scopeQuery(item)===scopeId)||cashierScopes[0];
@@ -31,10 +31,11 @@ export function Cashier(){
  const load=useCallback(async()=>{
   if(!scope){setOrders([]);setLoading(false);return;}
   request.current?.abort();const controller=new AbortController();request.current=controller;setLoading(true);setError('');
-  try{const result=await api<CashierData>(`staff/payments?${scopeQuery(scope)}`,'GET',undefined,controller.signal);setOrders(Array.isArray(result.orders)?result.orders:[]);setShift(result.shift||null);setNotice('');}
+  try{const result=await api<CashierData>(`staff/payments?${scopeQuery(scope)}`,'GET',undefined,controller.signal);const nextOrders=Array.isArray(result.orders)?result.orders:[];const nextIds=new Set(nextOrders.map(order=>order.id));const previousIds=readySnapshot.current;const newCount=previousIds?nextOrders.filter(order=>!previousIds.has(order.id)).length:0;readySnapshot.current=nextIds;setOrders(nextOrders);setShift(result.shift||null);if(newCount>0){setNotice(`${newCount} nouvelle${newCount>1?'s':''} commande${newCount>1?'s':''} prête${newCount>1?'s':''} à remettre.`);try{navigator.vibrate?.([180,80,180]);}catch{}}}
   catch(cause){if(!controller.signal.aborted)setError((cause as Error).message||'La caisse est indisponible.');}
   finally{if(!controller.signal.aborted)setLoading(false);}
  },[scope]);
+ useEffect(()=>{readySnapshot.current=null;},[scope?.organizationId,scope?.locationId]);
  useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);const poll=window.setInterval(()=>{if(!document.hidden&&!busy)void load();},5000);return()=>{window.clearTimeout(timer);window.clearInterval(poll);request.current?.abort();};},[load,busy]);
  const amountForOrder=(order:ReadyOrder)=>{const requestedEuros=amountDraft[order.id]?.trim();return requestedEuros?Math.round(Number(requestedEuros.replace(',','.'))*100):(order.remaining??order.total);};
  const pay=async(order:ReadyOrder,method:'cash'|'card')=>{
