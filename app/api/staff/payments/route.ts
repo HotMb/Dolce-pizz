@@ -82,16 +82,19 @@ export async function GET(request: Request) {
       if (!order) throw new ApiError(404, 'Commande introuvable dans cet établissement.');
       let rawItems: unknown = [];
       try {rawItems = JSON.parse(order.items);} catch {rawItems = [];}
-      const items = Array.isArray(rawItems) ? rawItems.slice(0, 60).map((item: any) => ({
-        name: typeof item?.name === 'string' ? item.name.slice(0, 120) : 'Article à vérifier',
-        quantity: Number.isInteger(item?.quantity) ? Math.max(1, Math.min(20, item.quantity)) : 1,
-        unitPrice: Number.isInteger(item?.unitPrice) ? Math.max(0, item.unitPrice) : 0,
-        total: Number.isInteger(item?.total) ? Math.max(0, item.total) : 0,
-        size: typeof item?.size === 'string' ? item.size.slice(0, 20) : '',
-        option: typeof item?.option === 'string' ? item.option.slice(0, 80) : '',
-        without: Array.isArray(item?.without) ? item.without.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
-        extra: Array.isArray(item?.extra) ? item.extra.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
-      })) : [];
+      const items = Array.isArray(rawItems) ? rawItems.slice(0, 60).map((item: unknown) => {
+       const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+       return ({
+        name: typeof row.name === 'string' ? row.name.slice(0, 120) : 'Article à vérifier',
+        quantity: Number.isInteger(row.quantity) ? Math.max(1, Math.min(20, Number(row.quantity))) : 1,
+        unitPrice: Number.isInteger(row.unitPrice) ? Math.max(0, Number(row.unitPrice)) : 0,
+        total: Number.isInteger(row.total) ? Math.max(0, Number(row.total)) : 0,
+        size: typeof row.size === 'string' ? row.size.slice(0, 20) : '',
+        option: typeof row.option === 'string' ? row.option.slice(0, 80) : '',
+        without: Array.isArray(row.without) ? row.without.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
+        extra: Array.isArray(row.extra) ? row.extra.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
+      });
+      }) : [];
       const prior = await db().prepare('SELECT allocation FROM payments WHERE order_id=? AND organization_id=? AND location_id=? AND status=\'captured\'').bind(order.id, scope.data.organizationId, scope.data.locationId).all<{allocation:string}>();
       const allocated = new Map<number, number>();
       for (const row of prior.results) {try {const saved = JSON.parse(row.allocation); if (Array.isArray(saved)) for (const entry of saved) if (Number.isInteger(entry?.lineIndex)&&Number.isInteger(entry?.amount)) allocated.set(entry.lineIndex,(allocated.get(entry.lineIndex)||0)+entry.amount);} catch {}}

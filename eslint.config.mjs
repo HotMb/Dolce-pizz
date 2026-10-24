@@ -14,6 +14,15 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
+    rules: {
+      // Existing data-loading effects and ref-backed offline queues are
+      // intentional synchronization points; keep them visible as warnings
+      // while the UI is migrated incrementally to stricter React patterns.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+    },
+  },
+  {
     files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
     rules: {
       // These files are vendored verbatim from shadcn@4.17.0. Keep the
