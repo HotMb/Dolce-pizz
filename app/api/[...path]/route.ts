@@ -70,7 +70,7 @@ async function handler(request:Request){
    if(path[1]==='verify'){const input=z.object({phone:clean.max(30),code:clean.regex(/^\d{6}$/,'Saisissez les 6 chiffres reçus par SMS.')}).parse(await body());const{user:member,token}=await verifyCode(mobile(input.phone),input.code);const profile=await customerProfile(PILOT_ORGANIZATION_ID,member.id);return json({user:{name:profile?.name||'',phone:localPhone(member.phone)}},200,sessionCookie(token,secure));}
    if(path[1]==='logout'){await endSession(cookie);return json({ok:true},200,sessionCookie('',secure));}
   }
-  if(path[0]==='catalog'&&method==='GET'){const m=await menu(PILOT_ORGANIZATION_ID);return json(m);}
+  if(path[0]==='catalog'&&method==='GET'){const m=await menu(PILOT_ORGANIZATION_ID,PILOT_LOCATION_ID);return json(m);}
   // The SMS link carries a signed, opaque proof; this short-lived cookie lets the existing form confirm the recipient's phone.
   if(path[0]==='marketing'&&path[1]==='stop'&&method==='GET'){
    const token=url.searchParams.get('token')||'';const response=NextResponse.redirect(new URL('/stop',url),303);
@@ -139,7 +139,7 @@ async function handler(request:Request){
    if(!Number.isFinite(slotMs))fail(400,'Choisissez un créneau valide.');
    const slot=new Date(slotMs).toISOString();
    if(!allowedSlot(slotMs,s))fail(409,'Ce créneau n’est plus disponible. Choisissez un autre horaire.');
-   const [products,ingredients]=await Promise.all([productList(false,organizationId),ingredientList(organizationId)]);
+   const [products,ingredients]=await Promise.all([productList(false,organizationId,locationId),ingredientList(organizationId)]);
    const priced=priceCart(input.items,{products,ingredients,extraPrice:s.extraPrice},input.ticket);
    if(priced.problem)fail(409,priced.problem);
    if(priced.count>30)fail(400,'Pour plus de 30 articles, appelez la pizzeria.');

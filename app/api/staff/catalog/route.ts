@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     if (!access || !hasStaffOrderAccess(access.roles)) throw new CatalogApiError(403, 'Vous n’avez pas accès à la carte de cet établissement.');
 
     const [products, ingredients, currentSettings] = await Promise.all([
-      productList(false, scope.data.organizationId), ingredientList(scope.data.organizationId), settings(scope.data.organizationId,scope.data.locationId),
+      productList(false, scope.data.organizationId,scope.data.locationId), ingredientList(scope.data.organizationId), settings(scope.data.organizationId,scope.data.locationId),
     ]);
     return json({products, ingredients, extraPrice: currentSettings.extraPrice});
   } catch (error) {

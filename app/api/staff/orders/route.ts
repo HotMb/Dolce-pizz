@@ -128,7 +128,7 @@ async function postOrder(request: Request, url: URL) {
   if (!currentSettings.hoursConfirmed || !allowedSlot(slotMs, currentSettings)) {
     fail(409, 'Ce créneau de retrait n’est plus disponible. Choisissez un autre horaire.');
   }
-  const [products, ingredients] = await Promise.all([productList(false, input.organizationId), ingredientList(input.organizationId)]);
+  const [products, ingredients] = await Promise.all([productList(false, input.organizationId, input.locationId), ingredientList(input.organizationId)]);
   // Offers use the same server-owned product flags and calculation as web orders. Loyalty is never applied here.
   const priced = priceCart(input.items, {
     products,

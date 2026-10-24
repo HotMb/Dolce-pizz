@@ -4,7 +4,7 @@ import {seedCatalog} from './seed';
 import {seedIngredients,type Ingredient} from './menu';
 import {pizzaPhotos} from './pizza-photos';
 import {defaultSettings,type Settings} from './rules';
-type ProductRow={id:string;name:string;category:string;description:string;price:number;xxl:number|null;available:number;options:string;offer:number;ingredients:string;allergens:string;allergens_checked:number;tagline:string;photo:string;status:string;spicy:number;sort:number;version:number};
+type ProductRow={id:string;name:string;category:string;description:string;price:number;xxl:number|null;available:number;location_available:number|null;location_price:number|null;location_xxl:number|null;options:string;offer:number;ingredients:string;allergens:string;allergens_checked:number;tagline:string;photo:string;status:string;spicy:number;sort:number;version:number};
 type IngredientRow={id:string;name:string;allergens:string;meat:string;origin:string;extra:number;available:number;locked:number;sort:number};
 const PILOT_ORGANIZATION_ID='dolce-pizza';
 export function db(){if(!env.DB)throw new Error('DB unavailable');return env.DB;}
@@ -25,16 +25,19 @@ const categoryOrder=(id:string)=>{const i=categories.findIndex(c=>c.id===id);ret
 export function toProduct(p:ProductRow):Product{
  // A photo dropped in assets-src/pizzas and exported by `npm run photos` shows up without touching the database.
  const photo=p.photo==='none'?'':p.photo||(pizzaPhotos.has(p.id)?'static':'');
- return {id:p.id,name:p.name,category:p.category,description:p.description,price:p.price,xxl:p.xxl,available:!!p.available,options:list(p.options),offer:!!p.offer,ingredients:list(p.ingredients),allergens:list(p.allergens),allergensChecked:!!p.allergens_checked,tagline:p.tagline,photo,status:p.status as ProductStatus,spicy:!!p.spicy,sort:p.sort,version:p.version};
+ return {id:p.id,name:p.name,category:p.category,description:p.description,price:p.location_price??p.price,xxl:p.location_xxl??p.xxl,available:p.location_available===null?!!p.available:!!p.location_available,options:list(p.options),offer:!!p.offer,ingredients:list(p.ingredients),allergens:list(p.allergens),allergensChecked:!!p.allergens_checked,tagline:p.tagline,photo,status:p.status as ProductStatus,spicy:!!p.spicy,sort:p.sort,version:p.version};
 }
 /** Published products for the site; `all` adds drafts and archived ones for the admin. Menu order: category, then position. */
-export async function productList(all=false,organizationId=PILOT_ORGANIZATION_ID){
- const r=await db().prepare(`SELECT * FROM products WHERE organization_id=?${all?'':" AND status='published'"} ORDER BY sort,rowid`).bind(organizationId).all<ProductRow>();
+export async function productList(all=false,organizationId=PILOT_ORGANIZATION_ID,locationId?:string){
+ const join=locationId?' LEFT JOIN location_product_overrides lpo ON lpo.organization_id=p.organization_id AND lpo.location_id=? AND lpo.product_id=p.id':'';
+ const where=all?'':" AND p.status='published' AND COALESCE(lpo.available,p.available)=1";
+ const sql=`SELECT p.*,${locationId?'lpo.available AS location_available,lpo.price AS location_price,lpo.xxl AS location_xxl':'NULL AS location_available,NULL AS location_price,NULL AS location_xxl'} FROM products p${join} WHERE p.organization_id=?${where} ORDER BY p.sort,p.rowid`;
+ const r=await db().prepare(sql).bind(...(locationId?[locationId,organizationId]:[organizationId])).all<ProductRow>();
  return r.results.map(toProduct).sort((a,b)=>categoryOrder(a.category)-categoryOrder(b.category));
 }
 export const toIngredient=(i:IngredientRow):Ingredient=>({id:i.id,name:i.name,allergens:list(i.allergens),meat:i.meat,origin:i.origin,extra:!!i.extra,available:!!i.available,locked:!!i.locked,sort:i.sort});
 export async function ingredientList(organizationId=PILOT_ORGANIZATION_ID){const r=await db().prepare('SELECT * FROM ingredients WHERE organization_id=? ORDER BY sort,name').bind(organizationId).all<IngredientRow>();return r.results.map(toIngredient);}
-export async function menu(organizationId=PILOT_ORGANIZATION_ID){const[products,ingredients,s]=await Promise.all([productList(false,organizationId),ingredientList(organizationId),settings(organizationId)]);return {products,ingredients,settings:s};}
+export async function menu(organizationId=PILOT_ORGANIZATION_ID,locationId?:string){const[products,ingredients,s]=await Promise.all([productList(false,organizationId,locationId),ingredientList(organizationId),settings(organizationId,locationId)]);return {products,ingredients,settings:s};}
 export async function balance(organizationId:string,userId:string){const r=await db().prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM ledger WHERE organization_id=? AND user_id=?').bind(organizationId,userId).first<{balance:number}>();return r?.balance||0;}
 export async function isAdmin(userId:string){return !!await db().prepare("SELECT user_id FROM roles WHERE user_id=? AND role='admin'").bind(userId).first();}
 export function orderView(r:Record<string,unknown>|null){if(!r||typeof r.items!=='string')throw new Error('Order unavailable');return {...r,items:JSON.parse(r.items) as unknown[]};}

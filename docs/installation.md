@@ -89,6 +89,8 @@ En production, cette valeur reste disponible pour les installations historiques,
 
 Les réglages d’horaires, de capacité et de fidélité sont stockés par établissement dans `location_config` (migration `0014`). Une installation historique qui n’a pas encore activé ses réglages locaux utilise temporairement son modèle organisationnel; l’onboarding d’une nouvelle enseigne crée directement le réglage de son premier site.
 
+La carte maître reste dans `products`. La migration `0017` ajoute `location_product_overrides` : le POS, les bornes et la commande web lisent une disponibilité, un prix ou un format XXL local lorsqu’il existe, sinon la valeur maître. Les modifications passent par `GET/POST /api/staff/catalog-overrides`, avec rôle responsable, portée établissement et version optimiste.
+
 ### Connecter Uber Eats
 
 1. Depuis l’API propriétaire `GET/POST /api/admin/delivery-integrations`, créer une liaison pour chaque magasin avec le `provider` `uber_eats`, l’identifiant de magasin Uber et le couple organisation/établissement correspondant. Une désactivation conserve l’historique et empêche les nouveaux webhooks.
