@@ -133,12 +133,15 @@ test('pickup payment captures exactly once and cannot bypass readiness or scope'
   assert.equal(readyList.body.orders[0].tableLabel, 'T4');
   const additionResponse = await api.GET(new Request('http://localhost/api/staff/payments?organizationId=dolce-pizza&locationId=ronchin&orderId=ready-order', {headers: new Headers({origin: 'http://localhost', cookie: workerCookie})}));
   assert.equal(additionResponse.status, 200);
-  const addition = await additionResponse.json() as {addition: {id:string;total:number;serviceMode:string;tableLabel:string;items:unknown[]}};
+  const addition = await additionResponse.json() as {addition: {id:string;total:number;remaining:number;serviceMode:string;tableLabel:string;items:Array<{lineIndex:number;remaining:number}>}};
   assert.equal(addition.addition.id, 'ready-order');
   assert.equal(addition.addition.total, 1200);
+  assert.equal(addition.addition.remaining, 1200);
   assert.equal(addition.addition.serviceMode, 'dine_in');
   assert.equal(addition.addition.tableLabel, 'T4');
   assert.equal(addition.addition.items.length, 1);
+  assert.equal(addition.addition.items[0].lineIndex, 0);
+  assert.equal(addition.addition.items[0].remaining, 1200);
   assert.equal(readyList.body.shift.id, 'shift-1');
   assert.equal(readyList.body.shift.cashSales, 0);
   assert.equal(readyList.body.shift.expectedCash, 1000);

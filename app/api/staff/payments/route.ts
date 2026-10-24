@@ -92,7 +92,11 @@ export async function GET(request: Request) {
         without: Array.isArray(item?.without) ? item.without.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
         extra: Array.isArray(item?.extra) ? item.extra.slice(0, 20).map((value: unknown) => String(value).slice(0, 80)) : [],
       })) : [];
-      return json({addition: {id: order.id, name: order.name, total: order.total, paidTotal: order.paid_total, remaining: Math.max(0, order.total - order.paid_total), status: order.status, paymentStatus: order.payment_status, serviceMode: order.service_mode, tableLabel: order.table_label, items}, scope: scope.data});
+      const prior = await db().prepare('SELECT allocation FROM payments WHERE order_id=? AND organization_id=? AND location_id=? AND status=\'captured\'').bind(order.id, scope.data.organizationId, scope.data.locationId).all<{allocation:string}>();
+      const allocated = new Map<number, number>();
+      for (const row of prior.results) {try {const saved = JSON.parse(row.allocation); if (Array.isArray(saved)) for (const entry of saved) if (Number.isInteger(entry?.lineIndex)&&Number.isInteger(entry?.amount)) allocated.set(entry.lineIndex,(allocated.get(entry.lineIndex)||0)+entry.amount);} catch {}}
+      const detailedItems = items.map((item, lineIndex) => ({...item, lineIndex, paidTotal: allocated.get(lineIndex)||0, remaining: Math.max(0, item.total-(allocated.get(lineIndex)||0))}));
+      return json({addition: {id: order.id, name: order.name, total: order.total, paidTotal: order.paid_total, remaining: Math.max(0, order.total - order.paid_total), status: order.status, paymentStatus: order.payment_status, serviceMode: order.service_mode, tableLabel: order.table_label, items: detailedItems}, scope: scope.data});
     }
     const shift = await db().prepare(
       `SELECT id,business_date,opening_float,opened_at FROM cash_shifts
