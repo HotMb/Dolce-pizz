@@ -11,9 +11,9 @@ Un ordinateur ou mini-PC sert de serveur local. Les tablettes et bornes sont con
 1. Installer Node.js 24.5 ou plus récent sur le serveur local.
 2. Ouvrir le dépôt et lancer `npm install`.
 3. Initialiser la base locale avec `npm run db:migrate:local`.
-4. Démarrer le mode réseau interne avec `npm run dev:interne`.
-5. Relever l’adresse IPv4 du serveur (par exemple `192.168.1.50`).
-6. Sur chaque tablette du même Wi-Fi, ouvrir `http://192.168.1.50:5173/interne`.
+4. Démarrer le mode réseau interne avec `lancer-interne.cmd`. Le script réutilise un serveur déjà actif et choisit automatiquement 5173, 5174, etc. si 5173 est occupé.
+5. Relever l’adresse IPv4 Wi-Fi du serveur (dans votre cas actuel `10.192.83.236`) et le port affiché par le script.
+6. Sur chaque tablette du même Wi-Fi, ouvrir `http://10.192.83.236:PORT/interne` avec le port réellement affiché.
 7. Lancer ensuite le raccourci correspondant au matériel. Chaque raccourci ouvre un écran fixe ; l’opérateur ne change pas de poste depuis l’interface.
 
 ### Raccourcis des postes
@@ -31,21 +31,21 @@ Depuis le dossier du dépôt, utiliser les fichiers suivants :
 
 `lancer-interne.cmd` ne doit être lancé qu’une seule fois sur le serveur local. Les autres fichiers ouvrent seulement le navigateur et se connectent au même serveur ; ils ne démarrent pas une base séparée. Si le serveur n’est pas encore démarré, un raccourci propose de le lancer automatiquement.
 
-Sur le serveur lui-même, `config-interne.cmd` peut rester sur `http://localhost:5173`. Sur les autres tablettes, modifier uniquement cette ligne en `http://192.168.1.50:5173`, puis lancer le raccourci de l’écran. Les quatre écrans utiliseront alors le même serveur et les mêmes tickets. Le serveur ne doit être démarré qu’une seule fois, sur le PC central.
+Sur le serveur lui-même, `config-interne.cmd` détecte automatiquement le port local. Sur les autres tablettes, modifier uniquement cette ligne en `http://10.192.83.236:PORT`, puis lancer le raccourci de l’écran. Tous les écrans utilisent alors le même serveur et les mêmes tickets. Le serveur ne doit être démarré qu’une seule fois, sur le PC central.
 
 Ne pas ouvrir le port du serveur sur Internet et ne pas configurer de redirection de port sur la box. Le Wi-Fi des appareils de production doit être séparé du Wi-Fi invité.
 
 ## Répartition des écrans
 
-- POS employé : prise de commande comptoir, sans créneau obligatoire ; le serveur attribue le prochain créneau opérationnel si l’employé n’en renseigne pas.
-- Centre d’appels : recherche par numéro, sans adresse ni code postal pour le pilote Ronchin ; l’heure de retrait est obligatoire avant l’envoi.
+- POS employé : prise de commande comptoir, sans créneau ; une minuterie démarre dès la validation et le serveur conserve seulement une échéance interne de capacité.
+- Centre d’appels : recherche par numéro, sans adresse, code postal ni créneau pour le pilote Ronchin ; la préparation démarre dès l’envoi.
 - Make Line : montage et préparation manuelle.
-- Four : cuisson et minuterie.
+- Four : cuisson et minuterie par ticket et par article.
 - Expeditor : rôle facultatif non affiché dans les postes fixes du pilote ; le Four contrôle la complétude et passe directement la commande à « prête ».
 - Caisse : paiement espèces ou carte au retrait.
 - Borne : commande autonome ; à utiliser après validation du parcours employé.
 
-Le flux standard est volontairement court : le Make Line affiche le détail de chaque pizza et ses modifications. L’opérateur démarre puis termine chaque article ; il sélectionne ensuite la carte du ticket et confirme « ENVOYÉ AU FOUR ». Le ticket quitte le Make Line et apparaît en rouge sur le Four tant que le passage n’est pas effectué, puis en vert après l’enfournement et la sortie. Le Four peut alors cliquer « Marquer prête · SMS + ticket » lorsque toutes les préparations requises sont terminées. Les actions sont enregistrées par le serveur et les deux écrans se mettent à jour sans rechargement manuel.
+Le flux standard est volontairement court : le Make Line affiche le détail de chaque pizza et ses modifications. Chaque ticket affiche le temps écoulé depuis sa prise et les tickets sont triés par risque puis ancienneté. L’opérateur démarre puis termine chaque article ; il sélectionne ensuite la carte du ticket et confirme « ENVOYÉ AU FOUR ». Le ticket quitte le Make Line et apparaît en rouge sur le Four tant que le passage n’est pas effectué, puis en vert après l’enfournement. Le Four peut alors cliquer « Marquer prête · SMS + ticket » lorsque toutes les préparations requises sont terminées. Les actions sont enregistrées par le serveur et les deux écrans se mettent à jour sans rechargement manuel.
 
 Quand le Four marque la commande prête, le serveur crée une notification SMS si un numéro autorisé existe et crée un job `ready_ticket` dans la file d’impression. Le relais imprimante enrôlé récupère cette file et imprime automatiquement. Uber Eats et les commandes sans numéro restent sans SMS.
 

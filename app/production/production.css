@@ -52,6 +52,8 @@ body:has(.production-shell) .skip{display:none}
 .production-ticket-times{display:grid;justify-items:end;gap:5px;text-align:right}
 .production-ticket-times>span{display:flex;align-items:center;gap:6px;color:#fff;font-size:18px;font-weight:800}
 .production-ticket-times>span svg{color:#ff9bae}
+.production-ticket-times>span.is-overdue{color:#ffcfcc}
+.production-ticket-times>span.is-overdue svg{color:#ff6b5f}
 .production-ticket-times small{color:var(--kds-muted);font-size:12px}
 .production-ticket-tags{display:flex;flex-wrap:wrap;gap:7px;padding:11px 17px 2px}
 .production-tag{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:4px 9px;border:1px solid #4b4649;border-radius:999px;color:#f0eeee;font-size:12px;font-weight:750}

@@ -126,17 +126,16 @@ async function postOrder(request: Request, url: URL) {
   let currentSettings: Awaited<ReturnType<typeof settings>>;
   try {currentSettings = await settings(input.organizationId,input.locationId);}
   catch {fail(503, 'Les horaires et créneaux ne sont pas configurés pour cette enseigne.');}
-  if (input.channel === 'phone' && !input.slot) fail(400, 'Le centre d’appels doit choisir une heure de retrait.');
   const countRows = await db().prepare(
     "SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'",
   ).bind(input.organizationId, input.locationId, new Date().toISOString()).all<{slot: string; n: number}>();
   const counts = Object.fromEntries(countRows.results.map(row => [row.slot, row.n]));
   const requestedSlot = input.slot ? new Date(Date.parse(input.slot)).toISOString() : null;
   const slot = requestedSlot || slots(currentSettings, counts)[0]?.iso;
-  if (!slot) fail(409, 'Aucun créneau opérationnel n’est disponible pour cette commande.');
+  if (!slot) fail(409, 'La pizzeria ne peut pas prendre de nouvelle commande maintenant.');
   const slotMs = Date.parse(slot);
   if (!currentSettings.hoursConfirmed || !allowedSlot(slotMs, currentSettings)) {
-    fail(409, 'Ce créneau de retrait n’est plus disponible. Choisissez un autre horaire.');
+    fail(409, 'Le service n’est plus disponible pour cette commande. Réessayez dans un instant.');
   }
   const [products, ingredients] = await Promise.all([productList(false, input.organizationId, input.locationId), ingredientList(input.organizationId)]);
   // Offers use the same server-owned product flags and calculation as web orders. Loyalty is never applied here.
@@ -149,7 +148,7 @@ async function postOrder(request: Request, url: URL) {
   if (priced.count > 30) fail(400, 'Pour plus de 30 articles, appelez la pizzeria.');
   const latestSettings = await settings(input.organizationId,input.locationId);
   if (latestSettings.version !== currentSettings.version || !latestSettings.hoursConfirmed || !allowedSlot(slotMs, latestSettings)) {
-    fail(409, 'La carte ou ce créneau vient de changer. Actualisez les disponibilités et réessayez.');
+    fail(409, 'La carte ou la file de production vient de changer. Réessayez.');
   }
   const items = snapshotPricedLines(priced.lines, products, ingredients);
   const contact = confirmedOrderContact(input);
@@ -199,10 +198,10 @@ async function postOrder(request: Request, url: URL) {
       id: string; total: number; status: string; slot: string; location_id: string; channel: string;
     }>();
     if (duplicate) return json({order: orderResponse(duplicate)});
-    if (actor.deviceRole) fail(409, 'Le poste a déjà enregistré cette commande ou le créneau est complet.');
+    if (actor.deviceRole) fail(409, 'Le poste a déjà enregistré cette commande ou la file est momentanément complète.');
     const stillAuthorized = await loadStaffScope(db(), actor.id, {organizationId: input.organizationId, locationId: input.locationId});
     if (!stillAuthorized || !staffOrderChannelAllowed(stillAuthorized.roles, input.channel)) fail(403, 'Votre accès à cet établissement a changé. Actualisez votre session.');
-    fail(409, 'Le créneau est complet ou la configuration a changé. Actualisez les disponibilités et réessayez.');
+    fail(409, 'La file de production est complète ou la configuration a changé. Réessayez.');
   }
   return json({order: {id, total: priced.total, status: 'preparing', slot, locationId: input.locationId, channel: input.channel}}, 201);
 }

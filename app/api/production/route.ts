@@ -151,7 +151,9 @@ export async function GET(request: Request) {
     }
     tickets.sort((a, b) => {
       const priority = compareProductionPriority(a.priority!, b.priority!);
-      return priority || Date.parse(a.slot) - Date.parse(b.slot) || Date.parse(a.createdAt) - Date.parse(b.createdAt);
+      // All stations receive the same queue: highest risk first, then oldest ticket.
+      // The client no longer chooses a pickup slot, so createdAt is the useful tie-breaker.
+      return priority || Date.parse(a.createdAt) - Date.parse(b.createdAt) || Date.parse(a.slot) - Date.parse(b.slot);
     });
     return json({orders: tickets, scope: access});
   } catch (error) {
