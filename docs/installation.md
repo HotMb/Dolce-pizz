@@ -98,6 +98,27 @@ Si `principalId` ou `phone` correspond à un compte existant, ses droits sont co
 7. Pour éprouver les postes KDS, envoyer la commande de test en préparation depuis `/admin`; ouvrir `/production`, parcourir Make Line, Four puis Expeditor et confirmer que l’action « prête » reste bloquée tant que chaque unité n’a pas fini son parcours. Les allergènes et le routage doivent aussi être vérifiés dans les fiches menu; l’API applique ce contrôle côté serveur.
 
 8. Ouvrir `/equipe`. Sur une installation neuve, le premier compte activé avec le code administrateur reçoit l’adhésion propriétaire de Dolce Pizz’. La migration `0005` attribue cette adhésion aux administrateurs déjà présents du pilote. La migration `0006` rattache le menu, les ingrédients, les photos et les réglages existants à l’organisation `dolce-pizza`. La migration `0007` migre les profils/consentements clients, les points et les campagnes historiques vers cette même organisation, sépare le client de l’employé créateur d’une commande et supprime les anciens champs de consentement globaux. La migration `0030` distingue les sessions OTP `customer` et `staff`; ouvrir une route d’équipe crée un cookie équipe de 12 heures, tandis que le compte client reste valable 90 jours. Elle ne crée pas de nouvelle enseigne et ne configure pas Tourcoing. Un nouveau collègue se connecte avec son propre mobile, copie l’identifiant affiché dans `/equipe` et le transmet au propriétaire. Celui-ci choisit l’établissement, l’identifiant et le rôle, puis confirme l’attribution. Depuis le bloc **Appareils** de cette même page, le propriétaire enrôle Make Line, Four, Expeditor, POS, borne ou relais imprimante; il transmet le jeton affiché une seule fois au poste, puis peut le faire tourner périodiquement ou révoquer l’appareil. La rotation invalide immédiatement l’ancien jeton et n’affiche le nouveau qu’une seule fois. Retirer un accès bloque les requêtes suivantes et les mutations en attente vérifient aussi sa révocation. Pour changer de responsable d’enseigne, ouvrir `/equipe/proprietaire`, saisir l’identifiant d’un compte existant et la phrase exacte `TRANSFERER LA PROPRIETE`; l’ancien propriétaire est révoqué dans la même transaction et le transfert est audité.
+
+### Réinitialiser les accès des postes de Ronchin
+
+Si les clés du `.env.local` ne fonctionnent plus, ne créez pas de mots de passe copiés dans le code. Depuis le dossier du projet, arrêtez le serveur interne, puis lancez :
+
+```powershell
+npm run access:provision:ronchin
+```
+
+Le script applique d’abord les migrations locales, retrouve le propriétaire actif de Dolce Pizz’ à Ronchin, puis crée ou renouvelle quatre appareils : **POS**, **Make Line**, **Four** et **Borne 1**. Il révoque les anciens jetons de ces appareils et affiche chaque nouveau jeton une seule fois. La base ne conserve que le hash dans `device_credentials`; le texte du jeton ne doit jamais être commité ni envoyé par SMS.
+
+Le script affiche aussi une clé interne temporaire pour ouvrir `/equipe` quand l’OTP SMS n’est pas disponible. Ajoutez cette ligne dans le `.env.local` du serveur, redémarrez `lancer-interne.cmd`, ouvrez `/connexion?retour=%2Fequipe`, puis choisissez **Utiliser une clé de poste**. Une fois l’administration accessible, vous pouvez enrôler ou faire tourner les appareils depuis **Appareils**. Pour une installation Windows, le raccourci `provision-acces-ronchin.cmd` lance la même procédure.
+
+Chaque poste garde ensuite son jeton dans le stockage local du navigateur :
+
+- POS : `/equipe/commande?device=1&channel=pos`
+- Make Line : `/production?station=make_line&organizationId=dolce-pizza&locationId=ronchin`
+- Four : `/production?station=oven&organizationId=dolce-pizza&locationId=ronchin`
+- Borne : `/borne`
+
+Ne partagez jamais un jeton entre deux postes. Pour remplacer une tablette perdue, relancez le provisionnement ou utilisez **Faire tourner le jeton** dans l’administration : l’ancien est invalidé immédiatement.
    Pour une commande POS ou téléphone, le personnel ne coche « Envoyer un SMS quand la commande sera prête » qu’après accord explicite du client. Cette confirmation crée la preuve `staff_confirmed`; décocher la case ou laisser le mobile vide désactive le SMS et conserve le ticket imprimé si nécessaire.
 
 9. Pour éprouver la saisie du personnel, attribuer le rôle Comptoir ou Centre d’appels, ouvrir `/equipe/commande`, choisir le canal, saisir les articles et envoyer la commande sans sélectionner d’heure. La commande apparaît immédiatement en préparation dans les postes KDS avec sa minuterie. Un SMS de retrait ne sera mis en file que si le client donne son mobile et confirme explicitement ce SMS.

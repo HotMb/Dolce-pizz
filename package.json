@@ -24,6 +24,7 @@
     "security:scan:env": "node scripts/security-scan.mjs --include-env",
     "security:http": "node scripts/check-http-security.mjs",
     "db:verify": "node scripts/verify-migrations.mjs",
+    "access:provision:ronchin": "node scripts/provision-ronchin-access.mjs",
     "photos": "node scripts/optimize-photos.mjs",
     "test": "node --import ./tests/ts-resolve.mjs --test \"tests/**/*.test.ts\""
   },
