@@ -27,7 +27,10 @@ export const staffOrderInputSchema = z.object({
   customerPhone: clean.max(30).refine(value => value === '' || normalizePhone(value) !== null),
   readySmsConfirmed: z.boolean(),
   postalCode: z.string().regex(/^\d{5}$/).optional(),
-  slot: z.string().datetime(),
+  // Le centre d'appels choisit toujours une heure. Le POS de Ronchin peut
+  // enregistrer une commande sans heure précise ; le serveur lui attribue
+  // alors le prochain créneau opérationnel disponible.
+  slot: z.string().datetime().optional(),
   note: clean.max(500),
   items: z.array(staffOrderLineSchema).min(1).max(40),
 }).strict();

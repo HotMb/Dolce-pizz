@@ -1,6 +1,6 @@
 # Déploiement interne prioritaire
 
-Le site client public est volontairement mis en attente. Le premier objectif est de faire fonctionner le service dans la pizzeria sur un réseau local : prise de commande, Make Line, Four, Expeditor et encaissement au retrait.
+Le site client public est volontairement mis en attente. Le premier objectif est de faire fonctionner le service dans la pizzeria sur un réseau local : prise de commande, centre d’appels, Make Line, Four et encaissement au retrait.
 
 ## Principe
 
@@ -25,6 +25,7 @@ Depuis le dossier du dépôt, utiliser les fichiers suivants :
 | Poste de préparation | `lancer-make-line.cmd` | Make Line / Montage |
 | Poste devant le four | `lancer-four.cmd` | Four / Cuisson |
 | Poste de prise de commande | `lancer-pos.cmd` | POS employé |
+| Poste du centre d’appels | `lancer-centre-appel.cmd` | Centre d’appels |
 | Borne client | `lancer-borne.cmd` | Borne |
 | Poste de paiement au retrait | `lancer-caisse.cmd` | Caisse |
 
@@ -36,7 +37,8 @@ Ne pas ouvrir le port du serveur sur Internet et ne pas configurer de redirectio
 
 ## Répartition des écrans
 
-- POS employé : prise de commande comptoir ou téléphone.
+- POS employé : prise de commande comptoir, sans créneau obligatoire ; le serveur attribue le prochain créneau opérationnel si l’employé n’en renseigne pas.
+- Centre d’appels : recherche par numéro, sans adresse ni code postal pour le pilote Ronchin ; l’heure de retrait est obligatoire avant l’envoi.
 - Make Line : montage et préparation manuelle.
 - Four : cuisson et minuterie.
 - Expeditor : rôle facultatif non affiché dans les postes fixes du pilote ; le Four contrôle la complétude et passe directement la commande à « prête ».

@@ -121,6 +121,12 @@ body:has(.staff-shell){background:#eef2f5;color:#162536;font-family:"Segoe UI",A
 .staff-confirm [data-slot=alert-dialog-footer]{gap:10px}
 .staff-confirm .btn{min-height:48px}
 .staff-shell a:focus-visible,.staff-shell button:focus-visible,.staff-confirm button:focus-visible{outline:3px solid var(--foreground);outline-offset:3px}
+.staff-advanced{margin-top:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.staff-advanced>summary{cursor:pointer;padding:18px 22px;font-weight:800;list-style-position:inside}
+.staff-advanced[open]>summary{border-bottom:1px solid var(--border)}
+.staff-advanced>.staff-management{margin-top:0;border:0;border-radius:0}
+.health-site-banner{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px;padding:16px 20px;border-left:4px solid var(--primary)}
+.health-site-banner span{color:var(--muted-foreground);font-size:13px}
 @media(max-width:800px){
  .staff-heading,.staff-site-choice,.staff-section-heading{align-items:flex-start;flex-direction:column;gap:12px}
  .staff-account{grid-template-columns:minmax(0,1fr);gap:16px;padding:20px}

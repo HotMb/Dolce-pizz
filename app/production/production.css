@@ -205,4 +205,10 @@ body:has(.production-shell) .skip{display:none}
 .production-ticket.is-oven-waiting{border-color:#e09b9b}.production-ticket.is-oven-sent{border-color:#279463}
 .production-confirm-reason{display:grid;gap:7px;margin:4px 0 8px;color:#17212b;font-size:14px;font-weight:750}.production-confirm-reason input{min-height:46px;padding:10px 12px;border:1px solid #9aa7b4;border-radius:7px;background:#fff;color:#17212b;font:inherit;font-weight:500}.production-confirm-reason input:focus-visible{outline:3px solid #175cd3;outline-offset:2px}
 .production-confirm-dialog .btn-danger{border:1px solid #a32828;background:#a32828;color:#fff}.production-confirm-dialog .btn-danger:hover:not(:disabled){background:#851f1f}.production-confirm-dialog .btn-danger:disabled{cursor:not-allowed;opacity:.55}
+.production-shell.station-make_line{--kds-bg:#edf7ef;background:#edf7ef}
+.production-shell.station-make_line .production-ticket{border-color:#b7d5c0;box-shadow:0 2px 8px #315c3b16}
+.production-shell.station-make_line .production-ticket.is-selected{border-color:#1d7a4b;box-shadow:0 0 0 3px #1d7a4b22,0 2px 8px #315c3b16}
+.production-shell.station-make_line .production-item{border-color:#c5dfcc;background:#f8fcf9}
+.production-shell.station-make_line .production-item.is-actionable{border-left-color:#2e8b57}
+.production-shell.station-make_line .production-empty,.production-shell.station-make_line .production-first-error{border-color:#b7d5c0;background:#fff}
 @media(max-width:560px){.production-ticket-actions{grid-template-columns:minmax(0,1fr)}.production-ticket-action,.production-ticket-waiting,.production-ticket-sent{min-height:50px}}

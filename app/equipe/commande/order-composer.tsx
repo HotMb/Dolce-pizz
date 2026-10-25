@@ -19,14 +19,13 @@ import './order-composer.css';
 type Channel='counter'|'phone'|'pos';
 type Slot={iso:string;date:string;label:string;remaining:number};
 type LocationInfo={name:string;addressLine1:string|null;postalCode:string|null;locality:string|null;phone:string|null};
-type RoutingCandidate={locationId:string;code:string;name:string;addressLine1:string|null;pickupPostalCode:string|null;locality:string|null;phone:string|null;priority:number};
 type CustomerLookup={name:string;phone:string;orderCount:number;lastOrderAt:string|null};
 type Schedule={slots:Slot[];location:LocationInfo};
 type StaffCatalog={products:Product[];ingredients:Ingredient[];extraPrice:number};
 type CatalogState={scopeKey:string;data:StaffCatalog|null;error:string};
 type OrderReceipt={id:string;total:number;status:string;slot:string;locationId:string;channel:Channel};
 type ServiceMode='pickup'|'dine_in';
-type Attempt={key:string;payload:{key:string;organizationId:string;locationId:string;channel:Channel;serviceMode:ServiceMode;tableLabel:string;customerName:string;customerPhone:string;readySmsConfirmed:boolean;postalCode?:string;slot:string;note:string;items:CartLine[]}};
+type Attempt={key:string;payload:{key:string;organizationId:string;locationId:string;channel:Channel;serviceMode:ServiceMode;tableLabel:string;customerName:string;customerPhone:string;readySmsConfirmed:boolean;slot?:string;note:string;items:CartLine[]}};
 type ProductDraft={product:Product;size:CartLine['size'];quantity:number;option:string;removed:string[];added:string[];freeId:string;freeOption:string};
 const dateLabel=new Intl.DateTimeFormat('fr-FR',{timeZone:'Europe/Paris',weekday:'long',day:'numeric',month:'long'});
 const rolesFor:Record<Channel,string[]>={counter:['owner','manager','pos'],phone:['owner','manager','call_center'],pos:['owner','manager','pos']};
@@ -42,10 +41,10 @@ function usePosDeviceAccess(enabled:boolean){
  return {data,error,checked,refreshing,refresh};
 }
 
-export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
+export function StaffOrderComposer({deviceMode=false,fixedChannel}:{deviceMode?:boolean;fixedChannel?:Channel}){
  const staff=useStaffAccess(),device=usePosDeviceAccess(deviceMode);
  const access=device.data?{data:{account:{id:`device:${device.data.device.label}`,name:device.data.device.label},scopes:[device.data.scope],roles:[{id:'pos',label:'POS mobile'}]},loading:!device.checked,error:device.error,status:device.checked&&!device.data?401:null,refreshing:device.refreshing,refresh:device.refresh}:{data:staff.data,loading:staff.loading,error:staff.error,status:staff.status,refreshing:staff.refreshing,refresh:staff.refresh};
- const [requestedChannel,setRequestedChannel]=useState<Channel>('counter');
+ const [requestedChannel,setRequestedChannel]=useState<Channel>(fixedChannel||'counter');
  const [selected,setSelected]=useState('');
  const [schedule,setSchedule]=useState<Schedule|null>(null);
  const [scheduleLoading,setScheduleLoading]=useState(false);
@@ -59,9 +58,6 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
  const [serviceMode,setServiceMode]=useState<ServiceMode>('pickup');
  const [tableLabel,setTableLabel]=useState('');
  const [readySmsConfirmed,setReadySmsConfirmed]=useState(false);
- const [postalCode,setPostalCode]=useState('');
- const [routingCandidates,setRoutingCandidates]=useState<RoutingCandidate[]>([]);
- const [routingLoading,setRoutingLoading]=useState(false);
  const [customerLookup,setCustomerLookup]=useState<CustomerLookup|null>(null);
  const [customerLookupLoading,setCustomerLookupLoading]=useState(false);
  const [customerLookupMessage,setCustomerLookupMessage]=useState('');
@@ -86,13 +82,11 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
  const showCallCenter=scopes.some(item=>roleCan(item,'phone'));
  const showPos=scopes.some(item=>roleCan(item,'pos'));
  const showCounter=scopes.some(item=>roleCan(item,'counter'));
- const channel:Channel=requestedChannel==='counter'?(showCounter?'counter':showCallCenter?'phone':showPos?'pos':'counter'):requestedChannel==='phone'?(showCallCenter?'phone':showCounter?'counter':showPos?'pos':'phone'):(showPos?'pos':showCounter?'counter':showCallCenter?'phone':'pos');
+ const channel:Channel=fixedChannel|| (requestedChannel==='counter'?(showCounter?'counter':showCallCenter?'phone':showPos?'pos':'counter'):requestedChannel==='phone'?(showCallCenter?'phone':showCounter?'counter':showPos?'pos':'phone'):(showPos?'pos':showCounter?'counter':showCallCenter?'phone':'pos'));
  const selectable=scopes.filter(scope=>roleCan(scope,channel));
- const selectableKey=selectable.map(item=>scopeQuery(item)).join('|');
  const scope=selectable.find(item=>scopeQuery(item)===selected)||selectable[0];
- const routingOrganizationId=scope?.organizationId||'';
  const catalogKey=scope?scopeQuery(scope):'';
- if(previousScope!==catalogKey){setPreviousScope(catalogKey);setCart([]);setDraft(null);setSlot('');setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setPostalCode('');setNote('');setFieldErrors({});}
+ if(previousScope!==catalogKey){setPreviousScope(catalogKey);setCart([]);setDraft(null);setSlot('');setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setNote('');setFieldErrors({});}
  const catalog=catalogState.scopeKey===catalogKey?catalogState.data:null;
  const catalogLoading=!!scope&&(!catalog&&!catalogState.error||catalogState.scopeKey!==catalogKey);
  const catalogError=catalogState.scopeKey===catalogKey?catalogState.error:'';
@@ -110,11 +104,11 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
    const params=new URLSearchParams(window.location.search);
    const organizationId=params.get('organizationId'),locationId=params.get('locationId');
    if(organizationId&&locationId)setSelected(new URLSearchParams({organizationId,locationId}).toString());
-   const requested=params.get('channel');
-   if(requested==='counter'||requested==='phone'||requested==='pos')setRequestedChannel(requested);
+    const requested=params.get('channel');
+    if(!fixedChannel&&(requested==='counter'||requested==='phone'||requested==='pos'))setRequestedChannel(requested);
   },0);
   return()=>window.clearTimeout(timer);
- },[]);
+ },[fixedChannel]);
 
  useEffect(()=>{
   if(!catalogKey)return;
@@ -135,7 +129,7 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
   request.current=controller;
   const start=window.setTimeout(()=>{
    if(controller.signal.aborted)return;
-   if(!scope){setSchedule(null);setSlot('');setScheduleLoading(false);setScheduleError('');return;}
+   if(channel!=='phone'||!scope){setSchedule(null);setSlot('');setScheduleLoading(false);setScheduleError('');return;}
    setScheduleLoading(true);setScheduleError('');setSchedule(null);setSlot('');
    void api<Schedule>(`staff/orders?${scopeQuery(scope)}`,'GET',undefined,controller.signal)
     .then(value=>{if(id===serial.current&&!controller.signal.aborted){if(!value||!Array.isArray(value.slots)||!value.location)throw new Error('Les créneaux reçus sont incomplets. Actualisez la page.');setSchedule(value);setScheduleError('');}})
@@ -145,26 +139,9 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
   return()=>{window.clearTimeout(start);controller.abort();};
  },[scope,channel]);
 
- useEffect(()=>{
-  if(channel!=='phone'||!routingOrganizationId||!/^[0-9]{5}$/.test(postalCode)){const timer=window.setTimeout(()=>{setRoutingCandidates([]);setRoutingLoading(false);},0);return()=>window.clearTimeout(timer);}
-  const controller=new AbortController();const loadingTimer=window.setTimeout(()=>setRoutingLoading(true),0);
-  void api<{candidates:RoutingCandidate[]}>(`staff/routing?organizationId=${encodeURIComponent(routingOrganizationId)}&postalCode=${postalCode}`,'GET',undefined,controller.signal)
-   .then(value=>{if(!controller.signal.aborted){const candidates=Array.isArray(value.candidates)?value.candidates:[];setRoutingCandidates(candidates);if(candidates.length===1&&selectableKey.includes(`${routingOrganizationId}::${candidates[0].locationId}`))setSelected(`${routingOrganizationId}::${candidates[0].locationId}`);}})
-   .catch(()=>{if(!controller.signal.aborted)setRoutingCandidates([]);})
-   .finally(()=>{if(!controller.signal.aborted)setRoutingLoading(false);});
-  return()=>{window.clearTimeout(loadingTimer);controller.abort();};
- },[channel,postalCode,routingOrganizationId,selectableKey]);
-
  const changeChannel=(next:Channel)=>{
   if(!canEdit)return;
   setRequestedChannel(next);setSelected('');setSlot('');setCart([]);setDraft(null);setPageError('');setFieldErrors({});
- };
- const changeScope=(value:string)=>{
-  if(!canEdit)return;
-  if(value===selected)return;
-  setSelected(value);setSlot('');setCart([]);setDraft(null);setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setPageError('');setFieldErrors({});
-  const target=selectable.find(item=>scopeQuery(item)===value);
-  if(target)window.history.replaceState(null,'',`/equipe/commande?${scopeQuery(target)}&channel=${channel}`);
  };
  const lookupCustomer=async()=>{
   setCustomerLookup(null);setCustomerLookupMessage('');
@@ -177,12 +154,12 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
 
  const validate=()=>{
   const errors:Record<string,string>={};
-  if(customerName.trim().length<2)errors.customerName='Indiquez le nom associé à la commande.';
+  const fallbackPhoneName=channel==='phone'&&localPhoneValid(customerPhone)?`Client ${customerPhone.replace(/\D/g,'').slice(-4)}`:'';
+  if((customerName.trim()||fallbackPhoneName).length<2)errors.customerName='Saisissez un numéro de téléphone valide.';
   if(customerPhone.trim()&&!localPhoneValid(customerPhone))errors.customerPhone='Saisissez un mobile français valide ou effacez ce numéro.';
   if(readySmsConfirmed&&!customerPhone.trim())errors.customerPhone='Ajoutez le mobile que le client a confirmé pour recevoir le SMS de retrait.';
   if(channel==='pos'&&serviceMode==='dine_in'&&!/^[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 .#-]{0,29}$/.test(tableLabel.trim()))errors.tableLabel='Indiquez une table (ex. T4).';
-  if(channel==='phone'&&postalCode.trim()&&!/^\d{5}$/.test(postalCode.trim()))errors.postalCode='Saisissez un code postal français à 5 chiffres.';
-  if(!slot||!schedule?.slots.some(item=>item.iso===slot))errors.slot='Choisissez un créneau de retrait encore disponible.';
+  if(channel==='phone'&&(!slot||!schedule?.slots.some(item=>item.iso===slot)))errors.slot='Choisissez un créneau de retrait encore disponible.';
   if(!cart.length)errors.cart='Ajoutez au moins un article à la commande.';
   if(priced.problem)errors.cart=priced.problem;
   if(priced.count>30)errors.cart='Pour plus de 30 articles, appelez la pizzeria.';
@@ -197,7 +174,8 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
   event.preventDefault();if(!canEdit||!validate())return;
   if(!scope)return;
   const key=crypto.randomUUID();
-  const payload:Attempt['payload']={key,organizationId:scope.organizationId,locationId:scope.locationId,channel,serviceMode:channel==='pos'?serviceMode:'pickup',tableLabel:channel==='pos'&&serviceMode==='dine_in'?tableLabel.trim():'',customerName:customerName.trim(),customerPhone:customerPhone.trim(),readySmsConfirmed,slot,note:note.trim(),items:cart,...(channel==='phone'&&postalCode.trim()?{postalCode:postalCode.trim()}:{})};
+  const customerNameForOrder=customerName.trim()||`Client ${customerPhone.replace(/\D/g,'').slice(-4)}`;
+  const payload:Attempt['payload']={key,organizationId:scope.organizationId,locationId:scope.locationId,channel,serviceMode:channel==='pos'?serviceMode:'pickup',tableLabel:channel==='pos'&&serviceMode==='dine_in'?tableLabel.trim():'',customerName:customerNameForOrder,customerPhone:customerPhone.trim(),readySmsConfirmed,...(slot?{slot}:{}),note:note.trim(),items:cart};
   setAttempt({key,payload});
   setAttemptError('');setAttemptUncertain(false);setConfirmOpen(true);
  };
@@ -209,7 +187,7 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
    const result=await api<{order:OrderReceipt}>('staff/orders','POST',attempt.payload);
    if(!result?.order||typeof result.order.id!=='string')throw new Error('La réponse du serveur ne confirme pas la commande. Réessayez avec la même tentative.');
    const created=result.order;
-   setReceipt(created);setConfirmOpen(false);setAttempt(null);setAttemptUncertain(false);setCart([]);setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setPostalCode('');setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setSlot('');setFieldErrors({});
+   setReceipt(created);setConfirmOpen(false);setAttempt(null);setAttemptUncertain(false);setCart([]);setCustomerName('');setCustomerPhone('');setServiceMode('pickup');setTableLabel('');setReadySmsConfirmed(false);setCustomerLookup(null);setCustomerLookupMessage('');setNote('');setSlot('');setFieldErrors({});
   }catch(cause){
    const error=cause as Error&{status?:number};setAttemptError(error.message||'La commande n’a pas pu être confirmée.');
    const status=error.status||0;setAttemptUncertain(status===0||status>=500);
@@ -225,7 +203,7 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
  };
  const updateQuantity=(index:number,next:number)=>setCart(rows=>rows.map((line,i)=>i===index?{...line,quantity:next}:line));
  const displayAddress=schedule?.location.addressLine1?`${schedule.location.addressLine1}${schedule.location.postalCode?`, ${schedule.location.postalCode}`:''}${schedule.location.locality?` ${schedule.location.locality}`:''}`:'';
- const retrySlots=useCallback(()=>{if(!scope)return;setSchedule(null);setScheduleError('');setSlot('');request.current?.abort();serial.current+=1;const controller=new AbortController(),id=serial.current;request.current=controller;setScheduleLoading(true);void api<Schedule>(`staff/orders?${scopeQuery(scope)}`,'GET',undefined,controller.signal).then(value=>{if(id===serial.current&&!controller.signal.aborted){setSchedule(value);setScheduleError('');}}).catch(error=>{if(id===serial.current&&!controller.signal.aborted)setScheduleError((error as Error).message||'Impossible de charger les créneaux.');}).finally(()=>{if(id===serial.current&&!controller.signal.aborted){setScheduleLoading(false);request.current=null;}});},[scope]);
+ const retrySlots=()=>{if(!scope)return;setSchedule(null);setScheduleError('');setSlot('');request.current?.abort();serial.current+=1;const controller=new AbortController(),id=serial.current;request.current=controller;setScheduleLoading(true);void api<Schedule>(`staff/orders?${scopeQuery(scope)}`,'GET',undefined,controller.signal).then(value=>{if(id===serial.current&&!controller.signal.aborted){setSchedule(value);setScheduleError('');}}).catch(error=>{if(id===serial.current&&!controller.signal.aborted)setScheduleError((error as Error).message||'Impossible de charger les créneaux.');}).finally(()=>{if(id===serial.current&&!controller.signal.aborted){setScheduleLoading(false);request.current=null;}});};
 
  useEffect(()=>{
   if(!attemptUncertain)return;
@@ -244,16 +222,16 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
   <header className="staff-heading pos-heading"><div><Link href={deviceMode?'/equipe/commande?device=1':`/equipe?${scopeQuery(scope)}`} className="staff-back"><ArrowLeft size={18}/> {deviceMode?'Configuration POS':'Espace équipe'}</Link><p className="staff-eyebrow"><ReceiptText size={17}/> DOLCE PIZZ’ · CAISSE</p><h1>Nouvelle commande<span>.</span></h1><p>Saisissez la commande, vérifiez le retrait et envoyez-la en cuisine. Le paiement reste dû au comptoir.</p></div><div className="pos-heading-site"><MapPin size={19}/><span>{scope.locationName}</span>{deviceMode&&<Button tone="quiet" onClick={()=>{localStorage.removeItem('dolce-pos-token');window.location.reload();}}><LockKeyhole size={16}/> Verrouiller</Button>}</div></header>
   {access.error&&<ErrorBox message={`${access.error} Les commandes restent bloquées tant que les accès ne sont pas vérifiés.`} retry={()=>void access.refresh()}/>}
   {receipt&&<section className="panel pos-receipt-success" role="status"><CheckCircle2 size={26}/><div><h2>Commande envoyée en cuisine.</h2><p>{receipt.channel==='phone'?'Commande prise par téléphone':'Commande du comptoir'} · {scope.locationName} · {money(receipt.total)} à régler au retrait.</p></div><Button tone="outline" onClick={()=>setReceipt(null)}>Prendre une autre commande</Button></section>}
-  <div className="pos-context panel">
-   <div className="pos-channel"><p className="staff-eyebrow">CANAL DE COMMANDE</p><div role="group" aria-label="Canal de prise de commande">{showCounter&&<button type="button" aria-pressed={channel==='counter'} disabled={!canEdit} onClick={()=>changeChannel('counter')}><Utensils size={18}/> Comptoir</button>}{showPos&&<button type="button" aria-pressed={channel==='pos'} disabled={!canEdit} onClick={()=>changeChannel('pos')}><ShoppingBasket size={18}/> POS mobile</button>}{showCallCenter&&<button type="button" aria-pressed={channel==='phone'} disabled={!canEdit} onClick={()=>changeChannel('phone')}><PhoneCall size={18}/> Centre d’appels</button>}</div></div>
-   <div className="pos-site-select"><Field label="Établissement de retrait" id="pos-scope" hint="Confirmez le nom et l’adresse du point de retrait avec le client."><Select value={scopeQuery(scope)} onValueChange={changeScope} disabled={!canEdit||selectable.length<2}><SelectTrigger id="pos-scope" className="staff-select"><SelectValue/></SelectTrigger><SelectContent className="staff-select-popup" position="popper">{selectable.map(item=><SelectItem key={scopeQuery(item)} value={scopeQuery(item)}>{item.organizationName} · {item.locationName}</SelectItem>)}</SelectContent></Select></Field></div>
-  </div>
+   <div className="pos-context panel">
+    {!fixedChannel&&<div className="pos-channel"><p className="staff-eyebrow">CANAL DE COMMANDE</p><div role="group" aria-label="Canal de prise de commande">{showCounter&&<button type="button" aria-pressed={channel==='counter'} disabled={!canEdit} onClick={()=>changeChannel('counter')}><Utensils size={18}/> Comptoir</button>}{showPos&&<button type="button" aria-pressed={channel==='pos'} disabled={!canEdit} onClick={()=>changeChannel('pos')}><ShoppingBasket size={18}/> POS mobile</button>}{showCallCenter&&<button type="button" aria-pressed={channel==='phone'} disabled={!canEdit} onClick={()=>changeChannel('phone')}><PhoneCall size={18}/> Centre d’appels</button>}</div></div>}
+    <div className="pos-fixed-channel"><p className="staff-eyebrow">{channel==='phone'?'CENTRE D’APPELS':'POS EMPLOYÉ'}</p><strong>{channel==='phone'?'Commande téléphonique · Ronchin':'Commande comptoir · Ronchin'}</strong><span>Un seul établissement actif</span></div>
+   </div>
   <form className="pos-layout" noValidate onSubmit={openConfirmation}>
    <div className="pos-main-column">
-    <section className="panel pos-customer"><div className="pos-section-title"><UserRound size={20}/><div><h2>Qui vient retirer ?</h2><p>Le client paiera sur place à la récupération.</p></div></div><div className="pos-customer-fields"><Field label="Nom à annoncer au retrait" id="pos-customerName" error={fieldErrors.customerName}><input id="pos-customerName" maxLength={80} autoComplete="off" value={customerName} onChange={event=>setCustomerName(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.customerName} aria-describedby={fieldErrors.customerName?'pos-customerName-error':undefined}/></Field><div className="pos-phone-lookup"><Field label="Mobile, facultatif" id="pos-customerPhone" hint="Conservez-le seulement si le client le souhaite." error={fieldErrors.customerPhone}><input id="pos-customerPhone" type="tel" inputMode="tel" autoComplete="off" maxLength={30} value={customerPhone} onChange={event=>{setCustomerPhone(event.target.value);setCustomerLookup(null);setCustomerLookupMessage('');if(!event.target.value)setReadySmsConfirmed(false);}} disabled={!canEdit} aria-invalid={!!fieldErrors.customerPhone} aria-describedby={`${fieldErrors.customerPhone?'pos-customerPhone-error ':''}pos-customerPhone-hint`}/></Field>{channel==='phone'&&<Button type="button" tone="outline" busy={customerLookupLoading} disabled={!canEdit||!customerPhone.trim()} onClick={()=>void lookupCustomer()}>Rechercher le client</Button>}</div></div>
+     <section className="panel pos-customer"><div className="pos-section-title"><UserRound size={20}/><div><h2>{channel==='phone'?'Client appelé':'Qui vient retirer ?'}</h2><p>Le paiement se fait sur place à la récupération.</p></div></div><div className="pos-customer-fields">{channel!=='phone'&&<Field label="Nom à annoncer au retrait" id="pos-customerName" error={fieldErrors.customerName}><input id="pos-customerName" maxLength={80} autoComplete="off" value={customerName} onChange={event=>setCustomerName(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.customerName} aria-describedby={fieldErrors.customerName?'pos-customerName-error':undefined}/></Field>}<div className="pos-phone-lookup"><Field label="Numéro de téléphone" id="pos-customerPhone" hint={channel==='phone'?'Utilisé pour retrouver le client et confirmer le retrait.':'Facultatif · uniquement avec l’accord du client.'} error={fieldErrors.customerPhone}><input id="pos-customerPhone" type="tel" inputMode="tel" autoComplete="off" maxLength={30} value={customerPhone} onChange={event=>{setCustomerPhone(event.target.value);setCustomerLookup(null);setCustomerLookupMessage('');if(!event.target.value)setReadySmsConfirmed(false);}} disabled={!canEdit} aria-invalid={!!fieldErrors.customerPhone} aria-describedby={`${fieldErrors.customerPhone?'pos-customerPhone-error ':''}pos-customerPhone-hint`}/></Field>{channel==='phone'&&<Button type="button" tone="outline" busy={customerLookupLoading} disabled={!canEdit||!customerPhone.trim()} onClick={()=>void lookupCustomer()}>Rechercher le client</Button>}</div></div>
     {channel==='phone'&&customerLookupMessage&&<p className="pos-lookup-message" role="status">{customerLookupMessage}{customerLookup?.orderCount?` ${customerLookup.orderCount} commande${customerLookup.orderCount>1?'s':''} connue${customerLookup.orderCount>1?'s':''}.`:''}</p>}
     {channel==='pos'&&<div className="pos-service-fields"><Field label="Type de service" id="pos-service-mode"><Select value={serviceMode} onValueChange={value=>{setServiceMode(value as ServiceMode);if(value==='pickup')setTableLabel('');}} disabled={!canEdit}><SelectTrigger id="pos-service-mode" className="staff-select"><SelectValue/></SelectTrigger><SelectContent className="staff-select-popup" position="popper"><SelectItem value="pickup">À emporter</SelectItem><SelectItem value="dine_in">Sur place</SelectItem></SelectContent></Select></Field>{serviceMode==='dine_in'&&<Field label="Table" id="pos-tableLabel" hint="Ex. T4 ou terrasse 2" error={fieldErrors.tableLabel}><input id="pos-tableLabel" maxLength={30} value={tableLabel} onChange={event=>setTableLabel(event.target.value)} disabled={!canEdit} aria-invalid={!!fieldErrors.tableLabel}/></Field>}</div>}
-    {channel==='phone'&&<><Field label="Code postal communiqué par le client" id="pos-postalCode" hint={routingLoading?'Recherche de l’établissement…':routingCandidates.length===1?`Établissement proposé : ${routingCandidates[0].name}`:'Le code postal sert à proposer le site de retrait; confirmez toujours l’adresse avec le client.'} error={fieldErrors.postalCode}><input id="pos-postalCode" inputMode="numeric" autoComplete="postal-code" maxLength={5} pattern="[0-9]{5}" value={postalCode} onChange={event=>setPostalCode(event.target.value.replace(/\D/g,'').slice(0,5))} disabled={!canEdit} aria-invalid={!!fieldErrors.postalCode} aria-describedby={`${fieldErrors.postalCode?'pos-postalCode-error ':''}pos-postalCode-hint`}/></Field>{routingCandidates.length>1&&<div className="pos-routing-options" role="group" aria-label="Établissements desservant ce code postal">{routingCandidates.map(candidate=><button type="button" key={candidate.locationId} className={`btn btn-outline ${scope?.locationId===candidate.locationId?'is-selected':''}`} onClick={()=>setSelected(`${scope?.organizationId}::${candidate.locationId}`)} disabled={!canEdit}>{candidate.name}{candidate.locality?` · ${candidate.locality}`:''}</button>)}</div>}</>}
+     {channel==='phone'&&<p className="pos-single-site-note">Ronchin est le seul établissement actif. Aucun code postal n’est demandé.</p>}
     <label className={`pos-sms-choice ${!customerPhone.trim()?'is-disabled':''}`}><Checkbox checked={readySmsConfirmed} disabled={!canEdit||!customerPhone.trim()} onCheckedChange={value=>setReadySmsConfirmed(value===true)}/><span><b>Envoyer un SMS quand la commande sera prête</b><small>À cocher uniquement avec l’accord du client. Cette préférence ne l’inscrit pas aux promotions.</small></span></label>
     </section>
     <section className="panel pos-products" aria-labelledby="pos-products-title"><div className="pos-section-title"><ShoppingBasket size={21}/><div><h2 id="pos-products-title">Ajouter au ticket</h2><p>Les prix et les disponibilités seront revérifiés par le serveur.</p></div></div>
@@ -263,10 +241,10 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
      {menuCategories.length>0&&<div className="pos-category-list" role="group" aria-label="Catégories de la carte">{menuCategories.map(item=><button key={item.id} type="button" className={activeCategory===item.id?'is-active':''} aria-pressed={activeCategory===item.id} onClick={()=>setCategory(item.id)} disabled={!canEdit}>{item.name}</button>)}</div>}
      <div className="pos-product-grid">{shownProducts.map(product=><article className="pos-product" key={product.id}><div><p className="pos-product-category">{categories.find(item=>item.id===product.category)?.name}</p><h3>{product.name}</h3><p>{product.description}</p>{product.allergensChecked?<small>Allergènes vérifiés</small>:<small className="pos-warning">Allergènes à vérifier avant préparation</small>}</div><div className="pos-product-footer"><span>{product.xxl===null?money(product.price):`${money(product.price)} · ${money(product.xxl)} XXL`}</span><Button type="button" tone="outline" disabled={!canEdit||!product.available} onClick={()=>setDraft(initialDraft(product))}>Personnaliser</Button></div></article>)}</div>
     </section>
-    <section className="panel pos-pickup"><div className="pos-section-title"><Clock size={20}/><div><h2>Heure de retrait</h2><p>{displayAddress||schedule?.location.name||scope.locationName}</p></div></div>
-     {scheduleLoading?<p className="pos-loading" role="status">Vérification des créneaux…</p>:scheduleError?<ErrorBox message={scheduleError} retry={retrySlots}/>:!schedule?.slots.length?<p className="pos-empty">Aucun créneau n’est disponible pour cet établissement. Appelez le responsable avant de promettre une heure.</p>:<div className="pos-slot-grid" id="pos-slot" role="group" aria-label="Créneaux de retrait" aria-describedby={fieldErrors.slot?'pos-slot-error':undefined}>{schedule.slots.map(item=><button key={item.iso} type="button" className={slot===item.iso?'is-selected':''} aria-pressed={slot===item.iso} onClick={()=>{setSlot(item.iso);setFieldErrors(errors=>({...errors,slot:''}));}} disabled={!canEdit}><span>{dateLabel.format(new Date(`${item.date}T12:00:00Z`))}</span><strong>{item.label}</strong><small>{item.remaining} place{item.remaining>1?'s':''}</small></button>)}</div>}
-     {fieldErrors.slot&&<p id="pos-slot-error" className="field-error" role="alert">{fieldErrors.slot}</p>}
-    </section>
+     {channel==='phone'&&<section className="panel pos-pickup"><div className="pos-section-title"><Clock size={20}/><div><h2>Heure de retrait obligatoire</h2><p>{displayAddress||schedule?.location.name||scope.locationName}</p></div></div>
+      {scheduleLoading?<p className="pos-loading" role="status">Vérification des créneaux…</p>:scheduleError?<ErrorBox message={scheduleError} retry={retrySlots}/>:!schedule?.slots.length?<p className="pos-empty">Aucun créneau n’est disponible pour Ronchin. Corrigez les horaires avant de prendre l’appel.</p>:<div className="pos-slot-grid" id="pos-slot" role="group" aria-label="Créneaux de retrait" aria-describedby={fieldErrors.slot?'pos-slot-error':undefined}>{schedule.slots.map(item=><button key={item.iso} type="button" className={slot===item.iso?'is-selected':''} aria-pressed={slot===item.iso} onClick={()=>{setSlot(item.iso);setFieldErrors(errors=>({...errors,slot:''}));}} disabled={!canEdit}><span>{dateLabel.format(new Date(`${item.date}T12:00:00Z`))}</span><strong>{item.label}</strong><small>{item.remaining} place{item.remaining>1?'s':''}</small></button>)}</div>}
+      {fieldErrors.slot&&<p id="pos-slot-error" className="field-error" role="alert">{fieldErrors.slot}</p>}
+     </section>}
     <section className="panel pos-note"><Field label="Précision pour la cuisine" id="pos-note" hint="500 caractères maximum. Évitez les données sensibles."><textarea className="resize-none" id="pos-note" maxLength={500} rows={3} value={note} onChange={event=>setNote(event.target.value)} disabled={!canEdit} placeholder="Ex. : client appellera à son arrivée"/></Field></section>
    </div>
    <aside className="panel pos-ticket" aria-labelledby="pos-ticket-title"><div className="pos-ticket-head"><p className="staff-eyebrow"><ReceiptText size={16}/> TICKET</p><h2 id="pos-ticket-title">Récapitulatif</h2><p>{schedule?.location.name||scope.locationName}</p></div>
@@ -276,7 +254,7 @@ export function StaffOrderComposer({deviceMode=false}:{deviceMode?:boolean}){
     {pageError&&<ErrorBox message={pageError}/>}
     {scheduleError&&<ErrorBox message={scheduleError}/>}
     {access.error&&<ErrorBox message="Confirmez à nouveau les accès avant d’envoyer la commande." retry={()=>void access.refresh()}/>}
-    <Button type="submit" busy={busy} disabled={!canEdit||!cart.length||!!priced.problem||scheduleLoading||!!scheduleError||!schedule?.slots.length||!catalog||!!catalogError||!!access.error} className="pos-submit">Vérifier la commande <ArrowUpRight size={18}/></Button>
+     <Button type="submit" busy={busy} disabled={!canEdit||!cart.length||!!priced.problem||(channel==='phone'&&(scheduleLoading||!!scheduleError||!schedule?.slots.length))||!catalog||!!catalogError||!!access.error} className="pos-submit">Vérifier et envoyer la commande <ArrowUpRight size={18}/></Button>
    </aside>
   </form>
 

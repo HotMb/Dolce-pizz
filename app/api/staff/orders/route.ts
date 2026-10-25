@@ -126,7 +126,14 @@ async function postOrder(request: Request, url: URL) {
   let currentSettings: Awaited<ReturnType<typeof settings>>;
   try {currentSettings = await settings(input.organizationId,input.locationId);}
   catch {fail(503, 'Les horaires et créneaux ne sont pas configurés pour cette enseigne.');}
-  const slot = new Date(Date.parse(input.slot)).toISOString();
+  if (input.channel === 'phone' && !input.slot) fail(400, 'Le centre d’appels doit choisir une heure de retrait.');
+  const countRows = await db().prepare(
+    "SELECT substr(slot,1,16)||':00.000Z' AS slot,COUNT(*) AS n FROM orders WHERE organization_id=? AND location_id=? AND status NOT IN ('rejected','cancelled') AND substr(slot,1,16)||':00.000Z'>? GROUP BY substr(slot,1,16)||':00.000Z'",
+  ).bind(input.organizationId, input.locationId, new Date().toISOString()).all<{slot: string; n: number}>();
+  const counts = Object.fromEntries(countRows.results.map(row => [row.slot, row.n]));
+  const requestedSlot = input.slot ? new Date(Date.parse(input.slot)).toISOString() : null;
+  const slot = requestedSlot || slots(currentSettings, counts)[0]?.iso;
+  if (!slot) fail(409, 'Aucun créneau opérationnel n’est disponible pour cette commande.');
   const slotMs = Date.parse(slot);
   if (!currentSettings.hoursConfirmed || !allowedSlot(slotMs, currentSettings)) {
     fail(409, 'Ce créneau de retrait n’est plus disponible. Choisissez un autre horaire.');
