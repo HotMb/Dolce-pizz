@@ -267,6 +267,22 @@ export async function POST(request: Request) {
       const latest = await currentTicketRevision(input.orderId, scope);
       return json({error: 'Le ticket a été modifié sur un autre poste. Actualisez la liste.', refresh: true, revision: latest}, 409);
     }
+
+    // Les écritures D1 regroupées peuvent être validées avec un instantané qui
+    // ne voit pas toujours la mise à jour précédente dans un INSERT ... SELECT.
+    // Réémettre les sorties de fin de parcours après la transaction principale
+    // garantit qu'une commande déclarée prête laisse bien son ticket et sa
+    // notification dans les files idempotentes.
+    if (ready) {
+      await db().batch([
+        db().prepare(
+          "INSERT OR IGNORE INTO print_outbox(id,operation_id,organization_id,location_id,order_id,job_type,payload,status,attempts,available_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'pending',0,?,?,?)",
+        ).bind(`${operationId}:ready-ticket`, `${operationId}:ready-ticket`, ORGANIZATION_ID, LOCATION_ID, input.orderId, 'ready_ticket', JSON.stringify({orderId: input.orderId, format: 'ready-ticket-v1'}), now, now, now),
+        db().prepare(
+          "INSERT OR IGNORE INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,updated_at,sent_at) SELECT ?,?,?,?,?,'order_ready',?,'pending',0,?,?,?,NULL FROM orders WHERE id=? AND organization_id=? AND location_id=? AND fulfillment='pickup' AND channel IN ('web','phone','pos','kiosk','counter') AND phone<>'' AND notification_phone<>'' AND notification_phone_basis IN ('account_otp','staff_confirmed') AND notification_phone_captured_at IS NOT NULL",
+        ).bind(`${operationId}:notification`, `${operationId}:notification`, ORGANIZATION_ID, LOCATION_ID, input.orderId, JSON.stringify({orderId: input.orderId, eventType: 'order_ready'}), now, now, now, input.orderId, ORGANIZATION_ID, LOCATION_ID),
+      ]);
+    }
     return json({ok: true, revision: next.revision, status: next.status, refresh: true});
   } catch (error) {
     return handleError(error);

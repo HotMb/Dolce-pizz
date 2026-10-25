@@ -31,7 +31,7 @@ export async function POST(request:Request){
   const input=mutation.parse(await request.json());await ensureSeed();if(!await owner(user.id,input.organizationId))throw new PrintingError(403,'Seul le propriétaire peut relancer une impression.');
   const now=new Date().toISOString();
   if(input.action==='reprint'){
-   const source=await db().prepare('SELECT id,organization_id,location_id,order_id,job_type,payload,status FROM print_outbox WHERE id=? AND organization_id=?').bind(input.jobId,input.organizationId).first<{id:string;organization_id:string;location_id:string;order_id:string;job_type:'kitchen_ticket'|'customer_receipt';payload:string;status:string}>();
+   const source=await db().prepare('SELECT id,organization_id,location_id,order_id,job_type,payload,status FROM print_outbox WHERE id=? AND organization_id=?').bind(input.jobId,input.organizationId).first<{id:string;organization_id:string;location_id:string;order_id:string;job_type:'kitchen_ticket'|'customer_receipt'|'ready_ticket';payload:string;status:string}>();
    if(!source)throw new PrintingError(404,'Job d’impression introuvable.');
    if(source.status!=='printed')throw new PrintingError(409,'Seul un ticket déjà imprimé peut être réimprimé.');
    const id=`${source.id}:reprint:${crypto.randomUUID()}`;const operationId=`${source.id}:reprint:${crypto.randomUUID()}`;

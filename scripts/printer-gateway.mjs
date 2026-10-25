@@ -34,7 +34,8 @@ const parseItems = (value) => {
 };
 const render = (ticket) => {
   const customerReceipt = ticket.jobType === 'customer_receipt';
-  const lines = ['DOLCE PIZZ’', customerReceipt ? 'TICKET CLIENT' : `COMMANDE ${text(ticket.orderId).slice(0, 18)}`, `RETRAIT ${text(ticket.slot)}`, `${text(ticket.customerName)}${customerReceipt ? '' : ` ${text(ticket.phone)}`}`];
+  const readyTicket = ticket.jobType === 'ready_ticket';
+  const lines = ['DOLCE PIZZ’', readyTicket ? 'COMMANDE PRÊTE' : customerReceipt ? 'TICKET CLIENT' : `COMMANDE ${text(ticket.orderId).slice(0, 18)}`, `RETRAIT ${text(ticket.slot)}`, `${text(ticket.customerName)}${customerReceipt || readyTicket ? '' : ` ${text(ticket.phone)}`}`];
   for (const item of parseItems(ticket.items)) {
     const quantity = Number(item.quantity || 1);
     lines.push(`${quantity} x ${text(item.name || item.productName || 'Article').slice(0, 38)}`);

@@ -6,6 +6,7 @@ import {
   completeStation,
   createProductionOrder,
   markOrderReady,
+  markOrderReadyAtOven,
   reopenCancelledOrder,
   startStation,
   type ProductionItemInput,
@@ -96,6 +97,23 @@ test('order cannot be marked ready until every required unit has completed Exped
   if (ready.ok) {
     assert.equal(ready.order.status, 'ready');
     assert.equal(ready.order.events.at(-1)?.type, 'order_ready');
+  }
+});
+
+test('oven readiness closes the optional Expeditor step with a valid lifecycle', () => {
+  let order = orderWith(item('pizza-1', 'pizza'));
+  order = start(order, 'pizza-1', 'make_line');
+  order = finish(order, 'pizza-1', 'make_line');
+  order = start(order, 'pizza-1', 'oven');
+  order = finish(order, 'pizza-1', 'oven');
+
+  const ready = markOrderReadyAtOven(order, command(order));
+  assert.equal(ready.ok, true);
+  if (ready.ok) {
+    const expeditor = ready.order.items[0].steps.find((step) => step.station === 'expeditor');
+    assert.equal(expeditor?.status, 'completed');
+    assert.equal(expeditor?.startedAt, instant);
+    assert.equal(expeditor?.completedAt, instant);
   }
 });
 

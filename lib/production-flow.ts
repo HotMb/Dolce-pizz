@@ -322,7 +322,14 @@ export function markOrderReadyAtOven(
   const items = order.items.map((item) => ({
     ...item,
     steps: item.steps.map((step) => step.station === 'expeditor' && step.status !== 'completed'
-      ? {...step, status: 'completed' as const, completedAt: command.at}
+      ? {
+        ...step,
+        status: 'completed' as const,
+        // The oven closes the optional Expeditor step automatically. Keep
+        // the persisted lifecycle valid by recording both timestamps.
+        startedAt: step.startedAt ?? command.at,
+        completedAt: command.at,
+      }
       : step),
   }));
   return succeed({...order, status: 'ready'}, items,

@@ -413,7 +413,18 @@ export function projectProductionTicket(input: {
     const meta = metaById.get(item.id);
     if (!meta) return [];
     const currentStep = item.steps.find((step) => step.status !== 'completed');
-    if (input.station !== 'expeditor' && currentStep?.station !== input.station) return [];
+    // The oven remains the final readiness gate for the standard pickup flow.
+    // Keep a cooked item visible there while its optional Expeditor step is
+    // still pending so the operator can print the ready ticket and notify the
+    // customer without having to switch stations.
+    const hasOvenStep = item.steps.some((step) => step.station === 'oven');
+    const ovenReady = hasOvenStep && item.steps
+      .filter((step) => step.station !== 'expeditor')
+      .every((step) => step.status === 'completed');
+    const visibleAtStation = input.station === 'expeditor'
+      || currentStep?.station === input.station
+      || (input.station === 'oven' && ovenReady);
+    if (!visibleAtStation) return [];
     return [{...meta, steps: [...item.steps]}];
   });
   if (!items.length) return null;

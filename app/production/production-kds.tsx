@@ -14,7 +14,7 @@ type StepStatus='pending'|'in_progress'|'completed';
 type OrderStatus='in_progress'|'ready'|'cancelled'|'completed';
 type StationStep={station:Station;status:StepStatus;startedAt:string|null;completedAt:string|null};
 type ProductionUnit={id:string;lineId:string;name:string;kind:string;size?:string;option?:string;without?:string[];extra?:string[];allergens?:string[];allergensKnown:boolean;routeKnown:boolean;steps:StationStep[]};
-type ProductionTicket={id:string;ticketNumber:string;slot:string;createdAt:string;channel:string;fulfillment:string;serviceMode?:string;tableLabel?:string;note:string|null;status:OrderStatus;revision:number;priority?:{band:'urgent'|'a_surveille'|'normal'|'pret';estimatedMinutes:number;reason:string};items:ProductionUnit[]};
+type ProductionTicket={id:string;ticketNumber:number;slot:string;createdAt:string;channel:string;fulfillment:string;serviceMode?:string;tableLabel?:string;note:string|null;status:OrderStatus;revision:number;priority?:{band:'urgent'|'a_surveille'|'normal'|'pret';estimatedMinutes:number;reason:string};items:ProductionUnit[]};
 type ProductionResponse={orders:ProductionTicket[]};
 type Command={orderId:string;action:'start'|'complete'|'ready';itemId?:string;station?:Station;expectedRevision:number};
 type QueuedCommand={id:string;command:Command;queuedAt:number};
@@ -38,7 +38,7 @@ function validResponse(value:unknown):ProductionResponse{
  for(const candidate of orders){
   if(!candidate||typeof candidate!=='object')throw new Error('Un ticket reçu est incomplet. Actualisez l’écran.');
   const order=candidate as Partial<ProductionTicket>;
-  if(typeof order.id!=='string'||typeof order.ticketNumber!=='string'||typeof order.slot!=='string'||typeof order.status!=='string'||!Number.isInteger(order.revision)||!Array.isArray(order.items))throw new Error('Un ticket reçu est incomplet. Actualisez l’écran.');
+  if(typeof order.id!=='string'||!Number.isInteger(order.ticketNumber)||typeof order.slot!=='string'||typeof order.status!=='string'||!Number.isInteger(order.revision)||!Array.isArray(order.items))throw new Error('Un ticket reçu est incomplet. Actualisez l’écran.');
   for(const item of order.items){if(!item||typeof item.id!=='string'||typeof item.name!=='string'||!Array.isArray(item.steps))throw new Error('Un article de ticket est incomplet. Actualisez l’écran.');}
  }
  return value as ProductionResponse;
