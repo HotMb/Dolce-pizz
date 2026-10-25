@@ -16,18 +16,21 @@ const dayAfter=(value:string)=>{const parsed=new Date(`${value}T00:00:00.000Z`);
 export async function GET(request:Request){
  try{
   const user=await staffSessionUser(request.headers.get('cookie'));if(!user)throw new ApiError(401,'Connectez-vous pour consulter les rapports.');
-  const query=new URL(request.url).searchParams;const parsed=z.object({organizationId:id,from:date.optional(),to:date.optional(),format:z.enum(['json','csv']).default('json')}).strict().parse(Object.fromEntries(query));
+  const query=new URL(request.url).searchParams;const parsed=z.object({organizationId:id,locationId:id.optional(),from:date.optional(),to:date.optional(),format:z.enum(['json','csv']).default('json')}).strict().parse(Object.fromEntries(query));
   if(!await owner(user.id,parsed.organizationId))throw new ApiError(403,'Les rapports sont réservés au propriétaire de l’enseigne.');
+  if(parsed.locationId&&!await db().prepare('SELECT 1 FROM locations WHERE organization_id=? AND id=?').bind(parsed.organizationId,parsed.locationId).first())throw new ApiError(404,'Cet établissement n’existe pas dans cette enseigne.');
   const now=new Date();const to=parsed.to||now.toISOString().slice(0,10),from=parsed.from||new Date(now.getTime()-29*86400000).toISOString().slice(0,10);if(new Date(`${from}T00:00:00Z`)>new Date(`${to}T00:00:00Z`))throw new ApiError(400,'La période est inversée.');
   const end=dayAfter(to);if((Date.parse(`${end}T00:00:00Z`)-Date.parse(`${from}T00:00:00Z`))/86400000>31)throw new ApiError(400,'La période est limitée à 31 jours.');
-  const scope={organizationId:parsed.organizationId,from,to};
+  const scope={organizationId:parsed.organizationId,locationId:parsed.locationId||null,from,to};
+  const locationClause=parsed.locationId?' AND location_id=?':'';
+  const locationJoinClause=parsed.locationId?' AND l.id=?':'';
   const [locations,totals,channels,payments]=await Promise.all([
    db().prepare(`SELECT l.id AS locationId,l.code,l.name,l.locality,l.status,COUNT(o.id) AS orders,COALESCE(SUM(CASE WHEN o.status='completed' THEN o.total ELSE 0 END),0) AS completedRevenue,COALESCE(SUM(CASE WHEN o.status='completed' THEN 1 ELSE 0 END),0) AS completed,COALESCE(SUM(CASE WHEN o.status IN ('cancelled','rejected') THEN 1 ELSE 0 END),0) AS cancelled
     FROM locations l LEFT JOIN orders o ON o.organization_id=l.organization_id AND o.location_id=l.id AND o.created_at>=? AND o.created_at<?
-    WHERE l.organization_id=? GROUP BY l.id,l.code,l.name,l.locality,l.status ORDER BY l.name`).bind(`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`,parsed.organizationId).all(),
-   db().prepare(`SELECT COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status='completed' THEN total ELSE 0 END),0) AS completedRevenue,COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),0) AS completed,COALESCE(SUM(CASE WHEN status IN ('cancelled','rejected') THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE organization_id=? AND created_at>=? AND created_at<?`).bind(parsed.organizationId,`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`).first(),
-   db().prepare(`SELECT channel,COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status='completed' THEN total ELSE 0 END),0) AS completedRevenue FROM orders WHERE organization_id=? AND created_at>=? AND created_at<? GROUP BY channel ORDER BY orders DESC`).bind(parsed.organizationId,`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`).all(),
-   db().prepare(`SELECT method,COUNT(*) AS payments,COALESCE(SUM(amount),0) AS amount FROM payments WHERE organization_id=? AND created_at>=? AND created_at<? GROUP BY method ORDER BY amount DESC`).bind(parsed.organizationId,`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`).all(),
+    WHERE l.organization_id=?${locationJoinClause} GROUP BY l.id,l.code,l.name,l.locality,l.status ORDER BY l.name`).bind(`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`,parsed.organizationId,...(parsed.locationId?[parsed.locationId]:[])).all(),
+   db().prepare(`SELECT COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status='completed' THEN total ELSE 0 END),0) AS completedRevenue,COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),0) AS completed,COALESCE(SUM(CASE WHEN status IN ('cancelled','rejected') THEN 1 ELSE 0 END),0) AS cancelled FROM orders WHERE organization_id=?${locationClause} AND created_at>=? AND created_at<?`).bind(parsed.organizationId,...(parsed.locationId?[parsed.locationId]:[]),`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`).first(),
+   db().prepare(`SELECT channel,COUNT(*) AS orders,COALESCE(SUM(CASE WHEN status='completed' THEN total ELSE 0 END),0) AS completedRevenue FROM orders WHERE organization_id=?${locationClause} AND created_at>=? AND created_at<? GROUP BY channel ORDER BY orders DESC`).bind(parsed.organizationId,...(parsed.locationId?[parsed.locationId]:[]),`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`).all(),
+   db().prepare(`SELECT method,COUNT(*) AS payments,COALESCE(SUM(amount),0) AS amount FROM payments WHERE organization_id=?${locationClause} AND created_at>=? AND created_at<? GROUP BY method ORDER BY amount DESC`).bind(parsed.organizationId,...(parsed.locationId?[parsed.locationId]:[]),`${from}T00:00:00.000Z`,`${end}T00:00:00.000Z`).all(),
   ]);
   const report={period:{from,to},totals,locations:locations.results,channels:channels.results,payments:payments.results} as ReportExport;
   if(parsed.format==='csv')return new NextResponse(reportCsv(report),{status:200,headers:{'Cache-Control':'no-store','Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="dolce-pizz-rapport-${from}-${to}.csv"`}});
