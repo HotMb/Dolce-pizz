@@ -43,7 +43,7 @@ Ne pas ouvrir le port du serveur sur Internet et ne pas configurer de redirectio
 - Caisse : paiement espèces ou carte au retrait.
 - Borne : commande autonome ; à utiliser après validation du parcours employé.
 
-Le flux standard est volontairement court : la validation du Make Line fait passer l’article au Four, puis le Four peut cliquer « Marquer prête · SMS + ticket » lorsque les préparations requises sont terminées. Le passage au Four est enregistré par le serveur et la carte du ticket est visible sur le poste Four sans recharger manuellement l’autre écran.
+Le flux standard est volontairement court : le Make Line affiche le détail de chaque pizza et ses modifications. L’opérateur démarre puis termine chaque article ; il sélectionne ensuite la carte du ticket et confirme « ENVOYÉ AU FOUR ». Le ticket quitte le Make Line et apparaît en rouge sur le Four tant que le passage n’est pas effectué, puis en vert après l’enfournement et la sortie. Le Four peut alors cliquer « Marquer prête · SMS + ticket » lorsque toutes les préparations requises sont terminées. Les actions sont enregistrées par le serveur et les deux écrans se mettent à jour sans rechargement manuel.
 
 Quand le Four marque la commande prête, le serveur crée une notification SMS si un numéro autorisé existe et crée un job `ready_ticket` dans la file d’impression. Le relais imprimante enrôlé récupère cette file et imprime automatiquement. Uber Eats et les commandes sans numéro restent sans SMS.
 
