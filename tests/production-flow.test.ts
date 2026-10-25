@@ -8,6 +8,7 @@ import {
   markOrderReady,
   markOrderReadyAtOven,
   reopenCancelledOrder,
+  sendOrderToOven,
   startStation,
   type ProductionItemInput,
   type ProductionOrder,
@@ -76,6 +77,21 @@ test('default routes send pizzas through Make Line, Oven, Expeditor and drinks d
     'expeditor',
   ]);
   assert.deepEqual(order.items[1].steps.map((step) => step.station), ['expeditor']);
+});
+
+test('ticket handoff completes all active Make Line steps in one revision-safe action', () => {
+  const initial = orderWith(item('pizza-1', 'pizza'), item('pizza-2', 'pizza'));
+  const startedFirst = start(initial, 'pizza-1', 'make_line');
+  const notReady = sendOrderToOven(startedFirst, command(startedFirst));
+  assert.equal(notReady.ok, false);
+  if (!notReady.ok) assert.equal(notReady.error, 'station_not_started');
+  const startedSecond = start(startedFirst, 'pizza-2', 'make_line');
+  const handedOff = sendOrderToOven(startedSecond, command(startedSecond));
+  assert.equal(handedOff.ok, true);
+  if (handedOff.ok) {
+    assert.deepEqual(handedOff.order.items.map((unit) => unit.steps[0].status), ['completed', 'completed']);
+    assert.equal(handedOff.order.revision, startedSecond.revision + 2);
+  }
 });
 
 test('order cannot be marked ready until every required unit has completed Expeditor', () => {

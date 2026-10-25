@@ -11,7 +11,7 @@ import {
   type StaffScopeKey,
 } from '@/lib/staff-access';
 import {
-  completeStation,
+  cancelProductionOrder, completeStation, sendOrderToOven,
   markOrderReady, markOrderReadyAtOven,
   startStation,
   type ProductionOrder,
@@ -204,7 +204,7 @@ export async function POST(request: Request) {
     if (productionStateIssue(order.id, payload, current)) {
       throw new ApiError(503, 'Les articles du ticket ne correspondent plus à la commande. Demandez une vérification responsable.');
     }
-    const dataIssue = productionDataIssue(payload, input.action === 'ready' ? undefined : input.itemId);
+    const dataIssue = input.action === 'cancel' ? null : productionDataIssue(payload, input.action === 'start' || input.action === 'complete' ? input.itemId : undefined);
     if (dataIssue) {
       const message = dataIssue === 'item_snapshot_missing'
         ? 'La fiche de cet article est introuvable. Actualisez le ticket.'
@@ -219,7 +219,11 @@ export async function POST(request: Request) {
       at: new Date().toISOString(),
       expectedRevision: input.expectedRevision,
     };
-    const transitioned = input.action === 'ready'
+    const transitioned = input.action === 'cancel'
+      ? cancelProductionOrder(current, {...command, reason: input.reason})
+      : input.action === 'send_to_oven'
+        ? sendOrderToOven(current, command)
+        : input.action === 'ready'
       ? input.station === 'oven' ? markOrderReadyAtOven(current, command) : markOrderReady(current, command)
       : input.action === 'start'
         ? startStation(current, input.itemId, input.station, command)
@@ -242,20 +246,21 @@ export async function POST(request: Request) {
     const eventDetails = JSON.stringify({type: eventType});
     const now = new Date().toISOString();
     const ready = next.status === 'ready';
+    const cancelReason = input.action === 'cancel' ? input.reason : '';
 
     const results = await db().batch([
       db().prepare(
         `UPDATE production_tickets SET status=?,revision=?,production_state=?,last_command_id=?,updated_at=? WHERE order_id=? AND organization_id=? AND location_id=? AND revision=? AND EXISTS(SELECT 1 FROM orders o WHERE o.id=production_tickets.order_id AND o.organization_id=? AND o.location_id=? AND o.status='preparing' AND o.version=?) AND ${productionWriteGuardSql}`,
       ).bind(next.status, next.revision, JSON.stringify(next), operationId, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, input.expectedRevision, ORGANIZATION_ID, LOCATION_ID, order.version, LOCATION_ID, ORGANIZATION_ID, user.id, input.station),
       db().prepare(
-        "UPDATE orders SET status='ready',version=version+1,updated_at=? WHERE id=? AND organization_id=? AND location_id=? AND status='preparing' AND version=? AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
-      ).bind(now, input.orderId, ORGANIZATION_ID, LOCATION_ID, order.version, ready ? 1 : 0, input.orderId, operationId, next.revision),
+        "UPDATE orders SET status=?,version=version+1,updated_at=? WHERE id=? AND organization_id=? AND location_id=? AND status='preparing' AND version=? AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
+      ).bind(next.status, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, order.version, ready || next.status === 'cancelled' ? 1 : 0, input.orderId, operationId, next.revision),
       db().prepare(
         'INSERT INTO production_events(id,operation_id,order_id,organization_id,location_id,revision,event_type,actor_user_id,item_id,station,details,created_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)',
       ).bind(operationId, operationId, input.orderId, ORGANIZATION_ID, LOCATION_ID, next.revision, eventType, user.id, itemId, station, eventDetails, now, input.orderId, operationId, next.revision),
       db().prepare(
-        "INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,'ready',?,'Commande prête',? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
-      ).bind(`${input.orderId}:production:${next.revision}`, user.id, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),
+        "INSERT INTO events(id,order_id,status,actor,note,created_at) SELECT ?,id,?,?,?,? FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status=? AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
+      ).bind(`${input.orderId}:production:${next.revision}`, next.status, user.id, next.status === 'cancelled' ? `Commande supprimée de la production${cancelReason ? ` · ${cancelReason}` : ''}` : 'Commande prête', now, input.orderId, ORGANIZATION_ID, LOCATION_ID, next.status, ready || next.status === 'cancelled' ? 1 : 0, input.orderId, operationId, next.revision),
       db().prepare(
         "INSERT INTO notification_outbox(id,operation_id,organization_id,location_id,order_id,event_type,payload,status,attempts,available_at,created_at,updated_at,sent_at) SELECT ?,?,?,?,?,'order_ready',?,'pending',0,?,?,?,NULL FROM orders WHERE id=? AND organization_id=? AND location_id=? AND status='ready' AND fulfillment='pickup' AND channel IN ('web','phone','pos','kiosk','counter') AND phone<>'' AND notification_phone<>'' AND notification_phone_basis IN ('account_otp','staff_confirmed') AND notification_phone_captured_at IS NOT NULL AND ?=1 AND EXISTS(SELECT 1 FROM production_tickets WHERE order_id=? AND last_command_id=? AND revision=?)",
       ).bind(`${operationId}:notification`, `${operationId}:notification`, ORGANIZATION_ID, LOCATION_ID, input.orderId, JSON.stringify({orderId: input.orderId, eventType: 'order_ready'}), now, now, now, input.orderId, ORGANIZATION_ID, LOCATION_ID, ready ? 1 : 0, input.orderId, operationId, next.revision),

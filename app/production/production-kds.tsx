@@ -2,7 +2,8 @@
 
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import Link from 'next/link';
-import {AlertTriangle,ArrowLeft,Check,CheckCircle2,ChefHat,Clock3,Coffee,Flame,LoaderCircle,PackageCheck,RefreshCw,Utensils,Wifi,WifiOff} from 'lucide-react';
+import {AlertTriangle,ArrowLeft,Check,CheckCircle2,ChefHat,Clock3,Coffee,Flame,LoaderCircle,PackageCheck,RefreshCw,Trash2,Utensils,Wifi,WifiOff} from 'lucide-react';
+import {AlertDialog,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle} from '@/components/ui/alert-dialog';
 import {api} from '../components';
 import {loginPath} from '../member-ui';
 import {scopeQuery,useStaffAccess,type StaffScope} from '../equipe/staff-access';
@@ -14,7 +15,11 @@ type StationStep={station:Station;status:StepStatus;startedAt:string|null;comple
 type ProductionUnit={id:string;lineId:string;name:string;kind:string;size?:string;option?:string;without?:string[];extra?:string[];allergens?:string[];allergensKnown:boolean;routeKnown:boolean;steps:StationStep[]};
 type ProductionTicket={id:string;ticketNumber:number;slot:string;createdAt:string;channel:string;fulfillment:string;serviceMode?:string;tableLabel?:string;note:string|null;status:OrderStatus;revision:number;priority?:{band:'urgent'|'a_surveille'|'normal'|'pret';estimatedMinutes:number;reason:string};items:ProductionUnit[]};
 type ProductionResponse={orders:ProductionTicket[]};
-type Command={orderId:string;action:'start'|'complete'|'ready';itemId?:string;station?:Station;expectedRevision:number};
+type Command=
+ | {orderId:string;action:'start'|'complete';itemId:string;station:Station;expectedRevision:number}
+ | {orderId:string;action:'ready';station:'oven'|'expeditor';expectedRevision:number}
+ | {orderId:string;action:'cancel';station:Station;reason:string;expectedRevision:number}
+ | {orderId:string;action:'send_to_oven';station:'make_line';expectedRevision:number};
 type QueuedCommand={id:string;command:Command;queuedAt:number};
 type StationInfo={name:string;shortName:string;description:string;icon:typeof ChefHat;actionPending:string;actionActive:string;doneLabel:string};
 type DeviceBootstrap={device:{id:string;label:string;role:Station;expiresAt:number};scope:StaffScope};
@@ -47,7 +52,7 @@ function hasConfirmedProductionData(order:ProductionTicket){return order.items.l
 function readableTime(value:string){const date=new Date(value);return Number.isFinite(date.getTime())?dateTimeFormat.format(date):'Horaire non disponible';}
 function elapsedSince(value:string|null,now:number){if(!value)return null;const ms=now-Date.parse(value);if(!Number.isFinite(ms)||ms<0)return '00:00';const seconds=Math.floor(ms/1000),minutes=Math.floor(seconds/60),hours=Math.floor(minutes/60);return hours?`${hours} h ${String(minutes%60).padStart(2,'0')} min`:`${String(minutes).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;}
 function commandError(error:unknown){const value=error as {message?:string;status?:number};return {message:value?.message||'L’action n’a pas été confirmée. Actualisez le ticket avant de réessayer.',conflict:value?.status===409};}
-function readQueuedCommands(key:string):QueuedCommand[]{if(typeof window==='undefined')return [];try{const raw=window.localStorage.getItem(key)||'';if(raw.length>60000)return [];const value=JSON.parse(raw);if(!Array.isArray(value))return [];return value.filter(item=>{const command=item?.command;return item&&typeof item.id==='string'&&command&&typeof command.orderId==='string'&&/^(start|complete|ready)$/.test(command.action)&&(!command.station||/^(make_line|oven|expeditor)$/.test(command.station))&&(!command.itemId||typeof command.itemId==='string')&&Number.isInteger(command.expectedRevision)&&command.expectedRevision>=0&&typeof item.queuedAt==='number'}).slice(0,50) as QueuedCommand[];}catch{return [];}}
+function readQueuedCommands(key:string):QueuedCommand[]{if(typeof window==='undefined')return [];try{const raw=window.localStorage.getItem(key)||'';if(raw.length>60000)return [];const value=JSON.parse(raw);if(!Array.isArray(value))return [];return value.filter(item=>{const command=item?.command;const validAction=command&&/^(start|complete|ready|cancel|send_to_oven)$/.test(command.action);const validStation=!command?.station||/^(make_line|oven|expeditor)$/.test(command.station);const validItem=!command?.itemId||typeof command.itemId==='string';const validReason=command?.action!=='cancel'||typeof command.reason==='string'&&command.reason.trim().length>=3;return item&&typeof item.id==='string'&&command&&typeof command.orderId==='string'&&validAction&&validStation&&validItem&&validReason&&Number.isInteger(command.expectedRevision)&&command.expectedRevision>=0&&typeof item.queuedAt==='number'}).slice(0,50) as QueuedCommand[];}catch{return [];}}
 
 function useProductionDeviceAccess(enabled:boolean){
  const[data,setData]=useState<DeviceBootstrap|null>(null),[error,setError]=useState(''),[checked,setChecked]=useState(!enabled),[refreshing,setRefreshing]=useState(false);
@@ -105,13 +110,15 @@ export function ProductionKds({station:requestedStation,organizationId,locationI
 function ProductionBoard({station,scope,accessError,deviceMode,onAuthorizationFailure}:{station:Station;scope:StaffScope;accessError:string;deviceMode:boolean;onAuthorizationFailure:()=>Promise<void>}){
  const info=stationInfo[station],Icon=info.icon;
  const resource=useProductionData(station,scope,onAuthorizationFailure,deviceMode);
- const[busyKey,setBusyKey]=useState(''),[actionError,setActionError]=useState(''),[conflict,setConflict]=useState(false),[feedback,setFeedback]=useState(''),[now,setNow]=useState(0);
- const busyRef=useRef(false);
+ const[busyKey,setBusyKey]=useState(''),[actionError,setActionError]=useState(''),[conflict,setConflict]=useState(false),[feedback,setFeedback]=useState(''),[now,setNow]=useState(0),[selectedTicketId,setSelectedTicketId]=useState(''),[cancelOrder,setCancelOrder]=useState<ProductionTicket|null>(null),[cancelReason,setCancelReason]=useState('');
+ const busyRef=useRef(false),ticketGridRef=useRef<HTMLElement|null>(null);
  useEffect(()=>{const tick=()=>setNow(Date.now());const first=window.setTimeout(tick,0);const timer=window.setInterval(tick,1000);return()=>{window.clearTimeout(first);window.clearInterval(timer);};},[]);
+ useEffect(()=>{if(!selectedTicketId)return;const closeOnOutside=(event:PointerEvent)=>{if(ticketGridRef.current&&!ticketGridRef.current.contains(event.target as Node))setSelectedTicketId('');};document.addEventListener('pointerdown',closeOnOutside);return()=>document.removeEventListener('pointerdown',closeOnOutside);},[selectedTicketId]);
  const tickets=useMemo(()=>resource.data?.orders.filter(order=>order.status==='in_progress'||order.status==='ready')||[],[resource.data]);
  const actionableCount=tickets.reduce((count,order)=>count+order.items.filter(item=>currentStep(item)?.station===station).length,0);
  const runCommand=async(command:Command,key:string)=>{
-  if(busyRef.current||accessError||resource.error&&!resource.online||!scope.writeStations.includes(station)||(command.action==='ready'&&!scope.canMarkReady))return;
+  const allowed=command.action==='cancel'?scope.roles.some(role=>role==='owner'||role==='manager'):command.action==='send_to_oven'?scope.writeStations.includes('make_line'):command.action==='ready'?scope.canMarkReady:scope.writeStations.includes(station);
+  if(busyRef.current||accessError||resource.error&&!resource.online||!allowed)return;
   if(!resource.online){resource.enqueueCommand(command);setFeedback('Action mise en attente sur cet appareil. Elle sera vérifiée et envoyée au retour de la connexion.');return;}
   busyRef.current=true;setBusyKey(key);setActionError('');setConflict(false);setFeedback('');resource.pauseForCommand();
   try{await api(`production?${scopeQuery(scope)}`,'POST',command);setFeedback('Action enregistrée par le serveur.');}
@@ -138,19 +145,37 @@ function ProductionBoard({station,scope,accessError,deviceMode,onAuthorizationFa
   {resource.queuedCount>0&&<div className="production-banner is-warning" role="status"><WifiOff size={21}/><div><strong>{resource.queuedCount} action{resource.queuedCount>1?'s':''} en attente sur cet appareil.</strong><p>{resource.flushing?'Synchronisation en cours…':'Elles seront contrôlées avec la révision du ticket dès que la connexion revient.'}</p></div><button type="button" onClick={()=>void resource.refresh()} disabled={resource.flushing}>Actualiser</button></div>}
   {actionError&&<div className={`production-banner ${conflict?'is-conflict':'is-error'}`} role="alert"><AlertTriangle size={22}/><div><strong>{conflict?'Ticket modifié sur un autre poste.':'Action non confirmée.'}</strong><p>{actionError}{conflict?' Vérifiez son nouvel état avant de poursuivre.':''}</p></div><button type="button" onClick={retry} disabled={resource.fetching}><RefreshCw size={17}/> Actualiser</button></div>}
   {feedback&&<p className="production-feedback" role="status"><CheckCircle2 size={18}/>{feedback}</p>}
-  {!tickets.length?<section className="production-empty" aria-live="polite"><div className="production-empty-mark"><Icon size={34}/></div><h2>Aucun ticket en attente au poste {info.name.toLocaleLowerCase('fr')}.</h2><p>Les nouveaux articles s’afficheront ici dès leur transmission à la production.</p><button type="button" className="production-button production-button-secondary" onClick={retry} disabled={resource.fetching}><RefreshCw size={19}/> Actualiser les tickets</button></section>:<section className="production-ticket-grid" aria-label={`Tickets du poste ${info.name}`}>
-   {tickets.map(order=><ProductionTicketCard key={order.id} order={order} station={station} now={now} busyKey={busyKey} canWrite={scope.writeStations.includes(station)} canMarkReady={scope.canMarkReady} onCommand={runCommand}/>)
+  {!tickets.length?<section className="production-empty" aria-live="polite"><div className="production-empty-mark"><Icon size={34}/></div><h2>Aucun ticket en attente au poste {info.name.toLocaleLowerCase('fr')}.</h2><p>Les nouveaux articles s’afficheront ici dès leur transmission à la production.</p><button type="button" className="production-button production-button-secondary" onClick={retry} disabled={resource.fetching}><RefreshCw size={19}/> Actualiser les tickets</button></section>:<section ref={ticketGridRef} className="production-ticket-grid" aria-label={`Tickets du poste ${info.name}`}>
+   {tickets.map(order=><ProductionTicketCard key={order.id} order={order} station={station} now={now} busyKey={busyKey} selected={selectedTicketId===order.id} canWrite={scope.writeStations.includes(station)} canCancel={scope.roles.some(role=>role==='owner'||role==='manager')} canMarkReady={scope.canMarkReady} onSelect={()=>setSelectedTicketId(current=>current===order.id?'':order.id)} onCancel={()=>{setCancelOrder(order);setCancelReason('');}} onCommand={runCommand}/>)
    }</section>}
   <footer className="production-footer"><span><span className="production-live-dot"/>Mise à jour temps réel · secours automatique toutes les 4 secondes</span><span>Horaires affichés · Europe/Paris</span></footer>
+  <AlertDialog open={!!cancelOrder} onOpenChange={open=>{if(!open&&!busyKey){setCancelOrder(null);setCancelReason('');}}}>
+   <AlertDialogContent className="dolce-dialog production-confirm-dialog">
+    <AlertDialogHeader><AlertDialogTitle>Supprimer le ticket de la production ?</AlertDialogTitle><AlertDialogDescription>Le ticket sera retiré des écrans de préparation et restera dans l’historique. Indiquez un motif pour garder une trace.</AlertDialogDescription></AlertDialogHeader>
+    <label className="production-confirm-reason">Motif de suppression<input autoFocus value={cancelReason} onChange={event=>setCancelReason(event.target.value)} placeholder="Ex. doublon, erreur de saisie…" maxLength={240}/></label>
+    <AlertDialogFooter><AlertDialogCancel className="btn btn-outline" disabled={!!busyKey}>Annuler</AlertDialogCancel><button type="button" className="btn btn-danger" disabled={!cancelOrder||cancelReason.trim().length<3||!!busyKey} onClick={()=>{const order=cancelOrder;if(!order)return;setCancelOrder(null);void runCommand({orderId:order.id,action:'cancel',station,reason:cancelReason.trim(),expectedRevision:order.revision},`${order.id}:cancel`);}}>Supprimer le ticket</button></AlertDialogFooter>
+   </AlertDialogContent>
+  </AlertDialog>
  </main>;
 }
 
-function ProductionTicketCard({order,station,now,busyKey,canWrite,canMarkReady,onCommand}:{order:ProductionTicket;station:Station;now:number;busyKey:string;canWrite:boolean;canMarkReady:boolean;onCommand:(command:Command,key:string)=>Promise<void>}){
- const visibleItems=station==='expeditor'?order.items:order.items.filter(item=>currentStep(item)?.station===station);
+function ProductionTicketCard({order,station,now,busyKey,selected,canWrite,canCancel,canMarkReady,onSelect,onCancel,onCommand}:{order:ProductionTicket;station:Station;now:number;busyKey:string;selected:boolean;canWrite:boolean;canCancel:boolean;canMarkReady:boolean;onSelect:()=>void;onCancel:()=>void;onCommand:(command:Command,key:string)=>Promise<void>}){
+ const visibleItems=station==='expeditor'?order.items:station==='oven'?order.items.filter(item=>item.steps.some(step=>step.station==='oven')):order.items.filter(item=>currentStep(item)?.station===station);
  const finished=allStepsComplete(order),ovenReady=order.items.every(item=>item.steps.filter(step=>step.station!=='expeditor').every(step=>step.status==='completed')),readyEligible=station==='oven'?ovenReady:finished,ready=order.status==='ready',known=hasConfirmedProductionData(order);
- return <article className={`production-ticket ${ready?'is-ready':''}`} aria-labelledby={`ticket-${order.id}`}>
-  <header className="production-ticket-head"><div><span className="production-ticket-number">TICKET</span><h2 id={`ticket-${order.id}`}>{order.ticketNumber}</h2></div><div className="production-ticket-times"><span><Clock3 size={16}/><time dateTime={order.slot}>{readableTime(order.slot)}</time></span><small>Reçu à {readableTime(order.createdAt)}</small></div></header>
-  <div className="production-ticket-tags"><span className="production-tag tag-channel">{labelForChannel(order.channel)}</span><span className="production-tag tag-fulfillment"><Utensils size={15}/>{labelForFulfillment(order.fulfillment)}</span>{order.serviceMode==='dine_in'&&<span className="production-tag tag-channel">Table {order.tableLabel||'à confirmer'}</span>}{order.priority&&<span className={`production-tag tag-priority priority-${order.priority.band}`} title={`${order.priority.reason} · estimation ${order.priority.estimatedMinutes} min`}>{order.priority.band==='urgent'?'Urgent':order.priority.band==='a_surveille'?'À surveiller':order.priority.band==='pret'?'Prête':'Standard'}</span>}{ready&&<span className="production-tag tag-ready"><CheckCircle2 size={15}/>Commande prête</span>}</div>
+ const makeLineItems=order.items.filter(item=>item.steps.some(step=>step.station==='make_line'));
+ const makeLineComplete=makeLineItems.length>0&&makeLineItems.every(item=>stationStep(item,'make_line')?.status==='completed');
+ const ovenSent=makeLineComplete;
+ return <article className={`production-ticket ${ready?'is-ready':''} ${station==='oven'?(ovenSent?'is-oven-sent':'is-oven-waiting'):(selected?'is-selected':'')}`} aria-labelledby={`ticket-${order.id}`}>
+  <button type="button" className="production-ticket-select" onClick={onSelect} aria-expanded={selected} aria-controls={`ticket-actions-${order.id}`}>
+   <header className="production-ticket-head"><div><span className="production-ticket-number">TICKET</span><h2 id={`ticket-${order.id}`}>{order.ticketNumber}</h2></div><div className="production-ticket-times"><span><Clock3 size={16}/><time dateTime={order.slot}>{readableTime(order.slot)}</time></span><small>Reçu à {readableTime(order.createdAt)}</small></div></header>
+   <div className="production-ticket-tags"><span className="production-tag tag-channel">{labelForChannel(order.channel)}</span><span className="production-tag tag-fulfillment"><Utensils size={15}/>{labelForFulfillment(order.fulfillment)}</span>{order.serviceMode==='dine_in'&&<span className="production-tag tag-channel">Table {order.tableLabel||'à confirmer'}</span>}{order.priority&&<span className={`production-tag tag-priority priority-${order.priority.band}`} title={`${order.priority.reason} · estimation ${order.priority.estimatedMinutes} min`}>{order.priority.band==='urgent'?'Urgent':order.priority.band==='a_surveille'?'À surveiller':order.priority.band==='pret'?'Prête':'Standard'}</span>}{ready&&<span className="production-tag tag-ready"><CheckCircle2 size={15}/>Commande prête</span>}</div>
+  </button>
+  {selected&&<div className="production-ticket-actions" id={`ticket-actions-${order.id}`} role="group" aria-label={`Actions du ticket ${order.ticketNumber}`}>
+   {station==='make_line'&&<button type="button" className="production-ticket-action is-send" disabled={!makeLineComplete||busyKey!==''||!canWrite} onClick={()=>void onCommand({orderId:order.id,action:'send_to_oven',station:'make_line',expectedRevision:order.revision},`${order.id}:send_to_oven`)}>{busyKey===`${order.id}:send_to_oven`?<LoaderCircle className="production-spin" size={20}/>:<CheckCircle2 size={20}/>}<strong>{makeLineComplete?'ENVOYÉ AU FOUR':'TERMINER LES ARTICLES AVANT ENVOI'}</strong></button>}
+   {station==='oven'&&!ovenSent&&<span className="production-ticket-waiting"><AlertTriangle size={19}/><strong>EN ATTENTE DU MAKE LINE</strong></span>}
+   {station==='oven'&&ovenSent&&<span className="production-ticket-sent"><CheckCircle2 size={19}/><strong>ENVOYÉ AU FOUR</strong></span>}
+   <button type="button" className="production-ticket-action is-delete" disabled={!canCancel||busyKey!==''} onClick={onCancel}><Trash2 size={20}/><strong>SUPPRIMER</strong></button>
+  </div>}
   {order.note&&<p className="production-order-note"><AlertTriangle size={16}/><span>Note du ticket : <strong>{order.note}</strong></span></p>}
   <div className="production-items">{visibleItems.map(item=><ProductionItemRow key={item.id} item={item} station={station} now={now} busy={busyKey===`${order.id}:${item.id}`} disabled={!canWrite||busyKey!==''||item.allergensKnown!==true||item.routeKnown!==true} onAction={action=>void onCommand({orderId:order.id,action,itemId:item.id,station,expectedRevision:order.revision},`${order.id}:${item.id}`)}/>)}</div>
   {(station==='oven'||station==='expeditor')&&<div className="production-order-final">

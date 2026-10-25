@@ -160,7 +160,7 @@ test('ticket initialization expands quantities, routes known item snapshots, and
   assert.equal('phone' in (view || {}), false);
 });
 
-test('station projection shows only the current station while Expeditor receives every unit', () => {
+test('station projection shows oven tickets in red before handoff while Expeditor receives every unit', () => {
   const orderId = 'f863d441-d1a7-46e4-8f64-9c13ca4c790c';
   const initialized = createTicketFromOrder({
     id: orderId,
@@ -175,14 +175,14 @@ test('station projection shows only the current station while Expeditor receives
     ]),
   });
   const pizzaId = initialized.flow.items[0].id;
-  const emptyAtOven = projectProductionTicket({
+  const waitingAtOven = projectProductionTicket({
     orderId,
     ticketNumber: 3,
     payload: initialized.payload,
     flow: initialized.flow,
     station: 'oven',
   });
-  assert.equal(emptyAtOven, null);
+  assert.deepEqual(waitingAtOven?.items.map((item) => item.kind), ['pizza']);
 
   let flow = startStation(initialized.flow, pizzaId, 'make_line', {
     actorId: 'operator', at: '2026-10-22T18:00:00.000Z', expectedRevision: 0,

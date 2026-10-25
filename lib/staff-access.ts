@@ -67,8 +67,10 @@ export function resolveStaffScope(principalId: string, site: StaffSite, membersh
     canMarkReady: writeStations.includes('oven') || writeStations.includes('expeditor'), canManageStaff: roles.includes('owner')};
 }
 
-export function canOperateStation(scope: StaffScope | null, station: ProductionStation, action: 'read' | 'start' | 'complete' | 'ready'): boolean {
+export function canOperateStation(scope: StaffScope | null, station: ProductionStation, action: 'read' | 'start' | 'complete' | 'ready' | 'cancel' | 'send_to_oven'): boolean {
   if (!scope) return false;
+  if (action === 'cancel') return scope.roles.includes('owner') || scope.roles.includes('manager');
+  if (action === 'send_to_oven') return station === 'make_line' && scope.writeStations.includes('make_line');
   return action === 'read' ? scope.stations.includes(station)
     : action === 'ready' ? (station === 'oven' || station === 'expeditor') && scope.canMarkReady
       : scope.writeStations.includes(station);

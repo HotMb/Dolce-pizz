@@ -233,6 +233,19 @@ const productionCommandSchema = z.discriminatedUnion('action', [
     station: z.enum(['oven', 'expeditor']),
     expectedRevision: z.number().int().nonnegative(),
   }).strict(),
+  z.object({
+    orderId: z.string().uuid(),
+    action: z.literal('cancel'),
+    station: stationSchema,
+    reason: z.string().trim().min(3).max(240),
+    expectedRevision: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    orderId: z.string().uuid(),
+    action: z.literal('send_to_oven'),
+    station: z.literal('make_line'),
+    expectedRevision: z.number().int().nonnegative(),
+  }).strict(),
 ]);
 
 export type ProductionCommandInput = z.infer<typeof productionCommandSchema>;
@@ -418,12 +431,12 @@ export function projectProductionTicket(input: {
     // still pending so the operator can print the ready ticket and notify the
     // customer without having to switch stations.
     const hasOvenStep = item.steps.some((step) => step.station === 'oven');
-    const ovenReady = hasOvenStep && item.steps
-      .filter((step) => step.station !== 'expeditor')
-      .every((step) => step.status === 'completed');
+    // The oven board must show the whole ticket before handoff as well. The
+    // operator needs a red waiting card, then the same card turns green once
+    // every routed item has left Make Line.
     const visibleAtStation = input.station === 'expeditor'
-      || currentStep?.station === input.station
-      || (input.station === 'oven' && ovenReady);
+      || (input.station === 'oven' && hasOvenStep)
+      || currentStep?.station === input.station;
     if (!visibleAtStation) return [];
     return [{...meta, steps: [...item.steps]}];
   });

@@ -274,6 +274,30 @@ export function completeStation(
   });
 }
 
+/** Complete every active Make Line step as one ticket-level handoff. */
+export function sendOrderToOven(
+  order: ProductionOrder,
+  command: ProductionCommand,
+): ProductionFlowResult {
+  const commandError = validateCommand(order, command);
+  if (commandError) return commandError;
+  const statusError = requireInProgress(order);
+  if (statusError) return statusError;
+  let current = order;
+  const routed = order.items.filter((item) => item.steps.some((step) => step.station === 'make_line'));
+  if (!routed.length) return {ok: false, error: 'incomplete_items', incompleteItemIds: []};
+  for (const item of routed) {
+    const step = current.items.find((candidate) => candidate.id === item.id)?.steps.find((candidate) => candidate.station === 'make_line');
+    if (!step) return {ok: false, error: 'station_not_in_route'};
+    if (step.status === 'completed') continue;
+    if (step.status !== 'in_progress') return {ok: false, error: 'station_not_started'};
+    const result = completeStation(current, item.id, 'make_line', {...command, expectedRevision: current.revision});
+    if (!result.ok) return result;
+    current = result.order;
+  }
+  return {ok: true, order: current};
+}
+
 /** Expeditor's final check: all routed item units must have completed every step. */
 export function markOrderReady(
   order: ProductionOrder,
