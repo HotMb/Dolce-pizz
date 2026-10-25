@@ -2,12 +2,10 @@
 
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import Link from 'next/link';
-import {useRouter} from 'next/navigation';
 import {AlertTriangle,ArrowLeft,Check,CheckCircle2,ChefHat,Clock3,Coffee,Flame,LoaderCircle,PackageCheck,RefreshCw,Utensils,Wifi,WifiOff} from 'lucide-react';
-import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '@/components/ui/select';
 import {api} from '../components';
 import {loginPath} from '../member-ui';
-import {productionHref,scopeQuery,useStaffAccess,type StaffScope} from '../equipe/staff-access';
+import {scopeQuery,useStaffAccess,type StaffScope} from '../equipe/staff-access';
 
 export type Station='make_line'|'oven'|'expeditor';
 type StepStatus='pending'|'in_progress'|'completed';
@@ -25,7 +23,6 @@ const stationInfo:Record<Station,StationInfo>={
  oven:{name:'Four',shortName:'Cuisson',description:'Enfournez les pizzas puis confirmez manuellement leur sortie.',icon:Flame,actionPending:'Enfourner',actionActive:'Confirmer la sortie du four',doneLabel:'Cuisson confirmée'},
  expeditor:{name:'Expédition',shortName:'Expeditor',description:'Rassemblez les articles et vérifiez chaque ticket avant de le déclarer prêt.',icon:PackageCheck,actionPending:'Commencer le contrôle',actionActive:'Confirmer l’article',doneLabel:'Article vérifié'},
 };
-const stationOrder:Station[]=['make_line','oven','expeditor'];
 const stationNames:Record<Station,string>={make_line:'Montage',oven:'Four',expeditor:'Expédition'};
 const timeFormat=new Intl.DateTimeFormat('fr-FR',{timeZone:'Europe/Paris',hour:'2-digit',minute:'2-digit'});
 const dateTimeFormat=new Intl.DateTimeFormat('fr-FR',{timeZone:'Europe/Paris',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
@@ -89,7 +86,7 @@ function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailu
 }
 
 export function ProductionKds({station:requestedStation,organizationId,locationId,deviceMode=false}:{station?:Station;organizationId?:string;locationId?:string;deviceMode?:boolean}){
- const staff=useStaffAccess(),device=useProductionDeviceAccess(deviceMode),router=useRouter();
+ const staff=useStaffAccess(),device=useProductionDeviceAccess(deviceMode);
  const accessData=device.data?{account:{id:`device:${device.data.device.id}`,name:device.data.device.label},scopes:[device.data.scope],roles:[{id:device.data.device.role,label:device.data.device.role}]}:staff.data;
  const accessLoading=deviceMode?!device.checked:staff.loading;
  const accessError=deviceMode&&device.checked&&!device.data?device.error:staff.error;
@@ -102,10 +99,10 @@ export function ProductionKds({station:requestedStation,organizationId,locationI
  const scope=explicit?scopes.find(item=>item.organizationId===organizationId&&item.locationId===locationId):scopes[0];
  const station=requestedStation||scope?.stations[0];
  if(!scope||!station||!scope.stations.includes(station))return <main id="contenu" className="production-shell"><div className="production-first-error"><AlertTriangle size={32}/><h1>{accessError?'Accès indisponible.':'Ce poste ne vous est pas attribué.'}</h1><p>{accessError||(deviceMode?'Configurez un appareil enrôlé pour ouvrir ce poste.':'Choisissez un poste autorisé depuis l’espace équipe ou demandez au responsable de vérifier vos droits.')}</p><Link href={accessStatus===401?loginPath('/production'):'/equipe'} className="production-button production-button-primary">{accessStatus===401?(deviceMode?'Ouvrir l’espace équipe':'Se reconnecter'):'Retrouver mes postes'}</Link><button type="button" className="production-button production-button-secondary" disabled={accessRefreshing} onClick={()=>void refreshAccess()}><RefreshCw size={18}/> Vérifier l’accès</button></div></main>;
- return <ProductionBoard key={`${scopeQuery(scope)}:${station}`} station={station} scope={scope} scopes={scopes} accessError={accessError} deviceMode={deviceMode} onAuthorizationFailure={refreshAccess} onSelectScope={next=>{const nextStation=next.stations.includes(station)?station:next.stations[0];router.push(productionHref(next,nextStation));}}/>;
+ return <ProductionBoard key={`${scopeQuery(scope)}:${station}`} station={station} scope={scope} accessError={accessError} deviceMode={deviceMode} onAuthorizationFailure={refreshAccess}/>;
 }
 
-function ProductionBoard({station,scope,scopes,accessError,deviceMode,onAuthorizationFailure,onSelectScope}:{station:Station;scope:StaffScope;scopes:StaffScope[];accessError:string;deviceMode:boolean;onAuthorizationFailure:()=>Promise<void>;onSelectScope:(scope:StaffScope)=>void}){
+function ProductionBoard({station,scope,accessError,deviceMode,onAuthorizationFailure}:{station:Station;scope:StaffScope;accessError:string;deviceMode:boolean;onAuthorizationFailure:()=>Promise<void>}){
  const info=stationInfo[station],Icon=info.icon;
  const resource=useProductionData(station,scope,onAuthorizationFailure,deviceMode);
  const[busyKey,setBusyKey]=useState(''),[actionError,setActionError]=useState(''),[conflict,setConflict]=useState(false),[feedback,setFeedback]=useState(''),[now,setNow]=useState(0);
@@ -131,12 +128,11 @@ function ProductionBoard({station,scope,scopes,accessError,deviceMode,onAuthoriz
    <div className="production-brand-block"><Link href="/equipe" className="production-back"><ArrowLeft size={18}/> Espace équipe</Link><div className="production-brand-line"><span className="production-brand-dot" aria-hidden="true"/><span>PRODUCTION</span><span className="production-separator">/</span><span>{info.name.toLocaleUpperCase('fr')}</span></div></div>
    <div className="production-sync" aria-live="polite">{resource.online?<Wifi size={17}/>:<WifiOff size={17}/>}<span>{resource.online?resource.error?'Connexion à rétablir':resource.fetching?'Actualisation…':`Synchronisé à ${resource.lastSync?timeFormat.format(resource.lastSync):'—'}`:'Hors connexion · affichage en lecture seule'}</span><button type="button" className="production-refresh" onClick={retry} disabled={resource.fetching||busyKey!==''} aria-label="Actualiser les tickets"><RefreshCw size={19}/></button></div>
   </header>
-  <div className="production-scope"><div><label htmlFor="production-location">Établissement actif</label><Select value={scopeQuery(scope)} onValueChange={value=>{const next=scopes.find(item=>scopeQuery(item)===value);if(next)onSelectScope(next);}} disabled={busyKey!==''||!!accessError}><SelectTrigger id="production-location" className="staff-select"><SelectValue/></SelectTrigger><SelectContent className="staff-select-popup" position="popper">{scopes.map(item=><SelectItem key={scopeQuery(item)} value={scopeQuery(item)}>{item.organizationName} · {item.locationName}</SelectItem>)}</SelectContent></Select></div><p>{scope.writeStations.includes(station)?'Validation autorisée sur ce poste.':'Lecture seule · vous pouvez consulter les tickets sans valider les étapes.'}</p></div>
+  <div className="production-scope"><div><label>Établissement actif</label><p className="production-fixed-location">{scope.organizationName} · {scope.locationName}</p></div><p>{scope.writeStations.includes(station)?'Validation autorisée sur ce poste.':'Lecture seule · vous pouvez consulter les tickets sans valider les étapes.'}</p></div>
   <section className="production-heading">
    <div className="production-heading-copy"><p className="production-eyebrow"><Icon size={17}/>{info.shortName} · POSTE DE TRAVAIL</p><h1>{info.name}<span>.</span></h1><p>{info.description}</p></div>
    <div className="production-count" aria-label={`${actionableCount} article${actionableCount===1?'':'s'} à traiter`}><strong>{actionableCount}</strong><span>article{actionableCount===1?'':'s'} à traiter</span></div>
   </section>
-  <nav className="production-stations" aria-label="Choisir un poste de production">{stationOrder.filter(key=>scope.stations.includes(key)).map(key=>{const tab=stationInfo[key],TabIcon=tab.icon;return <Link key={key} href={productionHref(scope,key)} className={`production-station-tab ${station===key?'is-current':''}`} aria-current={station===key?'page':undefined}><TabIcon size={21}/><span>{tab.name}</span><span className="production-station-step">{stationOrder.indexOf(key)+1}/3</span></Link>;})}</nav>
   {accessError&&<div className="production-banner is-warning" role="alert"><AlertTriangle size={21}/><div><strong>Les droits doivent être vérifiés.</strong><p>{accessError} Les validations sont bloquées jusqu’à la vérification.</p></div><button type="button" onClick={()=>void onAuthorizationFailure()}>Vérifier les accès</button></div>}
   {resource.error&&resource.data&&<div className="production-banner is-warning" role="alert"><WifiOff size={21}/><div><strong>Affichage des dernières données reçues.</strong><p>Les validations peuvent être mises en attente localement, puis seront revalidées par le serveur au retour de la connexion.</p></div><button type="button" onClick={retry} disabled={resource.fetching}>Actualiser</button></div>}
   {resource.queuedCount>0&&<div className="production-banner is-warning" role="status"><WifiOff size={21}/><div><strong>{resource.queuedCount} action{resource.queuedCount>1?'s':''} en attente sur cet appareil.</strong><p>{resource.flushing?'Synchronisation en cours…':'Elles seront contrôlées avec la révision du ticket dès que la connexion revient.'}</p></div><button type="button" onClick={()=>void resource.refresh()} disabled={resource.flushing}>Actualiser</button></div>}
