@@ -30,7 +30,7 @@ Depuis le dossier du dépôt, utiliser les fichiers suivants :
 
 `lancer-interne.cmd` ne doit être lancé qu’une seule fois sur le serveur local. Les autres fichiers ouvrent seulement le navigateur et se connectent au même serveur ; ils ne démarrent pas une base séparée. Si le serveur n’est pas encore démarré, un raccourci propose de le lancer automatiquement.
 
-Sur le serveur lui-même, les raccourcis utilisent `localhost`. Sur une autre tablette, ils doivent utiliser l’adresse IP du serveur, par exemple `http://192.168.1.50:5173`, ou être remplacés par des favoris contenant cette adresse.
+Sur le serveur lui-même, `config-interne.cmd` peut rester sur `http://localhost:5173`. Sur les autres tablettes, modifier uniquement cette ligne en `http://192.168.1.50:5173`, puis lancer le raccourci de l’écran. Les quatre écrans utiliseront alors le même serveur et les mêmes tickets. Le serveur ne doit être démarré qu’une seule fois, sur le PC central.
 
 Ne pas ouvrir le port du serveur sur Internet et ne pas configurer de redirection de port sur la box. Le Wi-Fi des appareils de production doit être séparé du Wi-Fi invité.
 
