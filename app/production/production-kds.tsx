@@ -91,7 +91,7 @@ function useProductionData(station:Station,scope:StaffScope,onAuthorizationFailu
 }
 
 export function ProductionKds({station:requestedStation,organizationId,locationId,deviceMode=false}:{station?:Station;organizationId?:string;locationId?:string;deviceMode?:boolean}){
- const staff=useStaffAccess(),device=useProductionDeviceAccess(deviceMode);
+ const staff=useStaffAccess(!deviceMode),device=useProductionDeviceAccess(deviceMode);
  const accessData=device.data?{account:{id:`device:${device.data.device.id}`,name:device.data.device.label},scopes:[device.data.scope],roles:[{id:device.data.device.role,label:device.data.device.role}]}:staff.data;
  const accessLoading=deviceMode?!device.checked:staff.loading;
  const accessError=deviceMode&&device.checked&&!device.data?device.error:staff.error;
