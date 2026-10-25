@@ -114,7 +114,7 @@ function ProductionBoard({station,scope,accessError,deviceMode,onAuthorizationFa
  const busyRef=useRef(false),ticketGridRef=useRef<HTMLElement|null>(null);
  useEffect(()=>{const tick=()=>setNow(Date.now());const first=window.setTimeout(tick,0);const timer=window.setInterval(tick,1000);return()=>{window.clearTimeout(first);window.clearInterval(timer);};},[]);
  useEffect(()=>{if(!selectedTicketId)return;const closeOnOutside=(event:PointerEvent)=>{if(ticketGridRef.current&&!ticketGridRef.current.contains(event.target as Node))setSelectedTicketId('');};document.addEventListener('pointerdown',closeOnOutside);return()=>document.removeEventListener('pointerdown',closeOnOutside);},[selectedTicketId]);
- const tickets=useMemo(()=>resource.data?.orders.filter(order=>order.status==='in_progress'||order.status==='ready')||[],[resource.data]);
+ const tickets=useMemo(()=>resource.data?.orders.filter(order=>order.status==='in_progress')||[],[resource.data]);
  const actionableCount=tickets.reduce((count,order)=>count+order.items.filter(item=>currentStep(item)?.station===station).length,0);
  const runCommand=async(command:Command,key:string)=>{
   const allowed=command.action==='cancel'?scope.roles.some(role=>role==='owner'||role==='manager'):command.action==='send_to_oven'?scope.writeStations.includes('make_line'):command.action==='ready'?scope.canMarkReady:scope.writeStations.includes(station);
