@@ -59,13 +59,13 @@ Le script Windows `lancer-site.cmd` sélectionne automatiquement Node 24.5.0 lor
 
 ### Accès direct aux postes internes
 
-Pour un poste de pizzeria, ajoutez dans `.env.local` une clé associée à un compte déjà présent dans la base :
+Pour un poste de pizzeria, ajoutez dans `.env.local` une clé interne. Le compte opérateur et son accès limité peuvent être créés automatiquement au premier usage :
 
 ```dotenv
-INTERNAL_ACCESS_KEYS_JSON=[{"id":"otto-admin","key":"remplacer-par-une-cle-longue","phone":"06XXXXXXXX","target":"/equipe"},{"id":"pos-ronchin","key":"une-autre-cle-longue","phone":"06XXXXXXXX","target":"/equipe/commande"},{"id":"four-ronchin","key":"une-cle-four-longue","phone":"06XXXXXXXX","target":"/production?station=oven"}]
+INTERNAL_ACCESS_KEYS_JSON=[{"id":"otto-admin","key":"remplacer-par-une-cle-longue","name":"Responsable Ronchin","role":"owner","target":"/equipe"},{"id":"pos-ronchin","key":"une-autre-cle-longue","name":"POS Ronchin","role":"pos","locationId":"ronchin","target":"/equipe/commande"},{"id":"make-line-ronchin","key":"une-cle-make-longue","name":"Make Line Ronchin","role":"make_line","locationId":"ronchin","target":"/production?station=make_line"},{"id":"four-ronchin","key":"une-cle-four-longue","name":"Four Ronchin","role":"oven","locationId":"ronchin","target":"/production?station=oven"}]
 ```
 
-Le compte indiqué par `phone` doit déjà avoir le rôle correspondant dans l’établissement. La clé ouvre une session équipe de 12 heures, puis le serveur applique les droits habituels. Pour un déploiement hébergé, utilisez `keyHash` (SHA-256) à la place de `key` et ne mettez jamais une clé réelle dans Git.
+Si `principalId` ou `phone` correspond à un compte existant, ses droits sont conservés. Sinon, un opérateur local est créé avec le `role` et l’établissement indiqués. La clé ouvre une session équipe de 12 heures, puis le serveur applique les droits habituels. Pour un déploiement hébergé, utilisez `keyHash` (SHA-256) à la place de `key` et ne mettez jamais une clé réelle dans Git.
    SMS_SENDER=DolcePizz
    ADMIN_SETUP_CODE=<secret de test long et unique>
    MARKETING_STOP_SECRET=<secret aléatoire long, différent du code admin>

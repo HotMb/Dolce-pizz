@@ -23,7 +23,7 @@ Customers and staff sign in with a French mobile number and a 6-digit SMS code (
 | `ADMIN_SETUP_CODE` | Private code (20+ characters) that grants the admin role to the first account that enters it on `/admin`. |
 | `MARKETING_STOP_SECRET` | Separate random signing secret for recipient-bound marketing unsubscribe links. Keep it stable so links already sent remain usable. |
 | `SMS_CAMPAIGNS_DEMO` | Optional `1` to simulate promotional SMS campaigns without sending messages. It never exposes login codes. |
-| `INTERNAL_ACCESS_KEYS_JSON` | Optional local/hosted staff key map. Each entry uses `keyHash` (SHA-256), `principalId` or `phone`, and a safe `target` such as `/equipe`, `/equipe/commande` or `/production?station=oven`. The matched user keeps the normal staff permissions. |
+| `INTERNAL_ACCESS_KEYS_JSON` | Optional internal-console key map. Each entry can use `keyHash` (SHA-256), `principalId` or `phone`, plus `name`, `role`, `organizationId`, `locationId` and a safe `target` such as `/equipe`, `/equipe/commande` or `/production?station=oven`. Local operator accounts and scoped memberships are created on first key use; the public storefront is not required. |
 | `NOTIFICATION_DISPATCH_SECRET` | Separate 32–256 character random secret for the server scheduler calling the ready-SMS consumer. Never put it in a browser or URL. |
 | `NOTIFICATION_SCHEDULER_CONFIGURED` | Set to `1` only after the cron or HTTPS job has been installed and tested; production preflight and health checks use it as an explicit readiness declaration. |
 
